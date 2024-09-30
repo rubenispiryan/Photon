@@ -159,7 +159,7 @@ def parse_token(token):
     elif token == '+':
         return add()
     elif token.isdigit() or (token[0] == '-' and token[1:].isdigit()):
-        return push(token)
+        return push(int(token))
     else:
         assert False, 'Unhandled token'
 
