@@ -86,6 +86,15 @@ OP_ADD = auto()
 OP_WRITE = auto()
 OP_COUNTER = auto()
 
+def push(a):
+    return OP_PUSH, a
+
+def add():
+    return (OP_ADD,)
+
+def write():
+    return (OP_WRITE,)
+
 
 def simulate_program(program):
     stack = []
@@ -112,6 +121,7 @@ def compile_program(program):
     write_level1 = write_indent(out, 1)
     write_base('.section __TEXT, __text')
     write_base('.global _start')
+    write_base('.align 2')
     asm_setup(write_base, write_level1)
     write_base('_start:')
     for i in range(len(program)):
@@ -142,20 +152,24 @@ def usage_help():
     print('     sim     Simulate the program')
     print('     com     Compile the program')
 
+def parse_token(token):
+    assert OP_COUNTER == 3, 'Exhaustive handling of tokens'
+    if token == '.':
+        return write()
+    elif token == '+':
+        return add()
+    elif token.isdigit() or (token[0] == '-' and token[1:].isdigit()):
+        return push(token)
+    else:
+        assert False, 'Unhandled token'
+
 def read_program(filename):
     program = []
     with open(filename, 'r') as f:
         for line in f:
-            line = line.strip().split()
+            line = line.split()
             for token in line:
-                if token == 'write':
-                    program.append((OP_WRITE,))
-                elif token == 'add':
-                    program.append((OP_ADD,))
-                elif token.isdigit() or (token[0] == '-' and token[1:].isdigit()):
-                    program.append((OP_PUSH, int(token)))
-                else:
-                    assert False, 'Unhandled token'
+                program.append(parse_token(token))
     return program
 
 
@@ -165,12 +179,12 @@ if __name__ == '__main__':
         exit(1)
     subcommand = sys.argv[1]
 
-    program = read_program(sys.argv[2])
+    program_stack = read_program(sys.argv[2])
 
     if subcommand == 'sim':
-        simulate_program(program)
+        simulate_program(program_stack)
     elif subcommand == 'com':
-        compile_program(program)
+        compile_program(program_stack)
         os.system('as -o output.o output.s')
         os.system('ld -o output output.o -lSystem -syslibroot `xcrun -sdk macosx --show-sdk-path` -e _start -arch arm64')
         os.system('./output')
