@@ -83,6 +83,7 @@ def asm_setup(write_base, write_level1):
 
 OP_PUSH = auto(True)
 OP_ADD = auto()
+OP_SUB = auto()
 OP_WRITE = auto()
 OP_COUNTER = auto()
 
@@ -92,13 +93,16 @@ def push(a):
 def add():
     return (OP_ADD,)
 
+def sub():
+    return (OP_SUB,)
+
 def write():
     return (OP_WRITE,)
 
 
 def simulate_program(program):
     stack = []
-    assert OP_COUNTER == 3, 'Exhaustive handling of operands in simulation'
+    assert OP_COUNTER == 4, 'Exhaustive handling of operands in simulation'
     for instruction in program:
         operand = instruction[0]
         if operand == OP_PUSH:
@@ -107,6 +111,10 @@ def simulate_program(program):
             a = stack.pop()
             b = stack.pop()
             stack.append(a + b)
+        elif operand == OP_SUB:
+            a = stack.pop()
+            b = stack.pop()
+            stack.append(b - a)
         elif operand == OP_WRITE:
             a = stack.pop()
             print(a)
@@ -115,7 +123,7 @@ def simulate_program(program):
 
 
 def compile_program(program):
-    assert OP_COUNTER == 3, 'Exhaustive handling of operands in simulation'
+    assert OP_COUNTER == 4, 'Exhaustive handling of operands in simulation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -135,6 +143,11 @@ def compile_program(program):
             write_level1('pop x1, xzr')
             write_level1('add x0, x0, x1')
             write_level1('push x0, xzr')
+        elif operand == OP_SUB:
+            write_level1('pop x0, xzr')
+            write_level1('pop x1, xzr')
+            write_level1('sub x0, x1, x0')
+            write_level1('push x0, xzr')
         elif operand == OP_WRITE:
             write_level1('pop x0, xzr')
             write_level1('bl dump')
@@ -153,11 +166,13 @@ def usage_help():
     print('     com     Compile the program')
 
 def parse_token(token):
-    assert OP_COUNTER == 3, 'Exhaustive handling of tokens'
+    assert OP_COUNTER == 4, 'Exhaustive handling of tokens'
     if token == '.':
         return write()
     elif token == '+':
         return add()
+    elif token == '-':
+        return sub()
     elif token.isdigit() or (token[0] == '-' and token[1:].isdigit()):
         return push(int(token))
     else:
