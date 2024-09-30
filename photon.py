@@ -137,28 +137,35 @@ def compile_program(program):
 
 
 def usage_help():
-    print('Usage: photon.py <SUBCOMMAND>')
+    print('Usage: photon.py <SUBCOMMAND> <FILENAME>')
     print('Subcommands:')
     print('     sim     Simulate the program')
     print('     com     Compile the program')
 
+def read_program(filename):
+    program = []
+    with open(filename, 'r') as f:
+        for line in f:
+            line = line.strip().split()
+            for token in line:
+                if token == 'write':
+                    program.append((OP_WRITE,))
+                elif token == 'add':
+                    program.append((OP_ADD,))
+                elif token.isdigit() or (token[0] == '-' and token[1:].isdigit()):
+                    program.append((OP_PUSH, int(token)))
+                else:
+                    assert False, 'Unhandled token'
+    return program
+
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 3:
         usage_help()
         exit(1)
     subcommand = sys.argv[1]
 
-    program = [
-        (OP_PUSH, 32),
-        (OP_PUSH, 34),
-        (OP_PUSH, 240),
-        (OP_PUSH, 180),
-        (OP_ADD,),
-        (OP_ADD,),
-        (OP_ADD,),
-        (OP_WRITE,),
-    ]
+    program = read_program(sys.argv[2])
 
     if subcommand == 'sim':
         simulate_program(program)
