@@ -1,12 +1,16 @@
 import os
+import subprocess
 import sys
 
 auto_counter = 0
 
+
 def write_indent(file, level=0):
     def temp(buffer):
         file.write(' ' * (0 if level == 0 else 4 ** level) + buffer + '\n')
+
     return temp
+
 
 def auto(reset=False):
     global auto_counter
@@ -15,6 +19,7 @@ def auto(reset=False):
         return auto_counter
     auto_counter += 1
     return auto_counter
+
 
 def asm_setup(write_base, write_level1):
     write_base('.macro push reg1, reg2')
@@ -87,14 +92,18 @@ OP_SUB = auto()
 OP_WRITE = auto()
 OP_COUNTER = auto()
 
+
 def push(a):
     return OP_PUSH, a
+
 
 def add():
     return (OP_ADD,)
 
+
 def sub():
     return (OP_SUB,)
+
 
 def write():
     return (OP_WRITE,)
@@ -103,7 +112,8 @@ def write():
 def simulate_program(program):
     stack = []
     assert OP_COUNTER == 4, 'Exhaustive handling of operands in simulation'
-    for instruction in program:
+    for token in program:
+        instruction = token
         operand = instruction[0]
         if operand == OP_PUSH:
             stack.append(instruction[1])
@@ -136,7 +146,7 @@ def compile_program(program):
         instruction = program[i]
         operand = instruction[0]
         if operand == OP_PUSH:
-            write_level1('mov x0, #{}'.format(instruction[1]))
+            write_level1(f'mov x0, #{instruction[1]}')
             write_level1('push x0, xzr')
         elif operand == OP_ADD:
             write_level1('pop x0, xzr')
@@ -165,8 +175,10 @@ def usage_help():
     print('     sim     Simulate the program')
     print('     com     Compile the program')
 
-def parse_token(token):
+
+def parse_token(token, location):
     assert OP_COUNTER == 4, 'Exhaustive handling of tokens'
+    filename, line, column = location
     if token == '.':
         return write()
     elif token == '+':
@@ -176,33 +188,53 @@ def parse_token(token):
     elif token.isdigit() or (token[0] == '-' and token[1:].isdigit()):
         return push(int(token))
     else:
-        assert False, 'Unhandled token'
+        print(f'{os.path.abspath(filename)}:{line + 1}:{column}: Unhandled token `{token}`')
+        exit(1)
 
-def read_program(filename):
+
+def lex_line(line, filename, line_number):
+    lexed_line = []
+    l, r = 0, 0
+    while l < len(line):
+        if line[l].isspace():
+            l += 1
+            continue
+        r = l
+        while r < len(line) and not line[r].isspace():
+            r += 1
+        lexed_line.append((parse_token(line[l:r], (filename, line_number, l))))
+        l = r
+
+    return lexed_line
+
+
+def lex_file(filename):
     program = []
     with open(filename, 'r') as f:
-        for line in f:
-            line = line.split()
-            for token in line:
-                program.append(parse_token(token))
+        for i, line in enumerate(f):
+            program.extend(lex_line(line, filename, i))
     return program
 
 
 if __name__ == '__main__':
-    if len(sys.argv) < 3:
+    _, *argv = sys.argv
+    if len(argv) < 2:
         usage_help()
         exit(1)
-    subcommand = sys.argv[1]
+    subcommand, *argv = argv
+    filename_arg, *argv = argv
 
-    program_stack = read_program(sys.argv[2])
+    program_stack = lex_file(filename_arg)
 
     if subcommand == 'sim':
         simulate_program(program_stack)
     elif subcommand == 'com':
         compile_program(program_stack)
-        os.system('as -o output.o output.s')
-        os.system('ld -o output output.o -lSystem -syslibroot `xcrun -sdk macosx --show-sdk-path` -e _start -arch arm64')
-        os.system('./output')
+        subprocess.call('as -o output.o output.s', shell=True)
+        subprocess.call(
+            'ld -o output output.o -lSystem -syslibroot `xcrun -sdk macosx'
+            ' --show-sdk-path` -e _start -arch arm64', shell=True)
+        subprocess.call('./output', shell=True)
     else:
         usage_help()
         exit(1)

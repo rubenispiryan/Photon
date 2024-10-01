@@ -30,6 +30,7 @@ def main():
         expected = read_expected(filename[:-4] + 'test')
         assert compiled_out == expected, f'Compilation and Test of {filename} do not match'
         assert simulated_out == expected, f'Simulation and Test of {filename} do not match'
+        print(f'Test of {filename} passed successfully')
 
 
 if __name__ == '__main__':
