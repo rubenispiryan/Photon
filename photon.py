@@ -68,6 +68,7 @@ OP_PUSH = auto(True)
 OP_ADD = auto()
 OP_SUB = auto()
 OP_WRITE = auto()
+OP_EQUAL = auto()
 OP_COUNTER = auto()
 
 
@@ -87,9 +88,13 @@ def write():
     return (OP_WRITE,)
 
 
+def equal():
+    return (OP_EQUAL,)
+
+
 def simulate_program(program):
     stack = []
-    assert OP_COUNTER == 4, 'Exhaustive handling of operands in simulation'
+    assert OP_COUNTER == 5, 'Exhaustive handling of operands in simulation'
     for token in program:
         instruction = token
         operand = instruction[0]
@@ -106,12 +111,16 @@ def simulate_program(program):
         elif operand == OP_WRITE:
             a = stack.pop()
             print(a)
+        elif operand == OP_EQUAL:
+            a = stack.pop()
+            b = stack.pop()
+            stack.append(int(a == b))
         else:
             assert False, 'Unhandled instruction'
 
 
 def compile_program(program):
-    assert OP_COUNTER == 4, 'Exhaustive handling of operands in simulation'
+    assert OP_COUNTER == 5, 'Exhaustive handling of operands in simulation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -139,6 +148,12 @@ def compile_program(program):
         elif operand == OP_WRITE:
             write_level1('pop x0, xzr')
             write_level1('bl dump')
+        elif operand == OP_EQUAL:
+            write_level1('pop x0, xzr')
+            write_level1('pop x1, xzr')
+            write_level1('cmp x0, x1')
+            write_level1('cset x0, eq')
+            write_level1('push x0, xzr')
         else:
             assert False, 'Unhandled instruction'
     write_level1('mov x16, #1')
@@ -155,7 +170,7 @@ def usage_help():
 
 
 def parse_token(token, location):
-    assert OP_COUNTER == 4, 'Exhaustive handling of tokens'
+    assert OP_COUNTER == 5, 'Exhaustive handling of tokens'
     filename, line, column = location
     if token == '.':
         return write()
@@ -165,6 +180,8 @@ def parse_token(token, location):
         return sub()
     elif token.isdigit() or (token[0] == '-' and token[1:].isdigit()):
         return push(int(token))
+    elif token == '==':
+        return equal()
     else:
         print(f'{os.path.abspath(filename)}:{line + 1}:{column}: Unhandled token `{token}`')
         exit(1)
