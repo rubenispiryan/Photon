@@ -234,7 +234,8 @@ if __name__ == '__main__':
         subprocess.call(
             'ld -o output output.o -lSystem -syslibroot `xcrun -sdk macosx'
             ' --show-sdk-path` -e _start -arch arm64', shell=True)
-        subprocess.call('./output', shell=True)
+        if '--run' in argv:
+            subprocess.call('./output', shell=True)
     else:
         usage_help()
         exit(1)
