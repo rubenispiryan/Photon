@@ -2,8 +2,8 @@ import os
 import subprocess
 
 
-def execute(subcommand, filename):
-    return subprocess.check_output(f'python3 photon.py {subcommand} {filename}', shell=True)
+def execute(subcommand, filename, flag=''):
+    return subprocess.check_output(f'python3 photon.py {subcommand} {filename} {flag}', shell=True)
 
 
 def get_files(folder):
@@ -16,6 +16,7 @@ def get_files(folder):
             output.append(file_path)
     return output
 
+
 def read_expected(filename):
     with open(filename, 'rb') as f:
         expected = f.read()
@@ -26,10 +27,20 @@ def main():
     filenames = filter(lambda x: x.endswith('.phtn'), get_files('./examples'))
     for filename in filenames:
         simulated_out = execute('sim', filename)
-        compiled_out = execute('com', filename)
+        compiled_out = execute('com', filename, flag='--run')
         expected = read_expected(filename[:-4] + 'test')
-        assert compiled_out == expected, f'Compilation and Test of {filename} do not match'
-        assert simulated_out == expected, f'Simulation and Test of {filename} do not match'
+        assert compiled_out == expected, (
+            f'Output from compilation:\n'
+            f'  {compiled_out}\n'
+            f'Expected:\n'
+            f'  {expected}\n'
+            f'Compilation and Test of {filename} do not match')
+        assert simulated_out == expected, (
+            f'Output from simulation:\n'
+            f'{simulated_out}\n'
+            f'Expect:\n'
+            f'{expected}\n'
+            f'Simulation and Test of {filename} do not match')
         print(f'Test of {filename} passed successfully')
 
 
