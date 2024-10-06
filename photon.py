@@ -71,6 +71,7 @@ OP_WRITE = auto()
 OP_EQUAL = auto()
 OP_IF = auto()
 OP_END = auto()
+OP_ELSE = auto()
 OP_COUNTER = auto()
 
 
@@ -101,10 +102,13 @@ def iff():
 def end():
     return (OP_END,)
 
+def elsee():
+    return (OP_ELSE,)
+
 
 def simulate_program(program):
     stack = []
-    assert OP_COUNTER == 7, 'Exhaustive handling of operators in simulation'
+    assert OP_COUNTER == 8, 'Exhaustive handling of operators in simulation'
     i = 0
     while i < len(program):
         instruction = program[i]
@@ -130,6 +134,8 @@ def simulate_program(program):
             a = stack.pop()
             if a == 0:
                 i = instruction[1]
+        elif operator == OP_ELSE:
+            i = instruction[1]
         elif operator == OP_END:
             i += 1
             continue
@@ -139,7 +145,7 @@ def simulate_program(program):
 
 
 def compile_program(program):
-    assert OP_COUNTER == 7, 'Exhaustive handling of operators in compilation'
+    assert OP_COUNTER == 8, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -177,6 +183,9 @@ def compile_program(program):
             write_level1('pop x0, xzr')
             write_level1('tst x0, x0')
             write_level1(f'b.eq end_{instruction[1]}')
+        elif operator == OP_ELSE:
+            write_level1(f'b end_{instruction[1]}')
+            write_base(f'end_{i}:')
         elif operator == OP_END:
             write_base(f'end_{i}:')
         else:
@@ -196,7 +205,7 @@ def usage_help():
 
 
 def parse_token(token, location):
-    assert OP_COUNTER == 7, 'Exhaustive handling of tokens'
+    assert OP_COUNTER == 8, 'Exhaustive handling of tokens'
     filename, line, column = location
     if token == '.':
         return write()
@@ -212,22 +221,28 @@ def parse_token(token, location):
         return iff()
     elif token == 'end':
         return end()
+    elif token == 'else':
+        return elsee()
     else:
         print(f'{os.path.abspath(filename)}:{line + 1}:{column}: Unhandled token `{token}`')
         exit(1)
 
 
 def cross_reference_blocks(program):
-    assert OP_COUNTER == 7, 'Exhaustive handling of code block'
+    assert OP_COUNTER == 8, 'Exhaustive handling of code block'
     stack = []
     for i in range(len(program)):
         instruction = program[i]
         operator = instruction[0]
         if operator == OP_IF:
             stack.append(i)
-        elif operator == OP_END:
+        elif operator == OP_ELSE:
             if_index = stack.pop()
             program[if_index] = (OP_IF, i)
+            stack.append(i)
+        elif operator == OP_END:
+            block_index = stack.pop()
+            program[block_index] = (program[block_index][0], i)
     return program
 
 
