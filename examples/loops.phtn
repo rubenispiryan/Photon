@@ -1,0 +1,13 @@
+1
+while dup 5 < do
+dup .
+1 +
+end
+
+.
+
+100
+while dup 0 > do
+dup .
+1 -
+end
