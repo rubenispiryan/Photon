@@ -69,6 +69,8 @@ OP_ADD = auto()
 OP_SUB = auto()
 OP_WRITE = auto()
 OP_EQUAL = auto()
+OP_LT = auto()
+OP_GT = auto()
 OP_IF = auto()
 OP_END = auto()
 OP_ELSE = auto()
@@ -105,10 +107,16 @@ def end():
 def elsee():
     return (OP_ELSE,)
 
+def lt():
+    return (OP_LT,)
+
+def gt():
+    return (OP_GT,)
+
 
 def simulate_program(program):
     stack = []
-    assert OP_COUNTER == 8, 'Exhaustive handling of operators in simulation'
+    assert OP_COUNTER == 10, 'Exhaustive handling of operators in simulation'
     i = 0
     while i < len(program):
         instruction = program[i]
@@ -130,6 +138,14 @@ def simulate_program(program):
             a = stack.pop()
             b = stack.pop()
             stack.append(int(a == b))
+        elif operator == OP_LT:
+            a = stack.pop()
+            b = stack.pop()
+            stack.append(int(b < a))
+        elif operator == OP_GT:
+            a = stack.pop()
+            b = stack.pop()
+            stack.append(int(b > a))
         elif operator == OP_IF:
             a = stack.pop()
             if a == 0:
@@ -145,7 +161,7 @@ def simulate_program(program):
 
 
 def compile_program(program):
-    assert OP_COUNTER == 8, 'Exhaustive handling of operators in compilation'
+    assert OP_COUNTER == 10, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -179,6 +195,18 @@ def compile_program(program):
             write_level1('cmp x0, x1')
             write_level1('cset x0, eq')
             write_level1('push x0, xzr')
+        elif operator == OP_LT:
+            write_level1('pop x0, xzr')
+            write_level1('pop x1, xzr')
+            write_level1('cmp x0, x1')
+            write_level1('cset x0, gt')
+            write_level1('push x0, xzr')
+        elif operator == OP_GT:
+            write_level1('pop x0, xzr')
+            write_level1('pop x1, xzr')
+            write_level1('cmp x0, x1')
+            write_level1('cset x0, lt')
+            write_level1('push x0, xzr')
         elif operator == OP_IF:
             write_level1('pop x0, xzr')
             write_level1('tst x0, x0')
@@ -205,7 +233,7 @@ def usage_help():
 
 
 def parse_token(token, location):
-    assert OP_COUNTER == 8, 'Exhaustive handling of tokens'
+    assert OP_COUNTER == 10, 'Exhaustive handling of tokens'
     filename, line, column = location
     if token == '.':
         return write()
@@ -217,6 +245,10 @@ def parse_token(token, location):
         return push(int(token))
     elif token == '==':
         return equal()
+    elif token == '>':
+        return gt()
+    elif token == '<':
+        return lt()
     elif token == 'if':
         return iff()
     elif token == 'end':
@@ -229,7 +261,7 @@ def parse_token(token, location):
 
 
 def cross_reference_blocks(program):
-    assert OP_COUNTER == 8, 'Exhaustive handling of code block'
+    assert OP_COUNTER == 10, 'Exhaustive handling of code block'
     stack = []
     for i in range(len(program)):
         instruction = program[i]
