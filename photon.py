@@ -74,6 +74,7 @@ OP_GT = auto()
 OP_IF = auto()
 OP_END = auto()
 OP_ELSE = auto()
+OP_DUP = auto()
 OP_COUNTER = auto()
 
 
@@ -113,10 +114,13 @@ def lt():
 def gt():
     return (OP_GT,)
 
+def dup():
+    return (OP_DUP,)
+
 
 def simulate_program(program):
     stack = []
-    assert OP_COUNTER == 10, 'Exhaustive handling of operators in simulation'
+    assert OP_COUNTER == 11, 'Exhaustive handling of operators in simulation'
     i = 0
     while i < len(program):
         instruction = program[i]
@@ -155,13 +159,17 @@ def simulate_program(program):
         elif operator == OP_END:
             i += 1
             continue
+        elif operator == OP_DUP:
+            a = stack.pop()
+            stack.append(a)
+            stack.append(a)
         else:
             assert False, f'Unhandled instruction: {instruction}'
         i += 1
 
 
 def compile_program(program):
-    assert OP_COUNTER == 10, 'Exhaustive handling of operators in compilation'
+    assert OP_COUNTER == 11, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -216,6 +224,10 @@ def compile_program(program):
             write_base(f'end_{i}:')
         elif operator == OP_END:
             write_base(f'end_{i}:')
+        elif operator == OP_DUP:
+            write_level1('pop x0, xzr')
+            write_level1('push x0, xzr')
+            write_level1('push x0, xzr')
         else:
             assert False, f'Unhandled instruction: {instruction}'
     write_level1('mov x16, #1')
@@ -233,7 +245,7 @@ def usage_help():
 
 
 def parse_token(token, location):
-    assert OP_COUNTER == 10, 'Exhaustive handling of tokens'
+    assert OP_COUNTER == 11, 'Exhaustive handling of tokens'
     filename, line, column = location
     if token == '.':
         return write()
@@ -255,13 +267,15 @@ def parse_token(token, location):
         return end()
     elif token == 'else':
         return elsee()
+    elif token == 'dup':
+        return dup()
     else:
         print(f'{os.path.abspath(filename)}:{line + 1}:{column}: Unhandled token `{token}`')
         exit(1)
 
 
 def cross_reference_blocks(program):
-    assert OP_COUNTER == 10, 'Exhaustive handling of code block'
+    assert OP_COUNTER == 11, 'Exhaustive handling of code block'
     stack = []
     for i in range(len(program)):
         instruction = program[i]
@@ -270,10 +284,12 @@ def cross_reference_blocks(program):
             stack.append(i)
         elif operator == OP_ELSE:
             if_index = stack.pop()
+            assert program[if_index][0] == OP_IF, 'Else can only be used with an `if`'
             program[if_index] = (OP_IF, i)
             stack.append(i)
         elif operator == OP_END:
             block_index = stack.pop()
+            assert program[block_index][0] in (OP_IF, OP_ELSE), 'Else can only be used with an `if` or `else`'
             program[block_index] = (program[block_index][0], i)
     return program
 
