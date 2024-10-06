@@ -75,6 +75,8 @@ OP_IF = auto()
 OP_END = auto()
 OP_ELSE = auto()
 OP_DUP = auto()
+OP_WHILE = auto()
+OP_DO = auto()
 OP_COUNTER = auto()
 
 
@@ -105,7 +107,7 @@ def iff():
 def end():
     return (OP_END,)
 
-def elsee():
+def els():
     return (OP_ELSE,)
 
 def lt():
@@ -117,10 +119,16 @@ def gt():
 def dup():
     return (OP_DUP,)
 
+def whil():
+    return (OP_WHILE,)
+
+def do():
+    return (OP_DO,)
+
 
 def simulate_program(program):
     stack = []
-    assert OP_COUNTER == 11, 'Exhaustive handling of operators in simulation'
+    assert OP_COUNTER == 13, 'Exhaustive handling of operators in simulation'
     i = 0
     while i < len(program):
         instruction = program[i]
@@ -157,19 +165,26 @@ def simulate_program(program):
         elif operator == OP_ELSE:
             i = instruction[1]
         elif operator == OP_END:
-            i += 1
-            continue
+            if len(instruction) > 1:
+                i = instruction[1]
         elif operator == OP_DUP:
             a = stack.pop()
             stack.append(a)
             stack.append(a)
+        elif operator == OP_WHILE:
+            i += 1
+            continue
+        elif operator == OP_DO:
+            a = stack.pop()
+            if a == 0:
+                i = instruction[1]
         else:
             assert False, f'Unhandled instruction: {instruction}'
         i += 1
 
 
 def compile_program(program):
-    assert OP_COUNTER == 11, 'Exhaustive handling of operators in compilation'
+    assert OP_COUNTER == 13, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -215,7 +230,7 @@ def compile_program(program):
             write_level1('cmp x0, x1')
             write_level1('cset x0, lt')
             write_level1('push x0, xzr')
-        elif operator == OP_IF:
+        elif operator in (OP_IF, OP_DO):
             write_level1('pop x0, xzr')
             write_level1('tst x0, x0')
             write_level1(f'b.eq end_{instruction[1]}')
@@ -223,11 +238,15 @@ def compile_program(program):
             write_level1(f'b end_{instruction[1]}')
             write_base(f'end_{i}:')
         elif operator == OP_END:
+            if len(instruction) > 1:
+                write_level1(f'b while_{instruction[1]}')
             write_base(f'end_{i}:')
         elif operator == OP_DUP:
             write_level1('pop x0, xzr')
             write_level1('push x0, xzr')
             write_level1('push x0, xzr')
+        elif operator == OP_WHILE:
+            write_base(f'while_{i}:')
         else:
             assert False, f'Unhandled instruction: {instruction}'
     write_level1('mov x16, #1')
@@ -245,7 +264,7 @@ def usage_help():
 
 
 def parse_token(token, location):
-    assert OP_COUNTER == 11, 'Exhaustive handling of tokens'
+    assert OP_COUNTER == 13, 'Exhaustive handling of tokens'
     filename, line, column = location
     if token == '.':
         return write()
@@ -266,20 +285,23 @@ def parse_token(token, location):
     elif token == 'end':
         return end()
     elif token == 'else':
-        return elsee()
+        return els()
     elif token == 'dup':
         return dup()
+    elif token == 'while':
+        return whil()
+    elif token == 'do':
+        return do()
     else:
         print(f'{os.path.abspath(filename)}:{line + 1}:{column}: Unhandled token `{token}`')
         exit(1)
 
 
 def cross_reference_blocks(program):
-    assert OP_COUNTER == 11, 'Exhaustive handling of code block'
+    assert OP_COUNTER == 13, 'Exhaustive handling of code block'
     stack = []
     for i in range(len(program)):
-        instruction = program[i]
-        operator = instruction[0]
+        operator = program[i][0]
         if operator == OP_IF:
             stack.append(i)
         elif operator == OP_ELSE:
@@ -287,10 +309,22 @@ def cross_reference_blocks(program):
             assert program[if_index][0] == OP_IF, 'Else can only be used with an `if`'
             program[if_index] = (OP_IF, i)
             stack.append(i)
+        elif operator == OP_WHILE:
+            stack.append(i)
+        elif operator == OP_DO:
+            stack.append(i)
         elif operator == OP_END:
             block_index = stack.pop()
-            assert program[block_index][0] in (OP_IF, OP_ELSE), 'Else can only be used with an `if` or `else`'
-            program[block_index] = (program[block_index][0], i)
+            if program[block_index][0] in (OP_IF, OP_ELSE):
+                program[block_index] = (program[block_index][0], i)
+            elif program[block_index][0] == OP_DO:
+                program[block_index] = (program[block_index][0], i)
+                while_index = stack.pop()
+                assert program[while_index][0] == OP_WHILE, '`while` must be present before `do`'
+                program[i] = (OP_END, while_index)
+            else:
+                assert False, 'Else can only be used with an `if` or `else`'
+
     return program
 
 
