@@ -69,6 +69,8 @@ OP_ADD = auto()
 OP_SUB = auto()
 OP_WRITE = auto()
 OP_EQUAL = auto()
+OP_IF = auto()
+OP_END = auto()
 OP_COUNTER = auto()
 
 
@@ -92,35 +94,52 @@ def equal():
     return (OP_EQUAL,)
 
 
+def iff():
+    return (OP_IF,)
+
+
+def end():
+    return (OP_END,)
+
+
 def simulate_program(program):
     stack = []
-    assert OP_COUNTER == 5, 'Exhaustive handling of operands in simulation'
-    for token in program:
-        instruction = token
-        operand = instruction[0]
-        if operand == OP_PUSH:
+    assert OP_COUNTER == 7, 'Exhaustive handling of operators in simulation'
+    i = 0
+    while i < len(program):
+        instruction = program[i]
+        operator = instruction[0]
+        if operator == OP_PUSH:
             stack.append(instruction[1])
-        elif operand == OP_ADD:
+        elif operator == OP_ADD:
             a = stack.pop()
             b = stack.pop()
             stack.append(a + b)
-        elif operand == OP_SUB:
+        elif operator == OP_SUB:
             a = stack.pop()
             b = stack.pop()
             stack.append(b - a)
-        elif operand == OP_WRITE:
+        elif operator == OP_WRITE:
             a = stack.pop()
             print(a)
-        elif operand == OP_EQUAL:
+        elif operator == OP_EQUAL:
             a = stack.pop()
             b = stack.pop()
             stack.append(int(a == b))
+        elif operator == OP_IF:
+            a = stack.pop()
+            if a == 0:
+                i = instruction[1]
+        elif operator == OP_END:
+            i += 1
+            continue
         else:
-            assert False, 'Unhandled instruction'
+            assert False, f'Unhandled instruction: {instruction}'
+        i += 1
 
 
 def compile_program(program):
-    assert OP_COUNTER == 5, 'Exhaustive handling of operands in simulation'
+    assert OP_COUNTER == 7, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -131,31 +150,37 @@ def compile_program(program):
     write_base('_start:')
     for i in range(len(program)):
         instruction = program[i]
-        operand = instruction[0]
-        if operand == OP_PUSH:
+        operator = instruction[0]
+        if operator == OP_PUSH:
             write_level1(f'mov x0, #{instruction[1]}')
             write_level1('push x0, xzr')
-        elif operand == OP_ADD:
+        elif operator == OP_ADD:
             write_level1('pop x0, xzr')
             write_level1('pop x1, xzr')
             write_level1('add x0, x0, x1')
             write_level1('push x0, xzr')
-        elif operand == OP_SUB:
+        elif operator == OP_SUB:
             write_level1('pop x0, xzr')
             write_level1('pop x1, xzr')
             write_level1('sub x0, x1, x0')
             write_level1('push x0, xzr')
-        elif operand == OP_WRITE:
+        elif operator == OP_WRITE:
             write_level1('pop x0, xzr')
             write_level1('bl dump')
-        elif operand == OP_EQUAL:
+        elif operator == OP_EQUAL:
             write_level1('pop x0, xzr')
             write_level1('pop x1, xzr')
             write_level1('cmp x0, x1')
             write_level1('cset x0, eq')
             write_level1('push x0, xzr')
+        elif operator == OP_IF:
+            write_level1('pop x0, xzr')
+            write_level1('tst x0, x0')
+            write_level1(f'b.eq end_{instruction[1]}')
+        elif operator == OP_END:
+            write_base(f'end_{i}:')
         else:
-            assert False, 'Unhandled instruction'
+            assert False, f'Unhandled instruction: {instruction}'
     write_level1('mov x16, #1')
     write_level1('mov x0, #0')
     write_level1('svc #0')
@@ -163,14 +188,15 @@ def compile_program(program):
 
 
 def usage_help():
-    print('Usage: photon.py <SUBCOMMAND> <FILENAME>')
+    print('Usage: photon.py <SUBCOMMAND> <FILENAME> <FLAGS>')
     print('Subcommands:')
     print('     sim     Simulate the program')
     print('     com     Compile the program')
+    print('         --run   Used with `com` to run immediately')
 
 
 def parse_token(token, location):
-    assert OP_COUNTER == 5, 'Exhaustive handling of tokens'
+    assert OP_COUNTER == 7, 'Exhaustive handling of tokens'
     filename, line, column = location
     if token == '.':
         return write()
@@ -182,13 +208,30 @@ def parse_token(token, location):
         return push(int(token))
     elif token == '==':
         return equal()
+    elif token == 'if':
+        return iff()
+    elif token == 'end':
+        return end()
     else:
         print(f'{os.path.abspath(filename)}:{line + 1}:{column}: Unhandled token `{token}`')
         exit(1)
 
 
+def cross_reference_blocks(program):
+    assert OP_COUNTER == 7, 'Exhaustive handling of code block'
+    stack = []
+    for i in range(len(program)):
+        instruction = program[i]
+        operator = instruction[0]
+        if operator == OP_IF:
+            stack.append(i)
+        elif operator == OP_END:
+            if_index = stack.pop()
+            program[if_index] = (OP_IF, i)
+    return program
+
+
 def lex_line(line, filename, line_number):
-    lexed_line = []
     l, r = 0, 0
     while l < len(line):
         if line[l].isspace():
@@ -197,10 +240,8 @@ def lex_line(line, filename, line_number):
         r = l
         while r < len(line) and not line[r].isspace():
             r += 1
-        lexed_line.append((parse_token(line[l:r], (filename, line_number, l))))
+        yield parse_token(line[l:r], (filename, line_number, l))
         l = r
-
-    return lexed_line
 
 
 def lex_file(filename):
@@ -220,7 +261,7 @@ if __name__ == '__main__':
     filename_arg, *argv = argv
 
     program_stack = lex_file(filename_arg)
-
+    program_referenced = cross_reference_blocks(program_stack)
     if subcommand == 'sim':
         simulate_program(program_stack)
     elif subcommand == 'com':
