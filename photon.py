@@ -5,6 +5,11 @@ import sys
 auto_counter = 0
 
 
+def raise_error(message, loc):
+    print(f'{loc[0]}:{loc[1] + 1}:{loc[2]}: {message}')
+    exit(1)
+
+
 def write_indent(file, level=0):
     def temp(buffer):
         file.write(' ' * (0 if level == 0 else 4 ** level) + buffer + '\n')
@@ -80,106 +85,59 @@ OP_DO = auto()
 OP_COUNTER = auto()
 
 
-def push(a):
-    return OP_PUSH, a
-
-
-def add():
-    return (OP_ADD,)
-
-
-def sub():
-    return (OP_SUB,)
-
-
-def write():
-    return (OP_WRITE,)
-
-
-def equal():
-    return (OP_EQUAL,)
-
-
-def iff():
-    return (OP_IF,)
-
-
-def end():
-    return (OP_END,)
-
-def els():
-    return (OP_ELSE,)
-
-def lt():
-    return (OP_LT,)
-
-def gt():
-    return (OP_GT,)
-
-def dup():
-    return (OP_DUP,)
-
-def whil():
-    return (OP_WHILE,)
-
-def do():
-    return (OP_DO,)
-
-
 def simulate_program(program):
     stack = []
     assert OP_COUNTER == 13, 'Exhaustive handling of operators in simulation'
     i = 0
     while i < len(program):
         instruction = program[i]
-        operator = instruction[0]
-        if operator == OP_PUSH:
-            stack.append(instruction[1])
-        elif operator == OP_ADD:
+        if instruction['type'] == OP_PUSH:
+            stack.append(instruction['value'])
+        elif instruction['type'] == OP_ADD:
             a = stack.pop()
             b = stack.pop()
             stack.append(a + b)
-        elif operator == OP_SUB:
+        elif instruction['type'] == OP_SUB:
             a = stack.pop()
             b = stack.pop()
             stack.append(b - a)
-        elif operator == OP_WRITE:
+        elif instruction['type'] == OP_WRITE:
             a = stack.pop()
             print(a)
-        elif operator == OP_EQUAL:
+        elif instruction['type'] == OP_EQUAL:
             a = stack.pop()
             b = stack.pop()
             stack.append(int(a == b))
-        elif operator == OP_LT:
+        elif instruction['type'] == OP_LT:
             a = stack.pop()
             b = stack.pop()
             stack.append(int(b < a))
-        elif operator == OP_GT:
+        elif instruction['type'] == OP_GT:
             a = stack.pop()
             b = stack.pop()
             stack.append(int(b > a))
-        elif operator == OP_IF:
+        elif instruction['type'] == OP_IF:
             a = stack.pop()
             if a == 0:
-                i = instruction[1]
-        elif operator == OP_ELSE:
-            i = instruction[1]
-        elif operator == OP_END:
-            if len(instruction) > 1:
-                i = instruction[1]
-        elif operator == OP_DUP:
+                i = instruction['jmp']
+        elif instruction['type'] == OP_ELSE:
+            i = instruction['jmp']
+        elif instruction['type'] == OP_END:
+            if 'jmp' in instruction:
+                i = instruction['jmp']
+        elif instruction['type'] == OP_DUP:
             a = stack.pop()
             stack.append(a)
             stack.append(a)
-        elif operator == OP_WHILE:
+        elif instruction['type'] == OP_WHILE:
             i += 1
             continue
-        elif operator == OP_DO:
+        elif instruction['type'] == OP_DO:
             a = stack.pop()
             if a == 0:
-                i = instruction[1]
+                i = instruction['jmp']
         else:
-            assert False, f'Unhandled instruction: {instruction}'
+            raise_error(f'Unhandled instruction: {instruction}', instruction['loc'])
         i += 1
 
 
@@ -195,60 +153,59 @@ def compile_program(program):
     write_base('_start:')
     for i in range(len(program)):
         instruction = program[i]
-        operator = instruction[0]
-        if operator == OP_PUSH:
-            write_level1(f'mov x0, #{instruction[1]}')
+        if instruction['type'] == OP_PUSH:
+            write_level1(f'mov x0, #{instruction["value"]}')
             write_level1('push x0, xzr')
-        elif operator == OP_ADD:
+        elif instruction['type'] == OP_ADD:
             write_level1('pop x0, xzr')
             write_level1('pop x1, xzr')
             write_level1('add x0, x0, x1')
             write_level1('push x0, xzr')
-        elif operator == OP_SUB:
+        elif instruction['type'] == OP_SUB:
             write_level1('pop x0, xzr')
             write_level1('pop x1, xzr')
             write_level1('sub x0, x1, x0')
             write_level1('push x0, xzr')
-        elif operator == OP_WRITE:
+        elif instruction['type'] == OP_WRITE:
             write_level1('pop x0, xzr')
             write_level1('bl dump')
-        elif operator == OP_EQUAL:
+        elif instruction['type'] == OP_EQUAL:
             write_level1('pop x0, xzr')
             write_level1('pop x1, xzr')
             write_level1('cmp x0, x1')
             write_level1('cset x0, eq')
             write_level1('push x0, xzr')
-        elif operator == OP_LT:
+        elif instruction['type'] == OP_LT:
             write_level1('pop x0, xzr')
             write_level1('pop x1, xzr')
             write_level1('cmp x0, x1')
             write_level1('cset x0, gt')
             write_level1('push x0, xzr')
-        elif operator == OP_GT:
+        elif instruction['type'] == OP_GT:
             write_level1('pop x0, xzr')
             write_level1('pop x1, xzr')
             write_level1('cmp x0, x1')
             write_level1('cset x0, lt')
             write_level1('push x0, xzr')
-        elif operator in (OP_IF, OP_DO):
+        elif instruction['type'] in (OP_IF, OP_DO):
             write_level1('pop x0, xzr')
             write_level1('tst x0, x0')
-            write_level1(f'b.eq end_{instruction[1]}')
-        elif operator == OP_ELSE:
-            write_level1(f'b end_{instruction[1]}')
+            write_level1(f'b.eq end_{instruction["jmp"]}')
+        elif instruction['type'] == OP_ELSE:
+            write_level1(f'b end_{instruction["jmp"]}')
             write_base(f'end_{i}:')
-        elif operator == OP_END:
-            if len(instruction) > 1:
-                write_level1(f'b while_{instruction[1]}')
+        elif instruction['type'] == OP_END:
+            if 'jmp' in instruction:
+                write_level1(f'b while_{instruction["jmp"]}')
             write_base(f'end_{i}:')
-        elif operator == OP_DUP:
+        elif instruction['type'] == OP_DUP:
             write_level1('pop x0, xzr')
             write_level1('push x0, xzr')
             write_level1('push x0, xzr')
-        elif operator == OP_WHILE:
+        elif instruction['type'] == OP_WHILE:
             write_base(f'while_{i}:')
         else:
-            assert False, f'Unhandled instruction: {instruction}'
+            raise_error(f'Unhandled instruction: {instruction}', instruction['loc'])
     write_level1('mov x16, #1')
     write_level1('mov x0, #0')
     write_level1('svc #0')
@@ -265,70 +222,61 @@ def usage_help():
 
 def parse_token(token, location):
     assert OP_COUNTER == 13, 'Exhaustive handling of tokens'
-    filename, line, column = location
-    if token == '.':
-        return write()
-    elif token == '+':
-        return add()
-    elif token == '-':
-        return sub()
+    token_dict = {
+        '.': {'type': OP_WRITE, 'loc': location},
+        '+': {'type': OP_ADD, 'loc': location},
+        '-': {'type': OP_SUB, 'loc': location},
+        '==': {'type': OP_EQUAL, 'loc': location},
+        '>': {'type': OP_GT, 'loc': location},
+        '<': {'type': OP_LT, 'loc': location},
+        'if': {'type': OP_IF, 'loc': location},
+        'end': {'type': OP_END, 'loc': location},
+        'else': {'type': OP_ELSE, 'loc': location},
+        'dup': {'type': OP_DUP, 'loc': location},
+        'while': {'type': OP_WHILE, 'loc': location},
+        'do': {'type': OP_DO, 'loc': location}
+    }
+    if token in token_dict:
+        return token_dict[token]
     elif token.isdigit() or (token[0] == '-' and token[1:].isdigit()):
-        return push(int(token))
-    elif token == '==':
-        return equal()
-    elif token == '>':
-        return gt()
-    elif token == '<':
-        return lt()
-    elif token == 'if':
-        return iff()
-    elif token == 'end':
-        return end()
-    elif token == 'else':
-        return els()
-    elif token == 'dup':
-        return dup()
-    elif token == 'while':
-        return whil()
-    elif token == 'do':
-        return do()
+        return {'type': OP_PUSH, 'loc': location, 'value': int(token)}
     else:
-        print(f'{os.path.abspath(filename)}:{line + 1}:{column}: Unhandled token `{token}`')
-        exit(1)
+        raise_error(f'Unhandled token: {token}', location)
 
 
 def cross_reference_blocks(program):
     assert OP_COUNTER == 13, 'Exhaustive handling of code block'
     stack = []
     for i in range(len(program)):
-        operator = program[i][0]
-        if operator == OP_IF:
+        if program[i]['type'] == OP_IF:
             stack.append(i)
-        elif operator == OP_ELSE:
+        elif program[i]['type'] == OP_ELSE:
             if_index = stack.pop()
-            assert program[if_index][0] == OP_IF, 'Else can only be used with an `if`'
-            program[if_index] = (OP_IF, i)
+            if program[if_index]['type'] != OP_IF:
+                raise_error(f'Else can only be used with an `if`', program[if_index]['loc'])
+            program[if_index]['jmp'] = i
             stack.append(i)
-        elif operator == OP_WHILE:
+        elif program[i]['type'] == OP_WHILE:
             stack.append(i)
-        elif operator == OP_DO:
+        elif program[i]['type'] == OP_DO:
             stack.append(i)
-        elif operator == OP_END:
+        elif program[i]['type'] == OP_END:
             block_index = stack.pop()
-            if program[block_index][0] in (OP_IF, OP_ELSE):
-                program[block_index] = (program[block_index][0], i)
-            elif program[block_index][0] == OP_DO:
-                program[block_index] = (program[block_index][0], i)
+            if program[block_index]['type'] in (OP_IF, OP_ELSE):
+                program[block_index]['jmp'] = i
+            elif program[block_index]['type'] == OP_DO:
+                program[block_index]['jmp'] = i
                 while_index = stack.pop()
-                assert program[while_index][0] == OP_WHILE, '`while` must be present before `do`'
-                program[i] = (OP_END, while_index)
+                if program[while_index]['type'] != OP_WHILE:
+                    raise_error('`while` must be present before `do`', program[while_index]['loc'])
+                program[i]['jmp'] = while_index
             else:
-                assert False, 'Else can only be used with an `if` or `else`'
-
+                raise_error('End can only be used with an `if`, `else` or `while`',
+                            program[block_index]['loc'])
     return program
 
 
-def lex_line(line, filename, line_number):
+def lex_line(line, file_path, line_number):
     l, r = 0, 0
     while l < len(line):
         if line[l].isspace():
@@ -337,15 +285,15 @@ def lex_line(line, filename, line_number):
         r = l
         while r < len(line) and not line[r].isspace():
             r += 1
-        yield parse_token(line[l:r], (filename, line_number, l))
+        yield parse_token(line[l:r], (file_path, line_number, l))
         l = r
 
 
-def lex_file(filename):
+def lex_file(file_path):
     program = []
-    with open(filename, 'r') as f:
+    with open(file_path, 'r') as f:
         for i, line in enumerate(f):
-            program.extend(lex_line(line, filename, i))
+            program.extend(lex_line(line, file_path, i))
     return program
 
 
@@ -356,8 +304,8 @@ if __name__ == '__main__':
         exit(1)
     subcommand, *argv = argv
     filename_arg, *argv = argv
-
-    program_stack = lex_file(filename_arg)
+    file_path_arg = os.path.abspath(filename_arg)
+    program_stack = lex_file(file_path_arg)
     program_referenced = cross_reference_blocks(program_stack)
     if subcommand == 'sim':
         simulate_program(program_stack)
