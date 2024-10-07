@@ -223,7 +223,7 @@ def usage_help():
 def parse_token(token, location):
     assert OP_COUNTER == 13, 'Exhaustive handling of tokens'
     token_dict = {
-        '.': {'type': OP_WRITE, 'loc': location},
+        'print': {'type': OP_WRITE, 'loc': location},
         '+': {'type': OP_ADD, 'loc': location},
         '-': {'type': OP_SUB, 'loc': location},
         '==': {'type': OP_EQUAL, 'loc': location},

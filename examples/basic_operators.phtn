@@ -1,22 +1,22 @@
-30 66 + .
+30 66 + print
 
-2024 301 - .
+2024 301 - print
 
-5 5 == .
-4 3 == .
-5 4 > .
-9 10 < .
+5 5 == print
+4 3 == print
+5 4 > print
+9 10 < print
 
-4 5 + 10 1 - == .
+4 5 + 10 1 - == print
 
 5 5 - 0 == if
-5 .
+5 print
 else
-10 .
+10 print
 end
 
 4 6 + 19 - 9 + 25 == if
-2024 .
+2024 print
 else
-2025 .
+2025 print
 end
