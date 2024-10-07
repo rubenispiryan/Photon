@@ -29,10 +29,10 @@ def auto(reset=False):
 def asm_setup(write_base, write_level1):
     write_base('.macro push reg1, reg2')
     write_level1('sub sp, sp, #16')
-    write_level1(r'stp \reg1, \reg2, [sp]')
+    write_level1(r'stp \reg1, xzr, [sp]')
     write_base('.endmacro')
     write_base('.macro pop reg1, reg2')
-    write_level1(r'ldp \reg1, \reg2, [sp]')
+    write_level1(r'ldp \reg1, xzr, [sp]')
     write_level1('add sp, sp, #16')
     write_base('.endmacro')
     write_base('dump:')
@@ -148,47 +148,47 @@ def compile_program(program):
     write_level1 = write_indent(out, 1)
     write_base('.section __TEXT, __text')
     write_base('.global _start')
-    write_base('.align 2')
+    write_base('.align 3')
     asm_setup(write_base, write_level1)
     write_base('_start:')
     for i in range(len(program)):
         instruction = program[i]
         if instruction['type'] == OP_PUSH:
             write_level1(f'mov x0, #{instruction["value"]}')
-            write_level1('push x0, xzr')
+            write_level1('push x0')
         elif instruction['type'] == OP_ADD:
-            write_level1('pop x0, xzr')
-            write_level1('pop x1, xzr')
+            write_level1('pop x0')
+            write_level1('pop x1')
             write_level1('add x0, x0, x1')
-            write_level1('push x0, xzr')
+            write_level1('push x0')
         elif instruction['type'] == OP_SUB:
-            write_level1('pop x0, xzr')
-            write_level1('pop x1, xzr')
+            write_level1('pop x0')
+            write_level1('pop x1')
             write_level1('sub x0, x1, x0')
-            write_level1('push x0, xzr')
+            write_level1('push x0')
         elif instruction['type'] == OP_WRITE:
-            write_level1('pop x0, xzr')
+            write_level1('pop x0')
             write_level1('bl dump')
         elif instruction['type'] == OP_EQUAL:
-            write_level1('pop x0, xzr')
-            write_level1('pop x1, xzr')
+            write_level1('pop x0')
+            write_level1('pop x1')
             write_level1('cmp x0, x1')
             write_level1('cset x0, eq')
-            write_level1('push x0, xzr')
+            write_level1('push x0')
         elif instruction['type'] == OP_LT:
-            write_level1('pop x0, xzr')
-            write_level1('pop x1, xzr')
+            write_level1('pop x0')
+            write_level1('pop x1')
             write_level1('cmp x0, x1')
             write_level1('cset x0, gt')
-            write_level1('push x0, xzr')
+            write_level1('push x0')
         elif instruction['type'] == OP_GT:
-            write_level1('pop x0, xzr')
-            write_level1('pop x1, xzr')
+            write_level1('pop x0')
+            write_level1('pop x1')
             write_level1('cmp x0, x1')
             write_level1('cset x0, lt')
-            write_level1('push x0, xzr')
+            write_level1('push x0')
         elif instruction['type'] in (OP_IF, OP_DO):
-            write_level1('pop x0, xzr')
+            write_level1('pop x0')
             write_level1('tst x0, x0')
             write_level1(f'b.eq end_{instruction["jmp"]}')
         elif instruction['type'] == OP_ELSE:
@@ -199,9 +199,9 @@ def compile_program(program):
                 write_level1(f'b while_{instruction["jmp"]}')
             write_base(f'end_{i}:')
         elif instruction['type'] == OP_DUP:
-            write_level1('pop x0, xzr')
-            write_level1('push x0, xzr')
-            write_level1('push x0, xzr')
+            write_level1('pop x0')
+            write_level1('push x0')
+            write_level1('push x0')
         elif instruction['type'] == OP_WHILE:
             write_base(f'while_{i}:')
         else:
