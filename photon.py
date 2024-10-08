@@ -27,12 +27,20 @@ def auto(reset=False):
 
 
 def asm_setup(write_base, write_level1):
-    write_base('.macro push reg1, reg2')
+    write_base('.macro push reg1')
     write_level1('sub sp, sp, #16')
     write_level1(r'stp \reg1, xzr, [sp]')
     write_base('.endmacro')
-    write_base('.macro pop reg1, reg2')
+    write_base('.macro pop reg1')
     write_level1(r'ldp \reg1, xzr, [sp]')
+    write_level1('add sp, sp, #16')
+    write_base('.endmacro')
+    write_base('.macro pushw reg1')
+    write_level1('sub sp, sp, #16')
+    write_level1(r'stp \reg1, wzr, [sp]')
+    write_base('.endmacro')
+    write_base('.macro popw reg1')
+    write_level1(r'ldp \reg1, wzr, [sp]')
     write_level1('add sp, sp, #16')
     write_base('.endmacro')
     write_base('dump:')
@@ -72,7 +80,7 @@ def asm_setup(write_base, write_level1):
 OP_PUSH = auto(True)
 OP_ADD = auto()
 OP_SUB = auto()
-OP_WRITE = auto()
+OP_PRINT = auto()
 OP_EQUAL = auto()
 OP_LT = auto()
 OP_GT = auto()
@@ -82,12 +90,35 @@ OP_ELSE = auto()
 OP_DUP = auto()
 OP_WHILE = auto()
 OP_DO = auto()
+OP_MEM = auto()
+OP_LOAD = auto()
+OP_STORE = auto()
 OP_COUNTER = auto()
+
+TOKEN_NAMES = {
+    OP_PRINT: 'print',
+    OP_ADD: '+',
+    OP_SUB: '-',
+    OP_EQUAL: '==',
+    OP_GT: '>',
+    OP_LT: '<',
+    OP_IF: 'if',
+    OP_END: 'end',
+    OP_ELSE: 'else',
+    OP_DUP: 'dup',
+    OP_WHILE: 'while',
+    OP_DO: 'do',
+    OP_MEM: 'mem',
+    OP_STORE: '.',
+    OP_LOAD: ',',
+}
+
+MEM_CAPACITY = 640_000
 
 
 def simulate_program(program):
     stack = []
-    assert OP_COUNTER == 13, 'Exhaustive handling of operators in simulation'
+    assert OP_COUNTER == 16, 'Exhaustive handling of operators in simulation'
     i = 0
     while i < len(program):
         instruction = program[i]
@@ -101,7 +132,7 @@ def simulate_program(program):
             a = stack.pop()
             b = stack.pop()
             stack.append(b - a)
-        elif instruction['type'] == OP_WRITE:
+        elif instruction['type'] == OP_PRINT:
             a = stack.pop()
             print(a)
         elif instruction['type'] == OP_EQUAL:
@@ -136,16 +167,26 @@ def simulate_program(program):
             a = stack.pop()
             if a == 0:
                 i = instruction['jmp']
+        elif instruction['type'] == OP_MEM:
+            raise NotImplementedError()
+        elif instruction['type'] == OP_LOAD:
+            raise NotImplementedError()
+        elif instruction['type'] == OP_STORE:
+            raise NotImplementedError()
         else:
-            raise_error(f'Unhandled instruction: {instruction}', instruction['loc'])
+            raise_error(f'Unhandled instruction: {TOKEN_NAMES[instruction["type"]]}',
+                        instruction['loc'])
         i += 1
 
 
 def compile_program(program):
-    assert OP_COUNTER == 13, 'Exhaustive handling of operators in compilation'
+    assert OP_COUNTER == 16, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
+    write_base('.section __DATA, __bss')
+    write_base('mem:')
+    write_level1(f'.skip {MEM_CAPACITY}')
     write_base('.section __TEXT, __text')
     write_base('.global _start')
     write_base('.align 3')
@@ -166,7 +207,7 @@ def compile_program(program):
             write_level1('pop x1')
             write_level1('sub x0, x1, x0')
             write_level1('push x0')
-        elif instruction['type'] == OP_WRITE:
+        elif instruction['type'] == OP_PRINT:
             write_level1('pop x0')
             write_level1('bl dump')
         elif instruction['type'] == OP_EQUAL:
@@ -204,8 +245,20 @@ def compile_program(program):
             write_level1('push x0')
         elif instruction['type'] == OP_WHILE:
             write_base(f'while_{i}:')
+        elif instruction['type'] == OP_MEM:
+            write_level1('adrp x0, mem@PAGE')
+            write_level1('push x0')
+        elif instruction['type'] == OP_STORE:
+            write_level1('popw w0')
+            write_level1('pop x1')
+            write_level1('strb w0, [x1]')
+        elif instruction['type'] == OP_LOAD:
+            write_level1('pop x0')
+            write_level1('ldrb w1, [x0]')
+            write_level1('pushw w1')
         else:
-            raise_error(f'Unhandled instruction: {instruction}', instruction['loc'])
+            raise_error(f'Unhandled instruction: {TOKEN_NAMES[instruction["type"]]}',
+                        instruction['loc'])
     write_level1('mov x16, #1')
     write_level1('mov x0, #0')
     write_level1('svc #0')
@@ -221,9 +274,9 @@ def usage_help():
 
 
 def parse_token(token, location):
-    assert OP_COUNTER == 13, 'Exhaustive handling of tokens'
+    assert OP_COUNTER == 16, 'Exhaustive handling of tokens'
     token_dict = {
-        'print': {'type': OP_WRITE, 'loc': location},
+        'print': {'type': OP_PRINT, 'loc': location},
         '+': {'type': OP_ADD, 'loc': location},
         '-': {'type': OP_SUB, 'loc': location},
         '==': {'type': OP_EQUAL, 'loc': location},
@@ -234,7 +287,10 @@ def parse_token(token, location):
         'else': {'type': OP_ELSE, 'loc': location},
         'dup': {'type': OP_DUP, 'loc': location},
         'while': {'type': OP_WHILE, 'loc': location},
-        'do': {'type': OP_DO, 'loc': location}
+        'do': {'type': OP_DO, 'loc': location},
+        'mem': {'type': OP_MEM, 'loc': location},
+        '.': {'type': OP_STORE, 'loc': location},
+        ',': {'type': OP_LOAD, 'loc': location},
     }
     if token in token_dict:
         return token_dict[token]
@@ -245,7 +301,7 @@ def parse_token(token, location):
 
 
 def cross_reference_blocks(program):
-    assert OP_COUNTER == 13, 'Exhaustive handling of code block'
+    assert OP_COUNTER == 16, 'Exhaustive handling of code block'
     stack = []
     for i in range(len(program)):
         if program[i]['type'] == OP_IF:
