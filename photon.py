@@ -91,6 +91,7 @@ OP_DO = auto()
 OP_MEM = auto()
 OP_LOAD = auto()
 OP_STORE = auto()
+OP_SYSCALL3 = auto()
 OP_COUNTER = auto()
 
 TOKEN_NAMES = {
@@ -109,6 +110,7 @@ TOKEN_NAMES = {
     OP_MEM: 'mem',
     OP_STORE: '.',
     OP_LOAD: ',',
+    OP_SYSCALL3: 'syscall3',
 }
 
 MEM_CAPACITY = 640_000
@@ -116,7 +118,7 @@ MEM_CAPACITY = 640_000
 
 def simulate_program(program):
     stack = []
-    assert OP_COUNTER == 16, 'Exhaustive handling of operators in simulation'
+    assert OP_COUNTER == 17, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(MEM_CAPACITY)
     while i < len(program):
@@ -169,12 +171,26 @@ def simulate_program(program):
         elif instruction['type'] == OP_MEM:
             stack.append(0)
         elif instruction['type'] == OP_LOAD:
-            a = stack.pop()
-            stack.append(mem[a])
+            address = stack.pop()
+            stack.append(mem[address])
         elif instruction['type'] == OP_STORE:
-            a = stack.pop()
-            b = stack.pop()
-            mem[b] = a & 0xFF
+            value = stack.pop()
+            address = stack.pop()
+            mem[address] = value & 0xFF
+        elif instruction['type'] == OP_SYSCALL3:
+            syscall_number = stack.pop()
+            arg1 = stack.pop()
+            arg2 = stack.pop()
+            arg3 = stack.pop()
+            if syscall_number == 4:
+                if arg1 == 1:
+                    print(mem[arg2:arg2 + arg3].decode(), end='')
+                elif arg1 == 2:
+                    print(mem[arg2:arg2 + arg3].decode(), end='', file=sys.stderr)
+                else:
+                    raise_error(f'Unkown file descriptor: {arg1}', instruction['loc'])
+            else:
+                raise_error(f'Unknown syscall number: {syscall_number}', instruction['loc'])
         else:
             raise_error(f'Unhandled instruction: {TOKEN_NAMES[instruction["type"]]}',
                         instruction['loc'])
@@ -182,7 +198,7 @@ def simulate_program(program):
 
 
 def compile_program(program):
-    assert OP_COUNTER == 16, 'Exhaustive handling of operators in compilation'
+    assert OP_COUNTER == 17, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -258,6 +274,12 @@ def compile_program(program):
             write_level1('pop x0')
             write_level1('ldrb w1, [x0]')
             write_level1('pushw w1')
+        elif instruction['type'] == OP_SYSCALL3:
+            write_level1('pop x16')
+            write_level1('pop x0')
+            write_level1('pop x1')
+            write_level1('pop x2')
+            write_level1('svc #0')
         else:
             raise_error(f'Unhandled instruction: {TOKEN_NAMES[instruction["type"]]}',
                         instruction['loc'])
@@ -276,7 +298,7 @@ def usage_help():
 
 
 def parse_token(token, location):
-    assert OP_COUNTER == 16, 'Exhaustive handling of tokens'
+    assert OP_COUNTER == 17, 'Exhaustive handling of tokens'
     token_dict = {
         'print': {'type': OP_PRINT, 'loc': location},
         '+': {'type': OP_ADD, 'loc': location},
@@ -293,6 +315,7 @@ def parse_token(token, location):
         'mem': {'type': OP_MEM, 'loc': location},
         '.': {'type': OP_STORE, 'loc': location},
         ',': {'type': OP_LOAD, 'loc': location},
+        'syscall3': {'type': OP_SYSCALL3, 'loc': location},
     }
     if token in token_dict:
         return token_dict[token]
@@ -303,7 +326,7 @@ def parse_token(token, location):
 
 
 def cross_reference_blocks(program):
-    assert OP_COUNTER == 16, 'Exhaustive handling of code block'
+    assert OP_COUNTER == 17, 'Exhaustive handling of code block'
     stack = []
     for i in range(len(program)):
         if program[i]['type'] == OP_IF:
