@@ -118,6 +118,7 @@ def simulate_program(program):
     stack = []
     assert OP_COUNTER == 16, 'Exhaustive handling of operators in simulation'
     i = 0
+    mem = bytearray(MEM_CAPACITY)
     while i < len(program):
         instruction = program[i]
         if instruction['type'] == OP_PUSH:
@@ -166,11 +167,14 @@ def simulate_program(program):
             if a == 0:
                 i = instruction['jmp']
         elif instruction['type'] == OP_MEM:
-            raise NotImplementedError()
+            stack.append(0)
         elif instruction['type'] == OP_LOAD:
-            raise NotImplementedError()
+            a = stack.pop()
+            stack.append(mem[a])
         elif instruction['type'] == OP_STORE:
-            raise NotImplementedError()
+            a = stack.pop()
+            b = stack.pop()
+            mem[b] = a & 0xFF
         else:
             raise_error(f'Unhandled instruction: {TOKEN_NAMES[instruction["type"]]}',
                         instruction['loc'])
