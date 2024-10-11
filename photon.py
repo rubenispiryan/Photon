@@ -27,13 +27,11 @@ def auto(reset=False):
 
 
 def asm_setup(write_base, write_level1):
-    write_base('.macro push reg1')
-    write_level1('sub sp, sp, #16')
-    write_level1(r'stp \reg1, xzr, [sp]')
+    write_base('.macro push reg1:req')
+    write_level1(r'str \reg1, [sp, #-16]!')
     write_base('.endmacro')
-    write_base('.macro pop reg1')
-    write_level1(r'ldp \reg1, xzr, [sp]')
-    write_level1('add sp, sp, #16')
+    write_base('.macro pop reg1:req')
+    write_level1(r'ldr \reg1, [sp], #16')
     write_base('.endmacro')
     write_base('.macro pushw reg1')
     write_level1('sub sp, sp, #16')
