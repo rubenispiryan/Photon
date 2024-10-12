@@ -93,6 +93,7 @@ OP_LOAD = auto()
 OP_STORE = auto()
 OP_SYSCALL3 = auto()
 OP_2DUP = auto()
+OP_DROP = auto()
 OP_COUNTER = auto()
 
 TOKEN_NAMES = {
@@ -113,6 +114,7 @@ TOKEN_NAMES = {
     OP_LOAD: ',',
     OP_SYSCALL3: 'syscall3',
     OP_2DUP: '2dup',
+    OP_DROP: 'drop',
 }
 
 assert OP_COUNTER == len(TOKEN_NAMES) + 1, 'Exhaustive handling of token names'
@@ -122,7 +124,7 @@ MEM_CAPACITY = 640_000
 
 def simulate_program(program):
     stack = []
-    assert OP_COUNTER == 18, 'Exhaustive handling of operators in simulation'
+    assert OP_COUNTER == 19, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(MEM_CAPACITY)
     while i < len(program):
@@ -172,6 +174,8 @@ def simulate_program(program):
             stack.append(a)
             stack.append(b)
             stack.append(a)
+        elif instruction['type'] == OP_DROP:
+            stack.pop()
         elif instruction['type'] == OP_WHILE:
             i += 1
             continue
@@ -209,7 +213,7 @@ def simulate_program(program):
 
 
 def compile_program(program):
-    assert OP_COUNTER == 18, 'Exhaustive handling of operators in compilation'
+    assert OP_COUNTER == 19, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -279,6 +283,8 @@ def compile_program(program):
             write_level1('push x0')
             write_level1('push x1')
             write_level1('push x0')
+        elif instruction['type'] == OP_DROP:
+            write_level1('pop x0')
         elif instruction['type'] == OP_WHILE:
             write_base(f'while_{i}:')
         elif instruction['type'] == OP_MEM:
@@ -316,7 +322,7 @@ def usage_help():
 
 
 def parse_token(token, location):
-    assert OP_COUNTER == 18, 'Exhaustive handling of tokens'
+    assert OP_COUNTER == 19, 'Exhaustive handling of tokens'
     token_dict = {
         'print': {'type': OP_PRINT, 'loc': location},
         '+': {'type': OP_ADD, 'loc': location},
@@ -335,6 +341,7 @@ def parse_token(token, location):
         ',': {'type': OP_LOAD, 'loc': location},
         'syscall3': {'type': OP_SYSCALL3, 'loc': location},
         '2dup': {'type': OP_2DUP, 'loc': location},
+        'drop': {'type': OP_DROP, 'loc': location},
     }
     if token in token_dict:
         return token_dict[token]
@@ -345,7 +352,7 @@ def parse_token(token, location):
 
 
 def cross_reference_blocks(program):
-    assert OP_COUNTER == 18, 'Exhaustive handling of code block'
+    assert OP_COUNTER == 19, 'Exhaustive handling of code block'
     stack = []
     for i in range(len(program)):
         if program[i]['type'] == OP_IF:
