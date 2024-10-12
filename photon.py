@@ -94,6 +94,10 @@ OP_STORE = auto()
 OP_SYSCALL3 = auto()
 OP_2DUP = auto()
 OP_DROP = auto()
+OP_BITAND = auto()
+OP_BITOR = auto()
+OP_SHIFT_RIGHT = auto()
+OP_SHIFT_LEFT = auto()
 OP_COUNTER = auto()
 
 TOKEN_NAMES = {
@@ -115,6 +119,10 @@ TOKEN_NAMES = {
     OP_SYSCALL3: 'syscall3',
     OP_2DUP: '2dup',
     OP_DROP: 'drop',
+    OP_BITAND: '&',
+    OP_BITOR: '|',
+    OP_SHIFT_RIGHT: '<<',
+    OP_SHIFT_LEFT: '>>',
 }
 
 assert OP_COUNTER == len(TOKEN_NAMES) + 1, 'Exhaustive handling of token names'
@@ -124,7 +132,7 @@ MEM_CAPACITY = 640_000
 
 def simulate_program(program):
     stack = []
-    assert OP_COUNTER == 19, 'Exhaustive handling of operators in simulation'
+    assert OP_COUNTER == 23, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(MEM_CAPACITY)
     while i < len(program):
@@ -192,6 +200,22 @@ def simulate_program(program):
             value = stack.pop()
             address = stack.pop()
             mem[address] = value & 0xFF
+        elif instruction['type'] == OP_BITOR:
+            a = stack.pop()
+            b = stack.pop()
+            stack.append(a | b)
+        elif instruction['type'] == OP_BITAND:
+            a = stack.pop()
+            b = stack.pop()
+            stack.append(a & b)
+        elif instruction['type'] == OP_SHIFT_RIGHT:
+            a = stack.pop()
+            b = stack.pop()
+            stack.append(b >> a)
+        elif instruction['type'] == OP_SHIFT_LEFT:
+            a = stack.pop()
+            b = stack.pop()
+            stack.append(b << a)
         elif instruction['type'] == OP_SYSCALL3:
             syscall_number = stack.pop()
             arg1 = stack.pop()
@@ -213,7 +237,7 @@ def simulate_program(program):
 
 
 def compile_program(program):
-    assert OP_COUNTER == 19, 'Exhaustive handling of operators in compilation'
+    assert OP_COUNTER == 23, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -298,6 +322,26 @@ def compile_program(program):
             write_level1('pop x0')
             write_level1('ldrb w1, [x0]')
             write_level1('pushw w1')
+        elif instruction['type'] == OP_BITOR:
+            write_level1('pop x0')
+            write_level1('pop x1')
+            write_level1('orr x0, x0, x1')
+            write_level1('push x0')
+        elif instruction['type'] == OP_BITAND:
+            write_level1('pop x0')
+            write_level1('pop x1')
+            write_level1('and x0, x0, x1')
+            write_level1('push x0')
+        elif instruction['type'] == OP_SHIFT_RIGHT:
+            write_level1('pop x0')
+            write_level1('pop x1')
+            write_level1('lsr x0, x1, x0')
+            write_level1('push x0')
+        elif instruction['type'] == OP_SHIFT_LEFT:
+            write_level1('pop x0')
+            write_level1('pop x1')
+            write_level1('lsl x0, x1, x0')
+            write_level1('push x0')
         elif instruction['type'] == OP_SYSCALL3:
             write_level1('pop x16')
             write_level1('pop x0')
@@ -322,7 +366,7 @@ def usage_help():
 
 
 def parse_token(token, location):
-    assert OP_COUNTER == 19, 'Exhaustive handling of tokens'
+    assert OP_COUNTER == 23, 'Exhaustive handling of tokens'
     token_dict = {
         'print': {'type': OP_PRINT, 'loc': location},
         '+': {'type': OP_ADD, 'loc': location},
@@ -342,6 +386,10 @@ def parse_token(token, location):
         'syscall3': {'type': OP_SYSCALL3, 'loc': location},
         '2dup': {'type': OP_2DUP, 'loc': location},
         'drop': {'type': OP_DROP, 'loc': location},
+        '&': {'type': OP_BITAND, 'loc': location},
+        '|': {'type': OP_BITOR, 'loc': location},
+        '>>': {'type': OP_SHIFT_RIGHT, 'loc': location},
+        '<<': {'type': OP_SHIFT_LEFT, 'loc': location},
     }
     if token in token_dict:
         return token_dict[token]
@@ -352,7 +400,7 @@ def parse_token(token, location):
 
 
 def cross_reference_blocks(program):
-    assert OP_COUNTER == 19, 'Exhaustive handling of code block'
+    assert OP_COUNTER == 23, 'Exhaustive handling of code block'
     stack = []
     for i in range(len(program)):
         if program[i]['type'] == OP_IF:
