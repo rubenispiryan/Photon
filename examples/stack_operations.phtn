@@ -1,0 +1,7 @@
+1 2 swap print print
+
+5 4 dup over print print print drop
+
+1 2 3 drop print drop
+
+5 4 2dup + 1 print drop print print
