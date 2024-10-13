@@ -6,7 +6,7 @@ end
 
 print
 
-0 100 while 2dup < do
+0 100 while dup2 < do
 dup print
 1 -
 end

@@ -23,14 +23,13 @@ mem 98 + 1 .
     swap 1 << 7 &
     over 1 + mem + ,
     |
-    2dup
+    dup2
     110 swap >> 1 &
     swap mem + swap .
     swap
     1 +
     end
-    drop
-    drop
+    drop2
 1 +
 end
 drop

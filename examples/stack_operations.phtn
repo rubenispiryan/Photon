@@ -4,4 +4,4 @@
 
 1 2 3 drop print drop
 
-5 4 2dup + 1 print drop print print
+5 4 dup2 + 1 print drop print print
