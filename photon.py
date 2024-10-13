@@ -107,6 +107,10 @@ OP_DROP2 = auto()
 OP_MOD = auto()
 OP_COUNTER = auto()
 
+TOKEN_WORD = auto(reset=True)
+TOKEN_INT = auto()
+TOKEN_COUNTER = auto()
+
 TOKEN_NAMES = {
     OP_PRINT: 'print',
     OP_ADD: '+',
@@ -450,47 +454,6 @@ def usage_help():
     print('         --run   Used with `com` to run immediately')
 
 
-def parse_token(token, location):
-    assert OP_COUNTER == 30, 'Exhaustive handling of tokens'
-    token_dict = {
-        'print': {'type': OP_PRINT, 'loc': location},
-        '+': {'type': OP_ADD, 'loc': location},
-        '-': {'type': OP_SUB, 'loc': location},
-        '==': {'type': OP_EQUAL, 'loc': location},
-        '>': {'type': OP_GT, 'loc': location},
-        '<': {'type': OP_LT, 'loc': location},
-        'if': {'type': OP_IF, 'loc': location},
-        'end': {'type': OP_END, 'loc': location},
-        'else': {'type': OP_ELSE, 'loc': location},
-        'dup': {'type': OP_DUP, 'loc': location},
-        'while': {'type': OP_WHILE, 'loc': location},
-        'do': {'type': OP_DO, 'loc': location},
-        'mem': {'type': OP_MEM, 'loc': location},
-        '.': {'type': OP_STORE, 'loc': location},
-        ',': {'type': OP_LOAD, 'loc': location},
-        'syscall3': {'type': OP_SYSCALL3, 'loc': location},
-        'dup2': {'type': OP_DUP2, 'loc': location},
-        'drop': {'type': OP_DROP, 'loc': location},
-        '&': {'type': OP_BITAND, 'loc': location},
-        '|': {'type': OP_BITOR, 'loc': location},
-        '>>': {'type': OP_SHIFT_RIGHT, 'loc': location},
-        '<<': {'type': OP_SHIFT_LEFT, 'loc': location},
-        'swap': {'type': OP_SWAP, 'loc': location},
-        'over': {'type': OP_OVER, 'loc': location},
-        'drop2': {'type': OP_DROP2, 'loc': location},
-        '%': {'type': OP_MOD, 'loc': location},
-        '>=': {'type': OP_GTE, 'loc': location},
-        '<=': {'type': OP_LTE, 'loc': location},
-        '!=': {'type': OP_NE, 'loc': location},
-    }
-    if token in token_dict:
-        return token_dict[token]
-    elif token.isdigit() or (token[0] == '-' and token[1:].isdigit()):
-        return {'type': OP_PUSH, 'loc': location, 'value': int(token)}
-    else:
-        raise_error(f'Unhandled token: {token}', location)
-
-
 def cross_reference_blocks(program):
     assert OP_COUNTER == 30, 'Exhaustive handling of code block'
     stack = []
@@ -523,6 +486,55 @@ def cross_reference_blocks(program):
     return program
 
 
+def parse_token(token, location):
+    assert OP_COUNTER == 30, 'Exhaustive handling of built-in words'
+    builtin_words = {
+        'print': {'type': OP_PRINT, 'loc': location},
+        '+': {'type': OP_ADD, 'loc': location},
+        '-': {'type': OP_SUB, 'loc': location},
+        '==': {'type': OP_EQUAL, 'loc': location},
+        '>': {'type': OP_GT, 'loc': location},
+        '<': {'type': OP_LT, 'loc': location},
+        'if': {'type': OP_IF, 'loc': location},
+        'end': {'type': OP_END, 'loc': location},
+        'else': {'type': OP_ELSE, 'loc': location},
+        'dup': {'type': OP_DUP, 'loc': location},
+        'while': {'type': OP_WHILE, 'loc': location},
+        'do': {'type': OP_DO, 'loc': location},
+        'mem': {'type': OP_MEM, 'loc': location},
+        '.': {'type': OP_STORE, 'loc': location},
+        ',': {'type': OP_LOAD, 'loc': location},
+        'syscall3': {'type': OP_SYSCALL3, 'loc': location},
+        'dup2': {'type': OP_DUP2, 'loc': location},
+        'drop': {'type': OP_DROP, 'loc': location},
+        '&': {'type': OP_BITAND, 'loc': location},
+        '|': {'type': OP_BITOR, 'loc': location},
+        '>>': {'type': OP_SHIFT_RIGHT, 'loc': location},
+        '<<': {'type': OP_SHIFT_LEFT, 'loc': location},
+        'swap': {'type': OP_SWAP, 'loc': location},
+        'over': {'type': OP_OVER, 'loc': location},
+        'drop2': {'type': OP_DROP2, 'loc': location},
+        '%': {'type': OP_MOD, 'loc': location},
+        '>=': {'type': OP_GTE, 'loc': location},
+        '<=': {'type': OP_LTE, 'loc': location},
+        '!=': {'type': OP_NE, 'loc': location},
+    }
+    assert TOKEN_COUNTER == 2, "Exhaustive handling of tokens"
+    if token['type'] == TOKEN_WORD:
+        return builtin_words[token['value']]
+    elif token['type'] == TOKEN_INT:
+        return {'type': OP_PUSH, 'loc': location, 'value': token['value']}
+    else:
+        raise_error(f'Unhandled token: {token}', location)
+
+
+def lex_word(word):
+    try:
+        return {'type': TOKEN_INT, 'value': int(word)}
+    except ValueError:
+        return {'type': TOKEN_WORD, 'value': word}
+
+
 def lex_line(line, file_path, line_number):
     l, r = 0, 0
     while l < len(line):
@@ -532,7 +544,7 @@ def lex_line(line, file_path, line_number):
         r = l
         while r < len(line) and not line[r].isspace():
             r += 1
-        yield parse_token(line[l:r], (file_path, line_number, l))
+        yield parse_token(lex_word(line[l:r]), (file_path, line_number, l))
         l = r
 
 
