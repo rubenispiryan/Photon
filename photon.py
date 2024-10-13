@@ -467,7 +467,8 @@ def compile_program(program):
     write_level1('svc #0')
     write_base('.section __DATA, __data')
     for i in range(len(strs)):
-        write_level1(f'str_{i}: .ascii "{strs[i]}"')
+        word = repr(strs[i]).strip("'")
+        write_level1(f'str_{i}: .ascii "{word}"')
     write_base('.section __DATA, __bss')
     write_base('mem:')
     write_level1(f'.skip {MEM_CAPACITY}')
