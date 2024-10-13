@@ -1,0 +1,29 @@
+name: Run tests and mypy checks on merge to main
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [closed]
+
+jobs:
+  test:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python3
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Set up environment
+      run: |
+        python3 -m pip install --upgrade pip
+        python3 -m pip install mypy
+
+    - name: Run make test
+      run: make test
