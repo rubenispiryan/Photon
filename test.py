@@ -1,13 +1,14 @@
 import os
 import subprocess
 import sys
+from typing import List
 
 
-def execute(subcommand, filename, flag=''):
+def execute(subcommand: str, filename: str, flag: str ='') -> bytes:
     return subprocess.check_output(f'python3 photon.py {subcommand} {filename} {flag}', shell=True)
 
 
-def get_files(folder):
+def get_files(folder: str) -> List[str]:
     output = []
     for filename in os.listdir(folder):
         file_path = os.path.join(folder, filename)
@@ -18,32 +19,32 @@ def get_files(folder):
     return output
 
 
-def read_expected(filename):
+def read_expected(filename: str) -> bytes:
     with open(filename, 'rb') as f:
         expected = f.read()
         return expected
 
-def create_expected(filename, expected):
+def create_expected(filename: str, expected: bytes) -> None:
     with open(filename, 'wb') as f:
         f.write(expected)
 
 
-def create_examples():
+def create_examples() -> None:
     filenames = filter(lambda x: x.endswith('.phtn'), get_files('./examples'))
     for filename in filenames:
         simulated_out = execute('sim', filename)
         compiled_out = execute('com', filename, flag='--run')
         assert compiled_out == simulated_out, (
             f'Output from compilation:\n'
-            f'  {compiled_out}\n'
+            f'  {compiled_out!r}\n'
             f'Output from simulation:\n'
-            f'  {simulated_out}\n'
+            f'  {simulated_out!r}\n'
             f'Compilation and Simulation of {filename} do not match during snapshot')
         create_expected(filename[:-4] + 'test', compiled_out)
         print(f'Snapshot of {filename} created successfully')
 
 
-def check_examples():
+def check_examples() -> None:
     filenames = filter(lambda x: x.endswith('.phtn'), get_files('./examples'))
     for filename in filenames:
         expected_filename = filename[:-4] + 'test'
@@ -55,15 +56,15 @@ def check_examples():
         expected = read_expected(filename[:-4] + 'test')
         assert compiled_out == expected, (
             f'Output from compilation:\n'
-            f'  {compiled_out}\n'
+            f'  {compiled_out!r}\n'
             f'Expected:\n'
-            f'  {expected}\n'
+            f'  {expected!r}\n'
             f'Compilation and Test of {filename} do not match')
         assert simulated_out == expected, (
             f'Output from simulation:\n'
-            f'{simulated_out}\n'
+            f'{simulated_out!r}\n'
             f'Expect:\n'
-            f'{expected}\n'
+            f'{expected!r}\n'
             f'Simulation and Test of {filename} do not match')
         print(f'Test of {filename} passed successfully')
 

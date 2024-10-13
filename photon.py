@@ -3,22 +3,23 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Tuple
+from io import FileIO
+from typing import Tuple, Generator, List, NoReturn, Callable, Dict, TextIO
 
 
-def raise_error(message, loc):
+def raise_error(message: str, loc: Tuple[str, int, int]) -> NoReturn:
     print(f'{loc[0]}:{loc[1] + 1}:{loc[2]}: {message}')
     exit(1)
 
 
-def write_indent(file, level=0):
-    def temp(buffer):
+def write_indent(file: TextIO, level:int = 0) -> Callable[[str], None]:
+    def temp(buffer: str) -> None:
         file.write(' ' * (0 if level == 0 else 4 ** level) + buffer + '\n')
 
     return temp
 
 
-def asm_setup(write_base, write_level1):
+def asm_setup(write_base: Callable[[str], None], write_level1: Callable[[str], None]) -> None:
     write_base('.macro push reg1:req')
     write_level1(r'str \reg1, [sp, #-16]!')
     write_base('.endmacro')
@@ -160,7 +161,7 @@ STR_CAPACITY = 640_000
 MEM_CAPACITY = 640_000
 
 
-def simulate_program(program):
+def simulate_program(program: List[Op]) -> None:
     stack = []
     assert len(OpType) == 31, 'Exhaustive handling of operators in simulation'
     i = 0
@@ -173,6 +174,7 @@ def simulate_program(program):
             if instruction.type == OpType.PUSH_INT:
                 stack.append(instruction.value)
             elif instruction.type == OpType.PUSH_STR:
+                assert type(instruction.value) == str, 'Value for `PUSH_STR` must be `str`'
                 bs = bytes(instruction.value, 'utf-8')
                 n = len(bs)
                 stack.append(n)
@@ -186,54 +188,67 @@ def simulate_program(program):
             elif instruction.type == OpType.ADD:
                 a = stack.pop()
                 b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `+` must be `int`'
                 stack.append(a + b)
             elif instruction.type == OpType.SUB:
                 a = stack.pop()
                 b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `-` must be `int`'
                 stack.append(b - a)
             elif instruction.type == OpType.PRINT:
                 a = stack.pop()
+                assert type(a) == int, 'Arguments for `print` must be `int`'
                 print(a)
             elif instruction.type == OpType.OP_EQUAL:
                 a = stack.pop()
                 b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `==` must be `int`'
                 stack.append(int(a == b))
             elif instruction.type == OpType.LT:
                 a = stack.pop()
                 b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `<` must be `int`'
                 stack.append(int(b < a))
             elif instruction.type == OpType.GT:
                 a = stack.pop()
                 b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `>` must be `int`'
                 stack.append(int(b > a))
             elif instruction.type == OpType.GTE:
                 a = stack.pop()
                 b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `>=` must be `int`'
                 stack.append(int(b >= a))
             elif instruction.type == OpType.LTE:
                 a = stack.pop()
                 b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `<=` must be `int`'
                 stack.append(int(b <= a))
             elif instruction.type == OpType.NE:
                 a = stack.pop()
                 b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `!=` must be `int`'
                 stack.append(int(a != b))
             elif instruction.type == OpType.IF:
                 a = stack.pop()
                 if a == 0:
+                    assert type(instruction.jmp) == int, 'Jump address must be `int`'
                     i = instruction.jmp
             elif instruction.type == OpType.ELSE:
+                assert type(instruction.jmp) == int, 'Jump address must be `int`'
                 i = instruction.jmp
             elif instruction.type == OpType.END:
                 if instruction.jmp is not None:
                     i = instruction.jmp
             elif instruction.type == OpType.DUP:
                 a = stack.pop()
+                assert type(a) == int, 'Arguments for `dup` must be `int`'
                 stack.append(a)
                 stack.append(a)
             elif instruction.type == OpType.DUP2:
                 a = stack.pop()
                 b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `dup2` must be `int`'
                 stack.append(b)
                 stack.append(a)
                 stack.append(b)
@@ -248,47 +263,58 @@ def simulate_program(program):
                 continue
             elif instruction.type == OpType.DO:
                 a = stack.pop()
+                assert type(a) ==  int, 'Arguments for `do` must be `int`'
                 if a == 0:
+                    assert type(instruction.jmp) == int, 'Jump address must be `int`'
                     i = instruction.jmp
             elif instruction.type == OpType.MEM:
                 stack.append(0)
             elif instruction.type == OpType.LOAD:
                 address = stack.pop()
+                assert type(address) == int, 'Arguments for `,` must be `int`'
                 stack.append(mem[address])
             elif instruction.type == OpType.STORE:
                 value = stack.pop()
                 address = stack.pop()
+                assert type(value) == type(address) == int, 'Arguments for `.` must be `int`'
                 mem[address] = value & 0xFF
             elif instruction.type == OpType.BITOR:
                 a = stack.pop()
                 b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `|` must be `int`'
                 stack.append(a | b)
             elif instruction.type == OpType.BITAND:
                 a = stack.pop()
                 b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `&` must be `int`'
                 stack.append(a & b)
             elif instruction.type == OpType.SHIFT_RIGHT:
                 a = stack.pop()
                 b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `>>` must be `int`'
                 stack.append(b >> a)
             elif instruction.type == OpType.SHIFT_LEFT:
                 a = stack.pop()
                 b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `<<` must be `int`'
                 stack.append(b << a)
             elif instruction.type == OpType.SWAP:
                 a = stack.pop()
                 b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `swap` must be `int`'
                 stack.append(a)
                 stack.append(b)
             elif instruction.type == OpType.OVER:
                 a = stack.pop()
                 b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `over` must be `int`'
                 stack.append(b)
                 stack.append(a)
                 stack.append(b)
             elif instruction.type == OpType.MOD:
                 a = stack.pop()
                 b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `mod` must be `int`'
                 stack.append(b % a)
             elif instruction.type == OpType.SYSCALL3:
                 syscall_number = stack.pop()
@@ -296,6 +322,7 @@ def simulate_program(program):
                 arg2 = stack.pop()
                 arg3 = stack.pop()
                 if syscall_number == 4:
+                    assert type(arg1) == type(arg2) == type(arg3) == int, 'Arguments for `syscall3` must be `int`'
                     if arg1 == 1:
                         print(mem[arg2:arg2 + arg3].decode(), end='')
                     elif arg1 == 2:
@@ -312,7 +339,7 @@ def simulate_program(program):
         i += 1
 
 
-def compile_program(program):
+def compile_program(program: List[Op]) -> None:
     assert len(OpType) == 31, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
@@ -322,14 +349,16 @@ def compile_program(program):
     write_base('.align 3')
     asm_setup(write_base, write_level1)
     write_base('_start:')
-    strs = []
-    allocated_strs = {}
+    strs: List[str] = []
+    allocated_strs: Dict[str, int] = {}
     for i in range(len(program)):
         instruction = program[i]
         if instruction.type == OpType.PUSH_INT:
+            assert type(instruction.value) == int, 'Instruction value must be an `int` for PUSH_INT'
             write_level1(f'ldr x0, ={instruction.value}')
             write_level1('push x0')
         elif instruction.type == OpType.PUSH_STR:
+            assert type(instruction.value) == str, 'Instruction value must be a `str` for PUSH_STR'
             write_level1(f'ldr x0, ={len(instruction.value)}')
             write_level1('push x0')
             address = allocated_strs.get(instruction.value, len(strs))
@@ -488,7 +517,7 @@ def compile_program(program):
     out.close()
 
 
-def usage_help():
+def usage_help() -> None:
     print('Usage: photon.py <SUBCOMMAND> <FILENAME> <FLAGS>')
     print('Subcommands:')
     print('     sim     Simulate the program')
@@ -496,7 +525,7 @@ def usage_help():
     print('         --run   Used with `com` to run immediately')
 
 
-def cross_reference_blocks(program):
+def cross_reference_blocks(program: List[Op]) -> List[Op]:
     assert len(OpType) == 31, 'Exhaustive handling of code block'
     stack = []
     for i in range(len(program)):
@@ -528,7 +557,7 @@ def cross_reference_blocks(program):
     return program
 
 
-def parse_token(token):
+def parse_token(token: Token) -> Op | NoReturn:
     assert len(OpType) == 31, 'Exhaustive handling of built-in words'
     builtin_words = {
         'print': Op(type=OpType.PRINT, loc=token.loc),
@@ -562,23 +591,25 @@ def parse_token(token):
         '!=': Op(type=OpType.NE, loc=token.loc),
     }
     assert len(TokenType) == 3, "Exhaustive handling of tokens"
-    if token.type == TokenType.WORD:
-        return builtin_words[token.value]
-    elif token.type == TokenType.INT:
+
+    if token.type == TokenType.INT:
         return Op(type=OpType.PUSH_INT, loc=token.loc, value=token.value)
     elif token.type == TokenType.STR:
         return Op(type=OpType.PUSH_STR, loc=token.loc, value=token.value)
+    elif token.type == TokenType.WORD:
+        assert type(token.value) == str, "`word` must be a string"
+        return builtin_words[token.value]
     else:
         raise_error(f'Unhandled token: {token}', token.loc)
 
 
-def seek_until(line, start, predicate):
+def seek_until(line: str, start: int, predicate: Callable[[str], bool]) -> int:
     while start < len(line) and not predicate(line[start]):
         start += 1
     return start
 
 
-def lex_line(line, file_path, line_number):
+def lex_line(line: str, file_path: str, line_number: int) -> Generator[Op, None, None]:
     col = seek_until(line, 0, lambda x: not x.isspace())
     while col < len(line):
         location = (file_path, line_number, col)
@@ -600,8 +631,8 @@ def lex_line(line, file_path, line_number):
             col = seek_until(line, col_end, lambda x: not x.isspace())
 
 
-def lex_file(file_path):
-    program = []
+def lex_file(file_path: str) -> List[Op]:
+    program: List[Op] = []
     with open(file_path, 'r') as f:
         for i, line in enumerate(f):
             program.extend(lex_line(line, file_path, i))
