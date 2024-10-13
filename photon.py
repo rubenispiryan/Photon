@@ -75,7 +75,8 @@ def asm_setup(write_base, write_level1):
     write_level1('ret')
 
 
-OP_PUSH = auto(True)
+OP_PUSH_INT = auto(True)
+OP_PUSH_STR = auto()
 OP_ADD = auto()
 OP_SUB = auto()
 OP_PRINT = auto()
@@ -107,11 +108,12 @@ OP_DROP2 = auto()
 OP_MOD = auto()
 OP_COUNTER = auto()
 
-TOKEN_WORD = auto(reset=True)
+TOKEN_WORD = auto(True)
 TOKEN_INT = auto()
+TOKEN_STR = auto()
 TOKEN_COUNTER = auto()
 
-TOKEN_NAMES = {
+BUILTIN_NAMES = {
     OP_PRINT: 'print',
     OP_ADD: '+',
     OP_SUB: '-',
@@ -143,21 +145,34 @@ TOKEN_NAMES = {
     OP_NE: '!=',
 }
 
-assert OP_COUNTER == len(TOKEN_NAMES) + 1, 'Exhaustive handling of token names'
+assert OP_COUNTER == len(BUILTIN_NAMES) + 2, 'Exhaustive handling of built-in word names'
 
+STR_CAPACITY = 640_000
 MEM_CAPACITY = 640_000
 
 
 def simulate_program(program):
     stack = []
-    assert OP_COUNTER == 30, 'Exhaustive handling of operators in simulation'
+    assert OP_COUNTER == 31, 'Exhaustive handling of operators in simulation'
     i = 0
-    mem = bytearray(MEM_CAPACITY)
+    mem = bytearray(STR_CAPACITY + MEM_CAPACITY)
+    str_size = 0
     while i < len(program):
         instruction = program[i]
         try:
-            if instruction['type'] == OP_PUSH:
+            if instruction['type'] == OP_PUSH_INT:
                 stack.append(instruction['value'])
+            elif instruction['type'] == OP_PUSH_STR:
+                bs = bytes(instruction['value'], 'utf-8')
+                n = len(bs)
+                stack.append(n)
+                if 'addr' not in instruction:
+                    instruction['addr'] = str_size
+                    mem[str_size:str_size + n] = bs
+                    str_size += n
+                    if str_size > STR_CAPACITY:
+                        raise_error('String buffer overflow', instruction['loc'])
+                stack.append(instruction['addr'])
             elif instruction['type'] == OP_ADD:
                 a = stack.pop()
                 b = stack.pop()
@@ -280,7 +295,7 @@ def simulate_program(program):
                 else:
                     raise_error(f'Unknown syscall number: {syscall_number}', instruction['loc'])
             else:
-                raise_error(f'Unhandled instruction: {TOKEN_NAMES[instruction["type"]]}',
+                raise_error(f'Unhandled instruction: {BUILTIN_NAMES[instruction["type"]]}',
                             instruction['loc'])
         except Exception as e:
             raise_error(f'Exception in Simulation: {str(e)}', instruction['loc'])
@@ -288,23 +303,30 @@ def simulate_program(program):
 
 
 def compile_program(program):
-    assert OP_COUNTER == 30, 'Exhaustive handling of operators in compilation'
+    assert OP_COUNTER == 31, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
-    write_base('.section __DATA, __bss')
-    write_base('mem:')
-    write_level1(f'.skip {MEM_CAPACITY}')
     write_base('.section __TEXT, __text')
     write_base('.global _start')
     write_base('.align 3')
     asm_setup(write_base, write_level1)
     write_base('_start:')
+    strs = []
+    allocated_strs = {}
     for i in range(len(program)):
         instruction = program[i]
-        if instruction['type'] == OP_PUSH:
+        if instruction['type'] == OP_PUSH_INT:
             write_level1(f'ldr x0, ={instruction["value"]}')
             write_level1('push x0')
+        elif instruction['type'] == OP_PUSH_STR:
+            write_level1(f'ldr x0, ={len(instruction["value"])}')
+            write_level1('push x0')
+            write_level1(f'adrp x1, str_{allocated_strs.get(instruction["value"], len(strs))}@PAGE')
+            write_level1('push x1')
+            if instruction['value'] not in allocated_strs:
+                allocated_strs[instruction['value']] = len(strs)
+                strs.append(instruction['value'])
         elif instruction['type'] == OP_ADD:
             write_level1('pop x0')
             write_level1('pop x1')
@@ -438,11 +460,17 @@ def compile_program(program):
             write_level1('pop x2')
             write_level1('svc #0')
         else:
-            raise_error(f'Unhandled instruction: {TOKEN_NAMES[instruction["type"]]}',
+            raise_error(f'Unhandled instruction: {BUILTIN_NAMES[instruction["type"]]}',
                         instruction['loc'])
     write_level1('mov x16, #1')
     write_level1('mov x0, #0')
     write_level1('svc #0')
+    write_base('.section __DATA, __data')
+    for i in range(len(strs)):
+        write_level1(f'str_{i}: .ascii "{strs[i]}"')
+    write_base('.section __DATA, __bss')
+    write_base('mem:')
+    write_level1(f'.skip {MEM_CAPACITY}')
     out.close()
 
 
@@ -455,7 +483,7 @@ def usage_help():
 
 
 def cross_reference_blocks(program):
-    assert OP_COUNTER == 30, 'Exhaustive handling of code block'
+    assert OP_COUNTER == 31, 'Exhaustive handling of code block'
     stack = []
     for i in range(len(program)):
         if program[i]['type'] == OP_IF:
@@ -487,7 +515,7 @@ def cross_reference_blocks(program):
 
 
 def parse_token(token, location):
-    assert OP_COUNTER == 30, 'Exhaustive handling of built-in words'
+    assert OP_COUNTER == 31, 'Exhaustive handling of built-in words'
     builtin_words = {
         'print': {'type': OP_PRINT, 'loc': location},
         '+': {'type': OP_ADD, 'loc': location},
@@ -519,33 +547,43 @@ def parse_token(token, location):
         '<=': {'type': OP_LTE, 'loc': location},
         '!=': {'type': OP_NE, 'loc': location},
     }
-    assert TOKEN_COUNTER == 2, "Exhaustive handling of tokens"
+    assert TOKEN_COUNTER == 3, "Exhaustive handling of tokens"
     if token['type'] == TOKEN_WORD:
         return builtin_words[token['value']]
     elif token['type'] == TOKEN_INT:
-        return {'type': OP_PUSH, 'loc': location, 'value': token['value']}
+        return {'type': OP_PUSH_INT, 'loc': location, 'value': token['value']}
+    elif token['type'] == TOKEN_STR:
+        return {'type': OP_PUSH_STR, 'loc': location, 'value': token['value']}
     else:
         raise_error(f'Unhandled token: {token}', location)
 
 
-def lex_word(word):
-    try:
-        return {'type': TOKEN_INT, 'value': int(word)}
-    except ValueError:
-        return {'type': TOKEN_WORD, 'value': word}
+def seek_until(line, start, predicate):
+    while start < len(line) and not predicate(line[start]):
+        start += 1
+    return start
 
 
 def lex_line(line, file_path, line_number):
-    l, r = 0, 0
-    while l < len(line):
-        if line[l].isspace():
-            l += 1
-            continue
-        r = l
-        while r < len(line) and not line[r].isspace():
-            r += 1
-        yield parse_token(lex_word(line[l:r]), (file_path, line_number, l))
-        l = r
+    col = seek_until(line, 0, lambda x: not x.isspace())
+    while col < len(line):
+        location = (file_path, line_number, col)
+        if line[col] == '"':
+            col_end = seek_until(line, col + 1, lambda x: x == '"')
+            word = line[col + 1:col_end]
+            yield parse_token({'type': TOKEN_STR, 'value': word.encode('utf-8').decode('unicode_escape')},
+                              location)
+            col = seek_until(line, col_end + 1, lambda x: not x.isspace())
+        else:
+            col_end = seek_until(line, col, lambda x: x.isspace())
+            word = line[col:col_end]
+            try:
+                yield parse_token({'type': TOKEN_INT, 'value': int(word)},
+                                  location)
+            except ValueError:
+                yield parse_token({'type': TOKEN_WORD, 'value': word},
+                                  location)
+            col = seek_until(line, col_end, lambda x: not x.isspace())
 
 
 def lex_file(file_path):
