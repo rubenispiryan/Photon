@@ -615,6 +615,8 @@ def lex_line(line: str, file_path: str, line_number: int) -> Generator[Op, None,
         location = (file_path, line_number, col)
         if line[col] == '"':
             col_end = seek_until(line, col + 1, lambda x: x == '"')
+            if col_end >= len(line):
+                raise_error('String literal was not closed', (file_path, line_number, col + 1))
             word = line[col + 1:col_end]
             yield parse_token(Token(type=TokenType.STR, value=word.encode('utf-8').decode('unicode_escape'),
                               loc=location))
