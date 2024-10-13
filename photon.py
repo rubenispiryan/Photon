@@ -1,8 +1,9 @@
 import os
 import subprocess
 import sys
-
-auto_counter = 0
+from dataclasses import dataclass
+from enum import Enum, auto
+from typing import Tuple
 
 
 def raise_error(message, loc):
@@ -15,15 +16,6 @@ def write_indent(file, level=0):
         file.write(' ' * (0 if level == 0 else 4 ** level) + buffer + '\n')
 
     return temp
-
-
-def auto(reset=False):
-    global auto_counter
-    if reset:
-        auto_counter = 0
-        return auto_counter
-    auto_counter += 1
-    return auto_counter
 
 
 def asm_setup(write_base, write_level1):
@@ -75,77 +67,94 @@ def asm_setup(write_base, write_level1):
     write_level1('ret')
 
 
-OP_PUSH_INT = auto(True)
-OP_PUSH_STR = auto()
-OP_ADD = auto()
-OP_SUB = auto()
-OP_PRINT = auto()
-OP_EQUAL = auto()
-OP_LT = auto()
-OP_GT = auto()
-OP_LTE = auto()
-OP_GTE = auto()
-OP_NE = auto()
-OP_IF = auto()
-OP_END = auto()
-OP_ELSE = auto()
-OP_DUP = auto()
-OP_WHILE = auto()
-OP_DO = auto()
-OP_MEM = auto()
-OP_LOAD = auto()
-OP_STORE = auto()
-OP_SYSCALL3 = auto()
-OP_DUP2 = auto()
-OP_DROP = auto()
-OP_BITAND = auto()
-OP_BITOR = auto()
-OP_SHIFT_RIGHT = auto()
-OP_SHIFT_LEFT = auto()
-OP_SWAP = auto()
-OP_OVER = auto()
-OP_DROP2 = auto()
-OP_MOD = auto()
-OP_COUNTER = auto()
+class OpType(Enum):
+    PUSH_INT = auto()
+    PUSH_STR = auto()
+    ADD = auto()
+    SUB = auto()
+    PRINT = auto()
+    OP_EQUAL = auto()
+    LT = auto()
+    GT = auto()
+    LTE = auto()
+    GTE = auto()
+    NE = auto()
+    IF = auto()
+    END = auto()
+    ELSE = auto()
+    WHILE = auto()
+    DO = auto()
+    MEM = auto()
+    LOAD = auto()
+    STORE = auto()
+    SYSCALL3 = auto()
+    DUP = auto()
+    DUP2 = auto()
+    DROP = auto()
+    DROP2 = auto()
+    BITAND = auto()
+    BITOR = auto()
+    SHIFT_RIGHT = auto()
+    SHIFT_LEFT = auto()
+    SWAP = auto()
+    OVER = auto()
+    MOD = auto()
 
-TOKEN_WORD = auto(True)
-TOKEN_INT = auto()
-TOKEN_STR = auto()
-TOKEN_COUNTER = auto()
+
+@dataclass
+class Op:
+    type: OpType
+    loc: Tuple[str, int, int]
+    value: int | str | None = None
+    jmp: int | None = None
+    addr: int | None = None
+
+
+class TokenType(Enum):
+    WORD = auto()
+    INT = auto()
+    STR = auto()
+
+@dataclass
+class Token:
+    type: TokenType
+    value: int | str
+    loc: Tuple[str, int, int]
+
 
 BUILTIN_NAMES = {
-    OP_PRINT: 'print',
-    OP_ADD: '+',
-    OP_SUB: '-',
-    OP_EQUAL: '==',
-    OP_GT: '>',
-    OP_LT: '<',
-    OP_IF: 'if',
-    OP_END: 'end',
-    OP_ELSE: 'else',
-    OP_DUP: 'dup',
-    OP_WHILE: 'while',
-    OP_DO: 'do',
-    OP_MEM: 'mem',
-    OP_STORE: '.',
-    OP_LOAD: ',',
-    OP_SYSCALL3: 'syscall3',
-    OP_DUP2: 'dup2',
-    OP_DROP: 'drop',
-    OP_BITAND: '&',
-    OP_BITOR: '|',
-    OP_SHIFT_RIGHT: '<<',
-    OP_SHIFT_LEFT: '>>',
-    OP_SWAP: 'swap',
-    OP_OVER: 'over',
-    OP_DROP2: 'drop2',
-    OP_MOD: '%',
-    OP_GTE: '>=',
-    OP_LTE: '<=',
-    OP_NE: '!=',
+    OpType.PRINT: 'print',
+    OpType.ADD: '+',
+    OpType.SUB: '-',
+    OpType.OP_EQUAL: '==',
+    OpType.GT: '>',
+    OpType.LT: '<',
+    OpType.IF: 'if',
+    OpType.END: 'end',
+    OpType.ELSE: 'else',
+    OpType.DUP: 'dup',
+    OpType.WHILE: 'while',
+    OpType.DO: 'do',
+    OpType.MEM: 'mem',
+    OpType.STORE: '.',
+    OpType.LOAD: ',',
+    OpType.SYSCALL3: 'syscall3',
+    OpType.DUP2: 'dup2',
+    OpType.DROP: 'drop',
+    OpType.BITAND: '&',
+    OpType.BITOR: '|',
+    OpType.SHIFT_RIGHT: '<<',
+    OpType.SHIFT_LEFT: '>>',
+    OpType.SWAP: 'swap',
+    OpType.OVER: 'over',
+    OpType.DROP2: 'drop2',
+    OpType.MOD: '%',
+    OpType.GTE: '>=',
+    OpType.LTE: '<=',
+    OpType.NE: '!=',
 }
 
-assert OP_COUNTER == len(BUILTIN_NAMES) + 2, 'Exhaustive handling of built-in word names'
+assert len(OpType) == len(BUILTIN_NAMES) + 2, 'Exhaustive handling of built-in word names'
 
 STR_CAPACITY = 640_000
 MEM_CAPACITY = 640_000
@@ -153,134 +162,135 @@ MEM_CAPACITY = 640_000
 
 def simulate_program(program):
     stack = []
-    assert OP_COUNTER == 31, 'Exhaustive handling of operators in simulation'
+    assert len(OpType) == 31, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(STR_CAPACITY + MEM_CAPACITY)
     str_size = 0
+    allocated_strs = {}
     while i < len(program):
         instruction = program[i]
         try:
-            if instruction['type'] == OP_PUSH_INT:
-                stack.append(instruction['value'])
-            elif instruction['type'] == OP_PUSH_STR:
-                bs = bytes(instruction['value'], 'utf-8')
+            if instruction.type == OpType.PUSH_INT:
+                stack.append(instruction.value)
+            elif instruction.type == OpType.PUSH_STR:
+                bs = bytes(instruction.value, 'utf-8')
                 n = len(bs)
                 stack.append(n)
-                if 'addr' not in instruction:
-                    instruction['addr'] = str_size
+                if instruction.value not in allocated_strs:
+                    allocated_strs[instruction.value] = str_size
                     mem[str_size:str_size + n] = bs
                     str_size += n
                     if str_size > STR_CAPACITY:
-                        raise_error('String buffer overflow', instruction['loc'])
-                stack.append(instruction['addr'])
-            elif instruction['type'] == OP_ADD:
+                        raise_error('String buffer overflow', instruction.loc)
+                stack.append(allocated_strs[instruction.value])
+            elif instruction.type == OpType.ADD:
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(a + b)
-            elif instruction['type'] == OP_SUB:
+            elif instruction.type == OpType.SUB:
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(b - a)
-            elif instruction['type'] == OP_PRINT:
+            elif instruction.type == OpType.PRINT:
                 a = stack.pop()
                 print(a)
-            elif instruction['type'] == OP_EQUAL:
+            elif instruction.type == OpType.OP_EQUAL:
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(int(a == b))
-            elif instruction['type'] == OP_LT:
+            elif instruction.type == OpType.LT:
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(int(b < a))
-            elif instruction['type'] == OP_GT:
+            elif instruction.type == OpType.GT:
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(int(b > a))
-            elif instruction['type'] == OP_GTE:
+            elif instruction.type == OpType.GTE:
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(int(b >= a))
-            elif instruction['type'] == OP_LTE:
+            elif instruction.type == OpType.LTE:
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(int(b <= a))
-            elif instruction['type'] == OP_NE:
+            elif instruction.type == OpType.NE:
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(int(a != b))
-            elif instruction['type'] == OP_IF:
+            elif instruction.type == OpType.IF:
                 a = stack.pop()
                 if a == 0:
-                    i = instruction['jmp']
-            elif instruction['type'] == OP_ELSE:
-                i = instruction['jmp']
-            elif instruction['type'] == OP_END:
-                if 'jmp' in instruction:
-                    i = instruction['jmp']
-            elif instruction['type'] == OP_DUP:
+                    i = instruction.jmp
+            elif instruction.type == OpType.ELSE:
+                i = instruction.jmp
+            elif instruction.type == OpType.END:
+                if instruction.jmp is not None:
+                    i = instruction.jmp
+            elif instruction.type == OpType.DUP:
                 a = stack.pop()
                 stack.append(a)
                 stack.append(a)
-            elif instruction['type'] == OP_DUP2:
+            elif instruction.type == OpType.DUP2:
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(b)
                 stack.append(a)
                 stack.append(b)
                 stack.append(a)
-            elif instruction['type'] == OP_DROP:
+            elif instruction.type == OpType.DROP:
                 stack.pop()
-            elif instruction['type'] == OP_DROP2:
+            elif instruction.type == OpType.DROP2:
                 stack.pop()
                 stack.pop()
-            elif instruction['type'] == OP_WHILE:
+            elif instruction.type == OpType.WHILE:
                 i += 1
                 continue
-            elif instruction['type'] == OP_DO:
+            elif instruction.type == OpType.DO:
                 a = stack.pop()
                 if a == 0:
-                    i = instruction['jmp']
-            elif instruction['type'] == OP_MEM:
+                    i = instruction.jmp
+            elif instruction.type == OpType.MEM:
                 stack.append(0)
-            elif instruction['type'] == OP_LOAD:
+            elif instruction.type == OpType.LOAD:
                 address = stack.pop()
                 stack.append(mem[address])
-            elif instruction['type'] == OP_STORE:
+            elif instruction.type == OpType.STORE:
                 value = stack.pop()
                 address = stack.pop()
                 mem[address] = value & 0xFF
-            elif instruction['type'] == OP_BITOR:
+            elif instruction.type == OpType.BITOR:
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(a | b)
-            elif instruction['type'] == OP_BITAND:
+            elif instruction.type == OpType.BITAND:
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(a & b)
-            elif instruction['type'] == OP_SHIFT_RIGHT:
+            elif instruction.type == OpType.SHIFT_RIGHT:
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(b >> a)
-            elif instruction['type'] == OP_SHIFT_LEFT:
+            elif instruction.type == OpType.SHIFT_LEFT:
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(b << a)
-            elif instruction['type'] == OP_SWAP:
+            elif instruction.type == OpType.SWAP:
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(a)
                 stack.append(b)
-            elif instruction['type'] == OP_OVER:
+            elif instruction.type == OpType.OVER:
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(b)
                 stack.append(a)
                 stack.append(b)
-            elif instruction['type'] == OP_MOD:
+            elif instruction.type == OpType.MOD:
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(b % a)
-            elif instruction['type'] == OP_SYSCALL3:
+            elif instruction.type == OpType.SYSCALL3:
                 syscall_number = stack.pop()
                 arg1 = stack.pop()
                 arg2 = stack.pop()
@@ -291,19 +301,19 @@ def simulate_program(program):
                     elif arg1 == 2:
                         print(mem[arg2:arg2 + arg3].decode(), end='', file=sys.stderr)
                     else:
-                        raise_error(f'Unknown file descriptor: {arg1}', instruction['loc'])
+                        raise_error(f'Unknown file descriptor: {arg1}', instruction.loc)
                 else:
-                    raise_error(f'Unknown syscall number: {syscall_number}', instruction['loc'])
+                    raise_error(f'Unknown syscall number: {syscall_number}', instruction.loc)
             else:
-                raise_error(f'Unhandled instruction: {BUILTIN_NAMES[instruction["type"]]}',
-                            instruction['loc'])
+                raise_error(f'Unhandled instruction: {BUILTIN_NAMES[instruction.type]}',
+                            instruction.loc)
         except Exception as e:
-            raise_error(f'Exception in Simulation: {str(e)}', instruction['loc'])
+            raise_error(f'Exception in Simulation: {str(e)}', instruction.loc)
         i += 1
 
 
 def compile_program(program):
-    assert OP_COUNTER == 31, 'Exhaustive handling of operators in compilation'
+    assert len(OpType) == 31, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -316,155 +326,155 @@ def compile_program(program):
     allocated_strs = {}
     for i in range(len(program)):
         instruction = program[i]
-        if instruction['type'] == OP_PUSH_INT:
-            write_level1(f'ldr x0, ={instruction["value"]}')
+        if instruction.type == OpType.PUSH_INT:
+            write_level1(f'ldr x0, ={instruction.value}')
             write_level1('push x0')
-        elif instruction['type'] == OP_PUSH_STR:
-            write_level1(f'ldr x0, ={len(instruction["value"])}')
+        elif instruction.type == OpType.PUSH_STR:
+            write_level1(f'ldr x0, ={len(instruction.value)}')
             write_level1('push x0')
-            address = allocated_strs.get(instruction["value"], len(strs))
+            address = allocated_strs.get(instruction.value, len(strs))
             write_level1(f'adrp x1, str_{address}@PAGE')
             write_level1(f'add x1, x1, str_{address}@PAGEOFF')
             write_level1('push x1')
-            if instruction['value'] not in allocated_strs:
-                allocated_strs[instruction['value']] = len(strs)
-                strs.append(instruction['value'])
-        elif instruction['type'] == OP_ADD:
+            if instruction.value not in allocated_strs:
+                allocated_strs[instruction.value] = len(strs)
+                strs.append(instruction.value)
+        elif instruction.type == OpType.ADD:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('add x0, x0, x1')
             write_level1('push x0')
-        elif instruction['type'] == OP_SUB:
+        elif instruction.type == OpType.SUB:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('sub x0, x1, x0')
             write_level1('push x0')
-        elif instruction['type'] == OP_PRINT:
+        elif instruction.type == OpType.PRINT:
             write_level1('pop x0')
             write_level1('bl dump')
-        elif instruction['type'] == OP_EQUAL:
+        elif instruction.type == OpType.OP_EQUAL:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('cmp x0, x1')
             write_level1('cset x0, eq')
             write_level1('push x0')
-        elif instruction['type'] == OP_LT:
+        elif instruction.type == OpType.LT:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('cmp x1, x0')
             write_level1('cset x0, lt')
             write_level1('push x0')
-        elif instruction['type'] == OP_GT:
+        elif instruction.type == OpType.GT:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('cmp x1, x0')
             write_level1('cset x0, gt')
             write_level1('push x0')
-        elif instruction['type'] == OP_LTE:
+        elif instruction.type == OpType.LTE:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('cmp x1, x0')
             write_level1('cset x0, le')
             write_level1('push x0')
-        elif instruction['type'] == OP_GTE:
+        elif instruction.type == OpType.GTE:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('cmp x1, x0')
             write_level1('cset x0, ge')
             write_level1('push x0')
-        elif instruction['type'] == OP_NE:
+        elif instruction.type == OpType.NE:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('cmp x0, x1')
             write_level1('cset x0, ne')
             write_level1('push x0')
-        elif instruction['type'] in (OP_IF, OP_DO):
+        elif instruction.type in (OpType.IF, OpType.DO):
             write_level1('pop x0')
             write_level1('tst x0, x0')
-            write_level1(f'b.eq end_{instruction["jmp"]}')
-        elif instruction['type'] == OP_ELSE:
-            write_level1(f'b end_{instruction["jmp"]}')
+            write_level1(f'b.eq end_{instruction.jmp}')
+        elif instruction.type == OpType.ELSE:
+            write_level1(f'b end_{instruction.jmp}')
             write_base(f'end_{i}:')
-        elif instruction['type'] == OP_END:
-            if 'jmp' in instruction:
-                write_level1(f'b while_{instruction["jmp"]}')
+        elif instruction.type == OpType.END:
+            if instruction.jmp is not None:
+                write_level1(f'b while_{instruction.jmp}')
             write_base(f'end_{i}:')
-        elif instruction['type'] == OP_DUP:
+        elif instruction.type == OpType.DUP:
             write_level1('pop x0')
             write_level1('push x0')
             write_level1('push x0')
-        elif instruction['type'] == OP_DUP2:
+        elif instruction.type == OpType.DUP2:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('push x1')
             write_level1('push x0')
             write_level1('push x1')
             write_level1('push x0')
-        elif instruction['type'] == OP_DROP:
+        elif instruction.type == OpType.DROP:
             write_level1('pop x0')
-        elif instruction['type'] == OP_DROP2:
+        elif instruction.type == OpType.DROP2:
             write_level1('pop x0')
             write_level1('pop x0')
-        elif instruction['type'] == OP_WHILE:
+        elif instruction.type == OpType.WHILE:
             write_base(f'while_{i}:')
-        elif instruction['type'] == OP_MEM:
+        elif instruction.type == OpType.MEM:
             write_level1('adrp x0, mem@PAGE')
             write_level1('add x0, x0, mem@PAGEOFF')
             write_level1('push x0')
-        elif instruction['type'] == OP_STORE:
+        elif instruction.type == OpType.STORE:
             write_level1('popw w0')
             write_level1('pop x1')
             write_level1('strb w0, [x1]')
-        elif instruction['type'] == OP_LOAD:
+        elif instruction.type == OpType.LOAD:
             write_level1('pop x0')
             write_level1('ldrb w1, [x0]')
             write_level1('pushw w1')
-        elif instruction['type'] == OP_BITOR:
+        elif instruction.type == OpType.BITOR:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('orr x0, x0, x1')
             write_level1('push x0')
-        elif instruction['type'] == OP_BITAND:
+        elif instruction.type == OpType.BITAND:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('and x0, x0, x1')
             write_level1('push x0')
-        elif instruction['type'] == OP_SHIFT_RIGHT:
+        elif instruction.type == OpType.SHIFT_RIGHT:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('lsr x0, x1, x0')
             write_level1('push x0')
-        elif instruction['type'] == OP_SHIFT_LEFT:
+        elif instruction.type == OpType.SHIFT_LEFT:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('lsl x0, x1, x0')
             write_level1('push x0')
-        elif instruction['type'] == OP_SWAP:
+        elif instruction.type == OpType.SWAP:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('push x0')
             write_level1('push x1')
-        elif instruction['type'] == OP_OVER:
+        elif instruction.type == OpType.OVER:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('push x1')
             write_level1('push x0')
             write_level1('push x1')
-        elif instruction['type'] == OP_MOD:
+        elif instruction.type == OpType.MOD:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('udiv x2, x1, x0')
             write_level1('msub x0, x2, x0, x1')
             write_level1('push x0')
-        elif instruction['type'] == OP_SYSCALL3:
+        elif instruction.type == OpType.SYSCALL3:
             write_level1('pop x16')
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('pop x2')
             write_level1('svc #0')
         else:
-            raise_error(f'Unhandled instruction: {BUILTIN_NAMES[instruction["type"]]}',
-                        instruction['loc'])
+            raise_error(f'Unhandled instruction: {BUILTIN_NAMES[instruction.type]}',
+                        instruction.loc)
     write_level1('mov x16, #1')
     write_level1('mov x0, #0')
     write_level1('svc #0')
@@ -487,79 +497,79 @@ def usage_help():
 
 
 def cross_reference_blocks(program):
-    assert OP_COUNTER == 31, 'Exhaustive handling of code block'
+    assert len(OpType) == 31, 'Exhaustive handling of code block'
     stack = []
     for i in range(len(program)):
-        if program[i]['type'] == OP_IF:
+        if program[i].type == OpType.IF:
             stack.append(i)
-        elif program[i]['type'] == OP_ELSE:
+        elif program[i].type == OpType.ELSE:
             if_index = stack.pop()
-            if program[if_index]['type'] != OP_IF:
-                raise_error(f'Else can only be used with an `if`', program[if_index]['loc'])
-            program[if_index]['jmp'] = i
+            if program[if_index].type != OpType.IF:
+                raise_error(f'Else can only be used with an `if`', program[if_index].loc)
+            program[if_index].jmp = i
             stack.append(i)
-        elif program[i]['type'] == OP_WHILE:
+        elif program[i].type == OpType.WHILE:
             stack.append(i)
-        elif program[i]['type'] == OP_DO:
+        elif program[i].type == OpType.DO:
             stack.append(i)
-        elif program[i]['type'] == OP_END:
+        elif program[i].type == OpType.END:
             block_index = stack.pop()
-            if program[block_index]['type'] in (OP_IF, OP_ELSE):
-                program[block_index]['jmp'] = i
-            elif program[block_index]['type'] == OP_DO:
-                program[block_index]['jmp'] = i
+            if program[block_index].type in (OpType.IF, OpType.ELSE):
+                program[block_index].jmp = i
+            elif program[block_index].type == OpType.DO:
+                program[block_index].jmp = i
                 while_index = stack.pop()
-                if program[while_index]['type'] != OP_WHILE:
-                    raise_error('`while` must be present before `do`', program[while_index]['loc'])
-                program[i]['jmp'] = while_index
+                if program[while_index].type != OpType.WHILE:
+                    raise_error('`while` must be present before `do`', program[while_index].loc)
+                program[i].jmp = while_index
             else:
                 raise_error('End can only be used with an `if`, `else` or `while`',
-                            program[block_index]['loc'])
+                            program[block_index].loc)
     return program
 
 
-def parse_token(token, location):
-    assert OP_COUNTER == 31, 'Exhaustive handling of built-in words'
+def parse_token(token):
+    assert len(OpType) == 31, 'Exhaustive handling of built-in words'
     builtin_words = {
-        'print': {'type': OP_PRINT, 'loc': location},
-        '+': {'type': OP_ADD, 'loc': location},
-        '-': {'type': OP_SUB, 'loc': location},
-        '==': {'type': OP_EQUAL, 'loc': location},
-        '>': {'type': OP_GT, 'loc': location},
-        '<': {'type': OP_LT, 'loc': location},
-        'if': {'type': OP_IF, 'loc': location},
-        'end': {'type': OP_END, 'loc': location},
-        'else': {'type': OP_ELSE, 'loc': location},
-        'dup': {'type': OP_DUP, 'loc': location},
-        'while': {'type': OP_WHILE, 'loc': location},
-        'do': {'type': OP_DO, 'loc': location},
-        'mem': {'type': OP_MEM, 'loc': location},
-        '.': {'type': OP_STORE, 'loc': location},
-        ',': {'type': OP_LOAD, 'loc': location},
-        'syscall3': {'type': OP_SYSCALL3, 'loc': location},
-        'dup2': {'type': OP_DUP2, 'loc': location},
-        'drop': {'type': OP_DROP, 'loc': location},
-        '&': {'type': OP_BITAND, 'loc': location},
-        '|': {'type': OP_BITOR, 'loc': location},
-        '>>': {'type': OP_SHIFT_RIGHT, 'loc': location},
-        '<<': {'type': OP_SHIFT_LEFT, 'loc': location},
-        'swap': {'type': OP_SWAP, 'loc': location},
-        'over': {'type': OP_OVER, 'loc': location},
-        'drop2': {'type': OP_DROP2, 'loc': location},
-        '%': {'type': OP_MOD, 'loc': location},
-        '>=': {'type': OP_GTE, 'loc': location},
-        '<=': {'type': OP_LTE, 'loc': location},
-        '!=': {'type': OP_NE, 'loc': location},
+        'print': Op(type=OpType.PRINT, loc=token.loc),
+        '+': Op(type=OpType.ADD, loc=token.loc),
+        '-': Op(type=OpType.SUB, loc=token.loc),
+        '==': Op(type=OpType.OP_EQUAL, loc=token.loc),
+        '>': Op(type=OpType.GT, loc=token.loc),
+        '<': Op(type=OpType.LT, loc=token.loc),
+        'if': Op(type=OpType.IF, loc=token.loc),
+        'end': Op(type=OpType.END, loc=token.loc),
+        'else': Op(type=OpType.ELSE, loc=token.loc),
+        'dup': Op(type=OpType.DUP, loc=token.loc),
+        'while': Op(type=OpType.WHILE, loc=token.loc),
+        'do': Op(type=OpType.DO, loc=token.loc),
+        'mem': Op(type=OpType.MEM, loc=token.loc),
+        '.': Op(type=OpType.STORE, loc=token.loc),
+        ',': Op(type=OpType.LOAD, loc=token.loc),
+        'syscall3': Op(type=OpType.SYSCALL3, loc=token.loc),
+        'dup2': Op(type=OpType.DUP2, loc=token.loc),
+        'drop': Op(type=OpType.DROP, loc=token.loc),
+        '&': Op(type=OpType.BITAND, loc=token.loc),
+        '|': Op(type=OpType.BITOR, loc=token.loc),
+        '>>': Op(type=OpType.SHIFT_RIGHT, loc=token.loc),
+        '<<': Op(type=OpType.SHIFT_LEFT, loc=token.loc),
+        'swap': Op(type=OpType.SWAP, loc=token.loc),
+        'over': Op(type=OpType.OVER, loc=token.loc),
+        'drop2': Op(type=OpType.DROP2, loc=token.loc),
+        '%': Op(type=OpType.MOD, loc=token.loc),
+        '>=': Op(type=OpType.GTE, loc=token.loc),
+        '<=': Op(type=OpType.LTE, loc=token.loc),
+        '!=': Op(type=OpType.NE, loc=token.loc),
     }
-    assert TOKEN_COUNTER == 3, "Exhaustive handling of tokens"
-    if token['type'] == TOKEN_WORD:
-        return builtin_words[token['value']]
-    elif token['type'] == TOKEN_INT:
-        return {'type': OP_PUSH_INT, 'loc': location, 'value': token['value']}
-    elif token['type'] == TOKEN_STR:
-        return {'type': OP_PUSH_STR, 'loc': location, 'value': token['value']}
+    assert len(TokenType) == 3, "Exhaustive handling of tokens"
+    if token.type == TokenType.WORD:
+        return builtin_words[token.value]
+    elif token.type == TokenType.INT:
+        return Op(type=OpType.PUSH_INT, loc=token.loc, value=token.value)
+    elif token.type == TokenType.STR:
+        return Op(type=OpType.PUSH_STR, loc=token.loc, value=token.value)
     else:
-        raise_error(f'Unhandled token: {token}', location)
+        raise_error(f'Unhandled token: {token}', token.loc)
 
 
 def seek_until(line, start, predicate):
@@ -575,18 +585,18 @@ def lex_line(line, file_path, line_number):
         if line[col] == '"':
             col_end = seek_until(line, col + 1, lambda x: x == '"')
             word = line[col + 1:col_end]
-            yield parse_token({'type': TOKEN_STR, 'value': word.encode('utf-8').decode('unicode_escape')},
-                              location)
+            yield parse_token(Token(type=TokenType.STR, value=word.encode('utf-8').decode('unicode_escape'),
+                              loc=location))
             col = seek_until(line, col_end + 1, lambda x: not x.isspace())
         else:
             col_end = seek_until(line, col, lambda x: x.isspace())
             word = line[col:col_end]
             try:
-                yield parse_token({'type': TOKEN_INT, 'value': int(word)},
-                                  location)
+                yield parse_token(Token(type=TokenType.INT, value=int(word),
+                                  loc=location))
             except ValueError:
-                yield parse_token({'type': TOKEN_WORD, 'value': word},
-                                  location)
+                yield parse_token(Token(type=TokenType.WORD, value=word,
+                                  loc=location))
             col = seek_until(line, col_end, lambda x: not x.isspace())
 
 
