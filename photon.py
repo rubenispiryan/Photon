@@ -299,7 +299,7 @@ def compile_program(program):
     for i in range(len(program)):
         instruction = program[i]
         if instruction['type'] == OP_PUSH:
-            write_level1(f'mov x0, #{instruction["value"]}')
+            write_level1(f'ldr x0, ={instruction["value"]}')
             write_level1('push x0')
         elif instruction['type'] == OP_ADD:
             write_level1('pop x0')
@@ -558,12 +558,16 @@ if __name__ == '__main__':
         simulate_program(program_stack)
     elif subcommand == 'com':
         compile_program(program_stack)
-        subprocess.call('as -o output.o output.s', shell=True)
-        subprocess.call(
+        exit_code = subprocess.call('as -o output.o output.s', shell=True)
+        if exit_code != 0:
+            exit(exit_code)
+        exit_code = subprocess.call(
             'ld -o output output.o -lSystem -syslibroot `xcrun -sdk macosx'
             ' --show-sdk-path` -e _start -arch arm64', shell=True)
+        if exit_code != 0:
+            exit(exit_code)
         if '--run' in argv:
-            subprocess.call('./output', shell=True)
+            exit(subprocess.call('./output', shell=True))
     else:
         usage_help()
         exit(1)
