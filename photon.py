@@ -141,113 +141,116 @@ def simulate_program(program):
     mem = bytearray(MEM_CAPACITY)
     while i < len(program):
         instruction = program[i]
-        if instruction['type'] == OP_PUSH:
-            stack.append(instruction['value'])
-        elif instruction['type'] == OP_ADD:
-            a = stack.pop()
-            b = stack.pop()
-            stack.append(a + b)
-        elif instruction['type'] == OP_SUB:
-            a = stack.pop()
-            b = stack.pop()
-            stack.append(b - a)
-        elif instruction['type'] == OP_PRINT:
-            a = stack.pop()
-            print(a)
-        elif instruction['type'] == OP_EQUAL:
-            a = stack.pop()
-            b = stack.pop()
-            stack.append(int(a == b))
-        elif instruction['type'] == OP_LT:
-            a = stack.pop()
-            b = stack.pop()
-            stack.append(int(b < a))
-        elif instruction['type'] == OP_GT:
-            a = stack.pop()
-            b = stack.pop()
-            stack.append(int(b > a))
-        elif instruction['type'] == OP_IF:
-            a = stack.pop()
-            if a == 0:
+        try:
+            if instruction['type'] == OP_PUSH:
+                stack.append(instruction['value'])
+            elif instruction['type'] == OP_ADD:
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(a + b)
+            elif instruction['type'] == OP_SUB:
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(b - a)
+            elif instruction['type'] == OP_PRINT:
+                a = stack.pop()
+                print(a)
+            elif instruction['type'] == OP_EQUAL:
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(int(a == b))
+            elif instruction['type'] == OP_LT:
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(int(b < a))
+            elif instruction['type'] == OP_GT:
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(int(b > a))
+            elif instruction['type'] == OP_IF:
+                a = stack.pop()
+                if a == 0:
+                    i = instruction['jmp']
+            elif instruction['type'] == OP_ELSE:
                 i = instruction['jmp']
-        elif instruction['type'] == OP_ELSE:
-            i = instruction['jmp']
-        elif instruction['type'] == OP_END:
-            if 'jmp' in instruction:
-                i = instruction['jmp']
-        elif instruction['type'] == OP_DUP:
-            a = stack.pop()
-            stack.append(a)
-            stack.append(a)
-        elif instruction['type'] == OP_2DUP:
-            a = stack.pop()
-            b = stack.pop()
-            stack.append(b)
-            stack.append(a)
-            stack.append(b)
-            stack.append(a)
-        elif instruction['type'] == OP_DROP:
-            stack.pop()
-        elif instruction['type'] == OP_WHILE:
-            i += 1
-            continue
-        elif instruction['type'] == OP_DO:
-            a = stack.pop()
-            if a == 0:
-                i = instruction['jmp']
-        elif instruction['type'] == OP_MEM:
-            stack.append(0)
-        elif instruction['type'] == OP_LOAD:
-            address = stack.pop()
-            stack.append(mem[address])
-        elif instruction['type'] == OP_STORE:
-            value = stack.pop()
-            address = stack.pop()
-            mem[address] = value & 0xFF
-        elif instruction['type'] == OP_BITOR:
-            a = stack.pop()
-            b = stack.pop()
-            stack.append(a | b)
-        elif instruction['type'] == OP_BITAND:
-            a = stack.pop()
-            b = stack.pop()
-            stack.append(a & b)
-        elif instruction['type'] == OP_SHIFT_RIGHT:
-            a = stack.pop()
-            b = stack.pop()
-            stack.append(b >> a)
-        elif instruction['type'] == OP_SHIFT_LEFT:
-            a = stack.pop()
-            b = stack.pop()
-            stack.append(b << a)
-        elif instruction['type'] == OP_SWAP:
-            a = stack.pop()
-            b = stack.pop()
-            stack.append(a)
-            stack.append(b)
-        elif instruction['type'] == OP_OVER:
-            a = stack.pop()
-            b = stack.pop()
-            stack.append(b)
-            stack.append(a)
-            stack.append(b)
-        elif instruction['type'] == OP_SYSCALL3:
-            syscall_number = stack.pop()
-            arg1 = stack.pop()
-            arg2 = stack.pop()
-            arg3 = stack.pop()
-            if syscall_number == 4:
-                if arg1 == 1:
-                    print(mem[arg2:arg2 + arg3].decode(), end='')
-                elif arg1 == 2:
-                    print(mem[arg2:arg2 + arg3].decode(), end='', file=sys.stderr)
+            elif instruction['type'] == OP_END:
+                if 'jmp' in instruction:
+                    i = instruction['jmp']
+            elif instruction['type'] == OP_DUP:
+                a = stack.pop()
+                stack.append(a)
+                stack.append(a)
+            elif instruction['type'] == OP_2DUP:
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(b)
+                stack.append(a)
+                stack.append(b)
+                stack.append(a)
+            elif instruction['type'] == OP_DROP:
+                stack.pop()
+            elif instruction['type'] == OP_WHILE:
+                i += 1
+                continue
+            elif instruction['type'] == OP_DO:
+                a = stack.pop()
+                if a == 0:
+                    i = instruction['jmp']
+            elif instruction['type'] == OP_MEM:
+                stack.append(0)
+            elif instruction['type'] == OP_LOAD:
+                address = stack.pop()
+                stack.append(mem[address])
+            elif instruction['type'] == OP_STORE:
+                value = stack.pop()
+                address = stack.pop()
+                mem[address] = value & 0xFF
+            elif instruction['type'] == OP_BITOR:
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(a | b)
+            elif instruction['type'] == OP_BITAND:
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(a & b)
+            elif instruction['type'] == OP_SHIFT_RIGHT:
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(b >> a)
+            elif instruction['type'] == OP_SHIFT_LEFT:
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(b << a)
+            elif instruction['type'] == OP_SWAP:
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(a)
+                stack.append(b)
+            elif instruction['type'] == OP_OVER:
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(b)
+                stack.append(a)
+                stack.append(b)
+            elif instruction['type'] == OP_SYSCALL3:
+                syscall_number = stack.pop()
+                arg1 = stack.pop()
+                arg2 = stack.pop()
+                arg3 = stack.pop()
+                if syscall_number == 4:
+                    if arg1 == 1:
+                        print(mem[arg2:arg2 + arg3].decode(), end='')
+                    elif arg1 == 2:
+                        print(mem[arg2:arg2 + arg3].decode(), end='', file=sys.stderr)
+                    else:
+                        raise_error(f'Unknown file descriptor: {arg1}', instruction['loc'])
                 else:
-                    raise_error(f'Unknown file descriptor: {arg1}', instruction['loc'])
+                    raise_error(f'Unknown syscall number: {syscall_number}', instruction['loc'])
             else:
-                raise_error(f'Unknown syscall number: {syscall_number}', instruction['loc'])
-        else:
-            raise_error(f'Unhandled instruction: {TOKEN_NAMES[instruction["type"]]}',
-                        instruction['loc'])
+                raise_error(f'Unhandled instruction: {TOKEN_NAMES[instruction["type"]]}',
+                            instruction['loc'])
+        except Exception as e:
+            raise_error(f'Exception in Simulation: {str(e)}', instruction['loc'])
         i += 1
 
 
