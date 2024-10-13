@@ -82,6 +82,8 @@ OP_PRINT = auto()
 OP_EQUAL = auto()
 OP_LT = auto()
 OP_GT = auto()
+OP_LTE = auto()
+OP_GTE = auto()
 OP_IF = auto()
 OP_END = auto()
 OP_ELSE = auto()
@@ -131,6 +133,8 @@ TOKEN_NAMES = {
     OP_OVER: 'over',
     OP_DROP2: 'drop2',
     OP_MOD: '%',
+    OP_GTE: '>=',
+    OP_LTE: '<=',
 }
 
 assert OP_COUNTER == len(TOKEN_NAMES) + 1, 'Exhaustive handling of token names'
@@ -140,7 +144,7 @@ MEM_CAPACITY = 640_000
 
 def simulate_program(program):
     stack = []
-    assert OP_COUNTER == 27, 'Exhaustive handling of operators in simulation'
+    assert OP_COUNTER == 29, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(MEM_CAPACITY)
     while i < len(program):
@@ -171,6 +175,14 @@ def simulate_program(program):
                 a = stack.pop()
                 b = stack.pop()
                 stack.append(int(b > a))
+            elif instruction['type'] == OP_GTE:
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(int(b >= a))
+            elif instruction['type'] == OP_LTE:
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(int(b <= a))
             elif instruction['type'] == OP_IF:
                 a = stack.pop()
                 if a == 0:
@@ -266,7 +278,7 @@ def simulate_program(program):
 
 
 def compile_program(program):
-    assert OP_COUNTER == 27, 'Exhaustive handling of operators in compilation'
+    assert OP_COUNTER == 29, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -305,14 +317,26 @@ def compile_program(program):
         elif instruction['type'] == OP_LT:
             write_level1('pop x0')
             write_level1('pop x1')
-            write_level1('cmp x0, x1')
-            write_level1('cset x0, gt')
+            write_level1('cmp x1, x0')
+            write_level1('cset x0, lt')
             write_level1('push x0')
         elif instruction['type'] == OP_GT:
             write_level1('pop x0')
             write_level1('pop x1')
-            write_level1('cmp x0, x1')
-            write_level1('cset x0, lt')
+            write_level1('cmp x1, x0')
+            write_level1('cset x0, gt')
+            write_level1('push x0')
+        elif instruction['type'] == OP_LTE:
+            write_level1('pop x0')
+            write_level1('pop x1')
+            write_level1('cmp x1, x0')
+            write_level1('cset x0, le')
+            write_level1('push x0')
+        elif instruction['type'] == OP_GTE:
+            write_level1('pop x0')
+            write_level1('pop x1')
+            write_level1('cmp x1, x0')
+            write_level1('cset x0, ge')
             write_level1('push x0')
         elif instruction['type'] in (OP_IF, OP_DO):
             write_level1('pop x0')
@@ -415,7 +439,7 @@ def usage_help():
 
 
 def parse_token(token, location):
-    assert OP_COUNTER == 27, 'Exhaustive handling of tokens'
+    assert OP_COUNTER == 29, 'Exhaustive handling of tokens'
     token_dict = {
         'print': {'type': OP_PRINT, 'loc': location},
         '+': {'type': OP_ADD, 'loc': location},
@@ -443,6 +467,8 @@ def parse_token(token, location):
         'over': {'type': OP_OVER, 'loc': location},
         'drop2': {'type': OP_DROP2, 'loc': location},
         '%': {'type': OP_MOD, 'loc': location},
+        '>=': {'type': OP_GTE, 'loc': location},
+        '<=': {'type': OP_LTE, 'loc': location},
     }
     if token in token_dict:
         return token_dict[token]
@@ -453,7 +479,7 @@ def parse_token(token, location):
 
 
 def cross_reference_blocks(program):
-    assert OP_COUNTER == 27, 'Exhaustive handling of code block'
+    assert OP_COUNTER == 29, 'Exhaustive handling of code block'
     stack = []
     for i in range(len(program)):
         if program[i]['type'] == OP_IF:
