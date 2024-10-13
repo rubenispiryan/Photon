@@ -2,6 +2,8 @@
 
 2024 301 - print
 
+5 2 % print
+
 5 5 == print
 4 3 == print
 5 4 > print

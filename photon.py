@@ -101,6 +101,7 @@ OP_SHIFT_LEFT = auto()
 OP_SWAP = auto()
 OP_OVER = auto()
 OP_DROP2 = auto()
+OP_MOD = auto()
 OP_COUNTER = auto()
 
 TOKEN_NAMES = {
@@ -129,6 +130,7 @@ TOKEN_NAMES = {
     OP_SWAP: 'swap',
     OP_OVER: 'over',
     OP_DROP2: 'drop2',
+    OP_MOD: '%',
 }
 
 assert OP_COUNTER == len(TOKEN_NAMES) + 1, 'Exhaustive handling of token names'
@@ -138,7 +140,7 @@ MEM_CAPACITY = 640_000
 
 def simulate_program(program):
     stack = []
-    assert OP_COUNTER == 26, 'Exhaustive handling of operators in simulation'
+    assert OP_COUNTER == 27, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(MEM_CAPACITY)
     while i < len(program):
@@ -237,6 +239,10 @@ def simulate_program(program):
                 stack.append(b)
                 stack.append(a)
                 stack.append(b)
+            elif instruction['type'] == OP_MOD:
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(b % a)
             elif instruction['type'] == OP_SYSCALL3:
                 syscall_number = stack.pop()
                 arg1 = stack.pop()
@@ -260,7 +266,7 @@ def simulate_program(program):
 
 
 def compile_program(program):
-    assert OP_COUNTER == 26, 'Exhaustive handling of operators in compilation'
+    assert OP_COUNTER == 27, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -379,6 +385,12 @@ def compile_program(program):
             write_level1('push x1')
             write_level1('push x0')
             write_level1('push x1')
+        elif instruction['type'] == OP_MOD:
+            write_level1('pop x0')
+            write_level1('pop x1')
+            write_level1('udiv x2, x1, x0')
+            write_level1('msub x0, x2, x0, x1')
+            write_level1('push x0')
         elif instruction['type'] == OP_SYSCALL3:
             write_level1('pop x16')
             write_level1('pop x0')
@@ -403,7 +415,7 @@ def usage_help():
 
 
 def parse_token(token, location):
-    assert OP_COUNTER == 26, 'Exhaustive handling of tokens'
+    assert OP_COUNTER == 27, 'Exhaustive handling of tokens'
     token_dict = {
         'print': {'type': OP_PRINT, 'loc': location},
         '+': {'type': OP_ADD, 'loc': location},
@@ -430,6 +442,7 @@ def parse_token(token, location):
         'swap': {'type': OP_SWAP, 'loc': location},
         'over': {'type': OP_OVER, 'loc': location},
         'drop2': {'type': OP_DROP2, 'loc': location},
+        '%': {'type': OP_MOD, 'loc': location},
     }
     if token in token_dict:
         return token_dict[token]
@@ -440,7 +453,7 @@ def parse_token(token, location):
 
 
 def cross_reference_blocks(program):
-    assert OP_COUNTER == 26, 'Exhaustive handling of code block'
+    assert OP_COUNTER == 27, 'Exhaustive handling of code block'
     stack = []
     for i in range(len(program)):
         if program[i]['type'] == OP_IF:
