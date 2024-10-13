@@ -3,6 +3,17 @@
 Photon is a stack-based programming language implemented
 in Python.
 
+## Features
+
+- [x] Native
+- [x] Executable
+- [x] Stack-based
+- [x] [Turing Complete (Shown by Rule 110 Implementation)](./examples/rule110.phtn)
+
+Planned:
+- [ ] Static Type Checking
+- [ ] Self-Hosted
+
 ## Usage
 
 ``` bash
