@@ -322,7 +322,9 @@ def compile_program(program):
         elif instruction['type'] == OP_PUSH_STR:
             write_level1(f'ldr x0, ={len(instruction["value"])}')
             write_level1('push x0')
-            write_level1(f'adrp x1, str_{allocated_strs.get(instruction["value"], len(strs))}@PAGE')
+            address = allocated_strs.get(instruction["value"], len(strs))
+            write_level1(f'adrp x1, str_{address}@PAGE')
+            write_level1(f'add x1, x1, str_{address}@PAGEOFF')
             write_level1('push x1')
             if instruction['value'] not in allocated_strs:
                 allocated_strs[instruction['value']] = len(strs)
@@ -407,6 +409,7 @@ def compile_program(program):
             write_base(f'while_{i}:')
         elif instruction['type'] == OP_MEM:
             write_level1('adrp x0, mem@PAGE')
+            write_level1('add x0, x0, mem@PAGEOFF')
             write_level1('push x0')
         elif instruction['type'] == OP_STORE:
             write_level1('popw w0')
