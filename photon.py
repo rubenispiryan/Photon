@@ -3,11 +3,18 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Tuple, Generator, List, NoReturn, Callable, Dict, TextIO
+from typing import Generator, List, NoReturn, Callable, Dict, TextIO
 
 
-def raise_error(message: str, loc: Tuple[str, int, int]) -> NoReturn:
-    print(f'{loc[0]}:{loc[1] + 1}:{loc[2]}: {message}')
+@dataclass
+class Loc:
+    filename: str
+    line: int
+    col: int
+
+
+def raise_error(message: str, loc: Loc) -> NoReturn:
+    print(f'{loc.filename}:{loc.line + 1}:{loc.col + 1}: {message}')
     exit(1)
 
 
@@ -104,7 +111,7 @@ class OpType(Enum):
 @dataclass
 class Op:
     type: OpType
-    loc: Tuple[str, int, int]
+    loc: Loc
     name: str
     value: int | str | None = None
     jmp: int | None = None
@@ -121,7 +128,7 @@ class TokenType(Enum):
 class Token:
     type: TokenType
     value: int | str
-    loc: Tuple[str, int, int]
+    loc: Loc
 
 
 STR_CAPACITY = 640_000
@@ -565,6 +572,8 @@ def parse_token(token: Token) -> Op | NoReturn:
         return Op(type=OpType.PUSH_STR, loc=token.loc, value=token.value, name='str')
     elif token.type == TokenType.WORD:
         assert type(token.value) == str, "`word` must be a string"
+        if token.value not in builtin_words:
+            raise_error(f'Unknown word token `{token.value}`', token.loc)
         return Op(type=builtin_words[token.value], loc=token.loc, name=token.value)
     else:
         raise_error(f'Unhandled token: {token}', token.loc)
@@ -576,28 +585,34 @@ def seek_until(line: str, start: int, predicate: Callable[[str], bool]) -> int:
     return start
 
 
+def lex_word(word: str, location: Loc) -> Token:
+    if word[0] == '"':
+        return Token(type=TokenType.STR, value=word.strip('"').encode('utf-8').decode('unicode_escape'),
+                                    loc=location)
+    else:
+        try:
+            return Token(type=TokenType.INT, value=int(word),
+                                    loc=location)
+        except ValueError:
+            return Token(type=TokenType.WORD, value=word,
+                                    loc=location)
+
 def lex_line(line: str, file_path: str, line_number: int) -> Generator[Op, None, None]:
     col = seek_until(line, 0, lambda x: not x.isspace())
     while col < len(line):
-        location = (file_path, line_number, col)
+        location = Loc(file_path, line_number, col)
         if line[col] == '"':
             col_end = seek_until(line, col + 1, lambda x: x == '"')
             if col_end >= len(line):
-                raise_error('String literal was not closed', (file_path, line_number, col + 1))
-            word = line[col + 1:col_end]
-            yield parse_token(Token(type=TokenType.STR, value=word.encode('utf-8').decode('unicode_escape'),
-                                    loc=location))
+                raise_error('String literal was not closed', location)
+            word = line[col:col_end + 1]
             col = seek_until(line, col_end + 1, lambda x: not x.isspace())
         else:
             col_end = seek_until(line, col, lambda x: x.isspace())
             word = line[col:col_end]
-            try:
-                yield parse_token(Token(type=TokenType.INT, value=int(word),
-                                        loc=location))
-            except ValueError:
-                yield parse_token(Token(type=TokenType.WORD, value=word,
-                                        loc=location))
             col = seek_until(line, col_end, lambda x: not x.isspace())
+        token = lex_word(word, location)
+        yield parse_token(token)
 
 
 def lex_file(file_path: str) -> List[Op]:
