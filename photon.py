@@ -91,6 +91,8 @@ class OpType(Enum):
     ELSE = auto()
     WHILE = auto()
     DO = auto()
+    MACRO = auto()
+    END_MACRO = auto()
     MEM = auto()
     LOAD = auto()
     STORE = auto()
@@ -137,7 +139,7 @@ MEM_CAPACITY = 640_000
 
 def simulate_program(program: List[Op]) -> None:
     stack = []
-    assert len(OpType) == 31, 'Exhaustive handling of operators in simulation'
+    assert len(OpType) == 33, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(STR_CAPACITY + MEM_CAPACITY)
     str_size = 0
@@ -314,7 +316,7 @@ def simulate_program(program: List[Op]) -> None:
 
 
 def compile_program(program: List[Op]) -> None:
-    assert len(OpType) == 31, 'Exhaustive handling of operators in compilation'
+    assert len(OpType) == 33, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -499,23 +501,28 @@ def usage_help() -> None:
     print('         --run   Used with `com` to run immediately')
 
 
-def cross_reference_blocks(program: List[Op]) -> List[Op]:
-    assert len(OpType) == 31, 'Exhaustive handling of code block'
+def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
+    assert len(OpType) == 33, 'Exhaustive handling of code block'
     stack = []
-    for i in range(len(program)):
-        if program[i].type == OpType.IF:
+    rprogram = list(reversed(token_program))
+    program: List[Op] = []
+    i = 0
+    while len(rprogram) > 0:
+        op = parse_token(rprogram.pop())
+        program.append(op)
+        if op.type == OpType.IF:
             stack.append(i)
-        elif program[i].type == OpType.ELSE:
+        elif op.type == OpType.ELSE:
             if_index = stack.pop()
             if program[if_index].type != OpType.IF:
                 raise_error(f'Else can only be used with an `if`', program[if_index].loc)
             program[if_index].jmp = i
             stack.append(i)
-        elif program[i].type == OpType.WHILE:
+        elif op.type == OpType.WHILE:
             stack.append(i)
-        elif program[i].type == OpType.DO:
+        elif op.type == OpType.DO:
             stack.append(i)
-        elif program[i].type == OpType.END:
+        elif op.type == OpType.END:
             block_index = stack.pop()
             if program[block_index].type in (OpType.IF, OpType.ELSE):
                 program[block_index].jmp = i
@@ -524,15 +531,18 @@ def cross_reference_blocks(program: List[Op]) -> List[Op]:
                 while_index = stack.pop()
                 if program[while_index].type != OpType.WHILE:
                     raise_error('`while` must be present before `do`', program[while_index].loc)
-                program[i].jmp = while_index
+                op.jmp = while_index
             else:
                 raise_error('End can only be used with an `if`, `else` or `while`',
                             program[block_index].loc)
+        elif op.type == OpType.MACRO:
+            assert False, "Not Implemented"
+        i += 1
     return program
 
 
 def parse_token(token: Token) -> Op | NoReturn:
-    assert len(OpType) == 31, 'Exhaustive handling of built-in words'
+    assert len(OpType) == 33, 'Exhaustive handling of built-in words'
     builtin_words = {
         'print': OpType.PRINT,
         '+': OpType.ADD,
@@ -587,17 +597,17 @@ def seek_until(line: str, start: int, predicate: Callable[[str], bool]) -> int:
 
 def lex_word(word: str, location: Loc) -> Token:
     if word[0] == '"':
-        return Token(type=TokenType.STR, value=word.strip('"').encode('utf-8').decode('unicode_escape'),
-                                    loc=location)
+        return Token(type=TokenType.STR,
+                     value=word.strip('"').encode('utf-8').decode('unicode_escape'),
+                     loc=location)
     else:
         try:
-            return Token(type=TokenType.INT, value=int(word),
-                                    loc=location)
+            return Token(type=TokenType.INT, value=int(word), loc=location)
         except ValueError:
-            return Token(type=TokenType.WORD, value=word,
-                                    loc=location)
+            return Token(type=TokenType.WORD, value=word, loc=location)
 
-def lex_line(line: str, file_path: str, line_number: int) -> Generator[Op, None, None]:
+
+def lex_line(line: str, file_path: str, line_number: int) -> Generator[Token, None, None]:
     col = seek_until(line, 0, lambda x: not x.isspace())
     while col < len(line):
         location = Loc(file_path, line_number, col)
@@ -611,12 +621,11 @@ def lex_line(line: str, file_path: str, line_number: int) -> Generator[Op, None,
             col_end = seek_until(line, col, lambda x: x.isspace())
             word = line[col:col_end]
             col = seek_until(line, col_end, lambda x: not x.isspace())
-        token = lex_word(word, location)
-        yield parse_token(token)
+        yield lex_word(word, location)
 
 
-def lex_file(file_path: str) -> List[Op]:
-    program: List[Op] = []
+def lex_file(file_path: str) -> List[Token]:
+    program: List[Token] = []
     with open(file_path, 'r') as f:
         for i, line in enumerate(f):
             program.extend(lex_line(line.split('//')[0], file_path, i))
@@ -634,9 +643,9 @@ if __name__ == '__main__':
     program_stack = lex_file(file_path_arg)
     program_referenced = cross_reference_blocks(program_stack)
     if subcommand == 'sim':
-        simulate_program(program_stack)
+        simulate_program(program_referenced)
     elif subcommand == 'com':
-        compile_program(program_stack)
+        compile_program(program_referenced)
         exit_code = subprocess.call('as -o output.o output.s', shell=True)
         if exit_code != 0:
             exit(exit_code)
