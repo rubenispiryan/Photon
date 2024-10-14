@@ -3,7 +3,6 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum, auto
-from io import FileIO
 from typing import Tuple, Generator, List, NoReturn, Callable, Dict, TextIO
 
 
@@ -12,7 +11,7 @@ def raise_error(message: str, loc: Tuple[str, int, int]) -> NoReturn:
     exit(1)
 
 
-def write_indent(file: TextIO, level:int = 0) -> Callable[[str], None]:
+def write_indent(file: TextIO, level: int = 0) -> Callable[[str], None]:
     def temp(buffer: str) -> None:
         file.write(' ' * (0 if level == 0 else 4 ** level) + buffer + '\n')
 
@@ -106,6 +105,7 @@ class OpType(Enum):
 class Op:
     type: OpType
     loc: Tuple[str, int, int]
+    name: str
     value: int | str | None = None
     jmp: int | None = None
     addr: int | None = None
@@ -116,46 +116,13 @@ class TokenType(Enum):
     INT = auto()
     STR = auto()
 
+
 @dataclass
 class Token:
     type: TokenType
     value: int | str
     loc: Tuple[str, int, int]
 
-
-BUILTIN_NAMES = {
-    OpType.PRINT: 'print',
-    OpType.ADD: '+',
-    OpType.SUB: '-',
-    OpType.OP_EQUAL: '==',
-    OpType.GT: '>',
-    OpType.LT: '<',
-    OpType.IF: 'if',
-    OpType.END: 'end',
-    OpType.ELSE: 'else',
-    OpType.DUP: 'dup',
-    OpType.WHILE: 'while',
-    OpType.DO: 'do',
-    OpType.MEM: 'mem',
-    OpType.STORE: '.',
-    OpType.LOAD: ',',
-    OpType.SYSCALL3: 'syscall3',
-    OpType.DUP2: 'dup2',
-    OpType.DROP: 'drop',
-    OpType.BITAND: '&',
-    OpType.BITOR: '|',
-    OpType.SHIFT_RIGHT: '<<',
-    OpType.SHIFT_LEFT: '>>',
-    OpType.SWAP: 'swap',
-    OpType.OVER: 'over',
-    OpType.DROP2: 'drop2',
-    OpType.MOD: '%',
-    OpType.GTE: '>=',
-    OpType.LTE: '<=',
-    OpType.NE: '!=',
-}
-
-assert len(OpType) == len(BUILTIN_NAMES) + 2, 'Exhaustive handling of built-in word names'
 
 STR_CAPACITY = 640_000
 MEM_CAPACITY = 640_000
@@ -263,7 +230,7 @@ def simulate_program(program: List[Op]) -> None:
                 continue
             elif instruction.type == OpType.DO:
                 a = stack.pop()
-                assert type(a) ==  int, 'Arguments for `do` must be `int`'
+                assert type(a) == int, 'Arguments for `do` must be `int`'
                 if a == 0:
                     assert type(instruction.jmp) == int, 'Jump address must be `int`'
                     i = instruction.jmp
@@ -332,7 +299,7 @@ def simulate_program(program: List[Op]) -> None:
                 else:
                     raise_error(f'Unknown syscall number: {syscall_number}', instruction.loc)
             else:
-                raise_error(f'Unhandled instruction: {BUILTIN_NAMES[instruction.type]}',
+                raise_error(f'Unhandled instruction: {instruction.name}',
                             instruction.loc)
         except Exception as e:
             raise_error(f'Exception in Simulation: {str(e)}', instruction.loc)
@@ -502,7 +469,7 @@ def compile_program(program: List[Op]) -> None:
             write_level1('pop x2')
             write_level1('svc #0')
         else:
-            raise_error(f'Unhandled instruction: {BUILTIN_NAMES[instruction.type]}',
+            raise_error(f'Unhandled instruction: {instruction.name}',
                         instruction.loc)
     write_level1('mov x16, #1')
     write_level1('mov x0, #0')
@@ -560,45 +527,45 @@ def cross_reference_blocks(program: List[Op]) -> List[Op]:
 def parse_token(token: Token) -> Op | NoReturn:
     assert len(OpType) == 31, 'Exhaustive handling of built-in words'
     builtin_words = {
-        'print': Op(type=OpType.PRINT, loc=token.loc),
-        '+': Op(type=OpType.ADD, loc=token.loc),
-        '-': Op(type=OpType.SUB, loc=token.loc),
-        '==': Op(type=OpType.OP_EQUAL, loc=token.loc),
-        '>': Op(type=OpType.GT, loc=token.loc),
-        '<': Op(type=OpType.LT, loc=token.loc),
-        'if': Op(type=OpType.IF, loc=token.loc),
-        'end': Op(type=OpType.END, loc=token.loc),
-        'else': Op(type=OpType.ELSE, loc=token.loc),
-        'dup': Op(type=OpType.DUP, loc=token.loc),
-        'while': Op(type=OpType.WHILE, loc=token.loc),
-        'do': Op(type=OpType.DO, loc=token.loc),
-        'mem': Op(type=OpType.MEM, loc=token.loc),
-        '.': Op(type=OpType.STORE, loc=token.loc),
-        ',': Op(type=OpType.LOAD, loc=token.loc),
-        'syscall3': Op(type=OpType.SYSCALL3, loc=token.loc),
-        'dup2': Op(type=OpType.DUP2, loc=token.loc),
-        'drop': Op(type=OpType.DROP, loc=token.loc),
-        '&': Op(type=OpType.BITAND, loc=token.loc),
-        '|': Op(type=OpType.BITOR, loc=token.loc),
-        '>>': Op(type=OpType.SHIFT_RIGHT, loc=token.loc),
-        '<<': Op(type=OpType.SHIFT_LEFT, loc=token.loc),
-        'swap': Op(type=OpType.SWAP, loc=token.loc),
-        'over': Op(type=OpType.OVER, loc=token.loc),
-        'drop2': Op(type=OpType.DROP2, loc=token.loc),
-        '%': Op(type=OpType.MOD, loc=token.loc),
-        '>=': Op(type=OpType.GTE, loc=token.loc),
-        '<=': Op(type=OpType.LTE, loc=token.loc),
-        '!=': Op(type=OpType.NE, loc=token.loc),
+        'print': OpType.PRINT,
+        '+': OpType.ADD,
+        '-': OpType.SUB,
+        '==': OpType.OP_EQUAL,
+        '>': OpType.GT,
+        '<': OpType.LT,
+        'if': OpType.IF,
+        'end': OpType.END,
+        'else': OpType.ELSE,
+        'dup': OpType.DUP,
+        'while': OpType.WHILE,
+        'do': OpType.DO,
+        'mem': OpType.MEM,
+        '.': OpType.STORE,
+        ',': OpType.LOAD,
+        'syscall3': OpType.SYSCALL3,
+        'dup2': OpType.DUP2,
+        'drop': OpType.DROP,
+        '&': OpType.BITAND,
+        '|': OpType.BITOR,
+        '>>': OpType.SHIFT_RIGHT,
+        '<<': OpType.SHIFT_LEFT,
+        'swap': OpType.SWAP,
+        'over': OpType.OVER,
+        'drop2': OpType.DROP2,
+        '%': OpType.MOD,
+        '>=': OpType.GTE,
+        '<=': OpType.LTE,
+        '!=': OpType.NE,
     }
     assert len(TokenType) == 3, "Exhaustive handling of tokens"
 
     if token.type == TokenType.INT:
-        return Op(type=OpType.PUSH_INT, loc=token.loc, value=token.value)
+        return Op(type=OpType.PUSH_INT, loc=token.loc, value=token.value, name='int')
     elif token.type == TokenType.STR:
-        return Op(type=OpType.PUSH_STR, loc=token.loc, value=token.value)
+        return Op(type=OpType.PUSH_STR, loc=token.loc, value=token.value, name='str')
     elif token.type == TokenType.WORD:
         assert type(token.value) == str, "`word` must be a string"
-        return builtin_words[token.value]
+        return Op(type=builtin_words[token.value], loc=token.loc, name=token.value)
     else:
         raise_error(f'Unhandled token: {token}', token.loc)
 
@@ -619,17 +586,17 @@ def lex_line(line: str, file_path: str, line_number: int) -> Generator[Op, None,
                 raise_error('String literal was not closed', (file_path, line_number, col + 1))
             word = line[col + 1:col_end]
             yield parse_token(Token(type=TokenType.STR, value=word.encode('utf-8').decode('unicode_escape'),
-                              loc=location))
+                                    loc=location))
             col = seek_until(line, col_end + 1, lambda x: not x.isspace())
         else:
             col_end = seek_until(line, col, lambda x: x.isspace())
             word = line[col:col_end]
             try:
                 yield parse_token(Token(type=TokenType.INT, value=int(word),
-                                  loc=location))
+                                        loc=location))
             except ValueError:
                 yield parse_token(Token(type=TokenType.WORD, value=word,
-                                  loc=location))
+                                        loc=location))
             col = seek_until(line, col_end, lambda x: not x.isspace())
 
 
