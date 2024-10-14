@@ -131,7 +131,42 @@ class Token:
     type: TokenType
     value: int | str
     loc: Loc
+    name: str
 
+
+BUILTIN_WORDS = {
+    'print': OpType.PRINT,
+    '+': OpType.ADD,
+    '-': OpType.SUB,
+    '==': OpType.OP_EQUAL,
+    '>': OpType.GT,
+    '<': OpType.LT,
+    'if': OpType.IF,
+    'end': OpType.END,
+    'else': OpType.ELSE,
+    'dup': OpType.DUP,
+    'while': OpType.WHILE,
+    'do': OpType.DO,
+    'mem': OpType.MEM,
+    '.': OpType.STORE,
+    ',': OpType.LOAD,
+    'syscall3': OpType.SYSCALL3,
+    'dup2': OpType.DUP2,
+    'drop': OpType.DROP,
+    '&': OpType.BITAND,
+    '|': OpType.BITOR,
+    '>>': OpType.SHIFT_RIGHT,
+    '<<': OpType.SHIFT_LEFT,
+    'swap': OpType.SWAP,
+    'over': OpType.OVER,
+    'drop2': OpType.DROP2,
+    '%': OpType.MOD,
+    '>=': OpType.GTE,
+    '<=': OpType.LTE,
+    '!=': OpType.NE,
+    'macro': OpType.MACRO,
+    'endmacro': OpType.END_MACRO,
+}
 
 STR_CAPACITY = 640_000
 MEM_CAPACITY = 640_000
@@ -243,6 +278,9 @@ def simulate_program(program: List[Op]) -> None:
                 if a == 0:
                     assert type(instruction.jmp) == int, 'Jump address must be `int`'
                     i = instruction.jmp
+            elif instruction.type == OpType.MACRO:
+                i += 1
+                continue
             elif instruction.type == OpType.MEM:
                 stack.append(0)
             elif instruction.type == OpType.LOAD:
@@ -477,6 +515,8 @@ def compile_program(program: List[Op]) -> None:
             write_level1('pop x1')
             write_level1('pop x2')
             write_level1('svc #0')
+        elif instruction.type == OpType.MACRO:
+            continue
         else:
             raise_error(f'Unhandled instruction: {instruction.name}',
                         instruction.loc)
@@ -506,9 +546,16 @@ def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
     stack = []
     rprogram = list(reversed(token_program))
     program: List[Op] = []
+    macros: Dict[str, List[Token]] = {}
     i = 0
     while len(rprogram) > 0:
-        op = parse_token(rprogram.pop())
+        token = rprogram.pop()
+        if token.value in macros:
+            assert type(token.value) == str, 'Compiler Error: non string macro name was saved'
+            rprogram.extend(reversed(macros[token.value]))
+            continue
+        else:
+            op = parse_token(token)
         program.append(op)
         if op.type == OpType.IF:
             stack.append(i)
@@ -536,44 +583,34 @@ def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
                 raise_error('End can only be used with an `if`, `else` or `while`',
                             program[block_index].loc)
         elif op.type == OpType.MACRO:
-            assert False, "Not Implemented"
+            if len(rprogram) == 0:
+                raise_error('Expected name of the macro but found nothing', op.loc)
+            macro_name = rprogram.pop()
+            if macro_name.type != TokenType.WORD or type(macro_name.value) != str:
+                raise_error(f'Expected macro name to be: `word`, but found: `{macro_name.name}`', macro_name.loc)
+            if macro_name.value in BUILTIN_WORDS:
+                raise_error(f'Redefinition of builtin word: `{macro_name.value}`', macro_name.loc)
+            if macro_name.value in macros:
+                raise_error(f'Redefinition of existing macro: `{macro_name.value}`', macro_name.loc)
+            if len(rprogram) == 0:
+                raise_error(f'Expected `endmacro` at the end of macro definition but found: `{macro_name.value}`',
+                            macro_name.loc)
+            macros[macro_name.value] = []
+            while len(rprogram) > 0:
+                token = rprogram.pop()
+                if token.type == TokenType.WORD and token.value == 'endmacro':
+                    break
+                else:
+                    macros[macro_name.value].append(token)
+            if token.type != TokenType.WORD or token.value != 'endmacro':
+                raise_error(f'Expected `endmacro` at the end of macro definition but found: `{token.value}`',
+                            token.loc)
         i += 1
     return program
 
 
 def parse_token(token: Token) -> Op | NoReturn:
     assert len(OpType) == 33, 'Exhaustive handling of built-in words'
-    builtin_words = {
-        'print': OpType.PRINT,
-        '+': OpType.ADD,
-        '-': OpType.SUB,
-        '==': OpType.OP_EQUAL,
-        '>': OpType.GT,
-        '<': OpType.LT,
-        'if': OpType.IF,
-        'end': OpType.END,
-        'else': OpType.ELSE,
-        'dup': OpType.DUP,
-        'while': OpType.WHILE,
-        'do': OpType.DO,
-        'mem': OpType.MEM,
-        '.': OpType.STORE,
-        ',': OpType.LOAD,
-        'syscall3': OpType.SYSCALL3,
-        'dup2': OpType.DUP2,
-        'drop': OpType.DROP,
-        '&': OpType.BITAND,
-        '|': OpType.BITOR,
-        '>>': OpType.SHIFT_RIGHT,
-        '<<': OpType.SHIFT_LEFT,
-        'swap': OpType.SWAP,
-        'over': OpType.OVER,
-        'drop2': OpType.DROP2,
-        '%': OpType.MOD,
-        '>=': OpType.GTE,
-        '<=': OpType.LTE,
-        '!=': OpType.NE,
-    }
     assert len(TokenType) == 3, "Exhaustive handling of tokens"
 
     if token.type == TokenType.INT:
@@ -582,9 +619,9 @@ def parse_token(token: Token) -> Op | NoReturn:
         return Op(type=OpType.PUSH_STR, loc=token.loc, value=token.value, name='str')
     elif token.type == TokenType.WORD:
         assert type(token.value) == str, "`word` must be a string"
-        if token.value not in builtin_words:
+        if token.value not in BUILTIN_WORDS:
             raise_error(f'Unknown word token `{token.value}`', token.loc)
-        return Op(type=builtin_words[token.value], loc=token.loc, name=token.value)
+        return Op(type=BUILTIN_WORDS[token.value], loc=token.loc, name=token.value)
     else:
         raise_error(f'Unhandled token: {token}', token.loc)
 
@@ -599,12 +636,13 @@ def lex_word(word: str, location: Loc) -> Token:
     if word[0] == '"':
         return Token(type=TokenType.STR,
                      value=word.strip('"').encode('utf-8').decode('unicode_escape'),
-                     loc=location)
+                     loc=location,
+                     name='string')
     else:
         try:
-            return Token(type=TokenType.INT, value=int(word), loc=location)
+            return Token(type=TokenType.INT, value=int(word), loc=location, name='integer')
         except ValueError:
-            return Token(type=TokenType.WORD, value=word, loc=location)
+            return Token(type=TokenType.WORD, value=word, loc=location, name='word')
 
 
 def lex_line(line: str, file_path: str, line_number: int) -> Generator[Token, None, None]:
