@@ -1,3 +1,4 @@
+// Stack manipulation operations
 1 2 swap print print
 
 5 4 dup over print print print drop

@@ -1,8 +1,11 @@
+// Bitwise and
 3 5 & print
 4 2 & print
 
+// Bitwise or
 2 1 | print
 9 0 | print
 
+// Unsigned shifts
 2 3 << print
 3 1 >> print

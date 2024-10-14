@@ -637,7 +637,7 @@ def lex_file(file_path: str) -> List[Op]:
     program: List[Op] = []
     with open(file_path, 'r') as f:
         for i, line in enumerate(f):
-            program.extend(lex_line(line, file_path, i))
+            program.extend(lex_line(line.split('//')[0], file_path, i))
     return program
 
 

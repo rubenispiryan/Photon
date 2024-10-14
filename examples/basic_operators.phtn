@@ -1,5 +1,5 @@
+// Math Operators
 30 66 + print
-
 2024 301 - print
 
 5 2 % print
@@ -22,6 +22,8 @@
 
 4 5 + 10 1 - == print
 
+// if-else Condition Blocks
+
 5 5 - 0 == if
 5 print
 else
@@ -34,4 +36,5 @@ else
 2025 print
 end
 
+// Large 64-bit number
 1234567890987654321 print

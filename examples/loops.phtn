@@ -1,3 +1,5 @@
+// While loop where the first argument
+// for the condition is supposed to be changed
 1
 while dup 5 < do
 dup print
@@ -6,6 +8,8 @@ end
 
 print
 
+// While loop where the second argument
+// for the condition is supposed to be changed
 0 100 while dup2 < do
 dup print
 1 -
