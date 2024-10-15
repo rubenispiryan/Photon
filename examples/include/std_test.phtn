@@ -1,0 +1,5 @@
+include "n.phtn"
+include "m.phtn"
+
+macro write 1 4 syscall3 endmacro
+macro writeln write "\n" write endmacro

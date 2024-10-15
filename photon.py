@@ -13,8 +13,14 @@ class Loc:
     col: int
 
 
+def make_log_message(message: str, loc: Loc) -> str:
+    return f'{loc.filename}:{loc.line + 1}:{loc.col + 1}: {message}'
+
+def notify_user(message: str, loc: Loc) -> None:
+    print(make_log_message('[NOTE] ' + message, loc))
+
 def raise_error(message: str, loc: Loc) -> NoReturn:
-    print(f'{loc.filename}:{loc.line + 1}:{loc.col + 1}: {message}')
+    print(make_log_message('[ERROR] ' + message, loc))
     exit(1)
 
 
@@ -93,6 +99,7 @@ class OpType(Enum):
     DO = auto()
     MACRO = auto()
     END_MACRO = auto()
+    INCLUDE = auto()
     MEM = auto()
     LOAD = auto()
     STORE = auto()
@@ -133,6 +140,11 @@ class Token:
     loc: Loc
     name: str
 
+@dataclass
+class Macro:
+    tokens: List[Token]
+    loc: Loc
+
 
 BUILTIN_WORDS = {
     'print': OpType.PRINT,
@@ -166,6 +178,7 @@ BUILTIN_WORDS = {
     '!=': OpType.NE,
     'macro': OpType.MACRO,
     'endmacro': OpType.END_MACRO,
+    'include': OpType.INCLUDE,
 }
 
 STR_CAPACITY = 640_000
@@ -174,7 +187,7 @@ MEM_CAPACITY = 640_000
 
 def simulate_program(program: List[Op]) -> None:
     stack = []
-    assert len(OpType) == 33, 'Exhaustive handling of operators in simulation'
+    assert len(OpType) == 34, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(STR_CAPACITY + MEM_CAPACITY)
     str_size = 0
@@ -278,9 +291,6 @@ def simulate_program(program: List[Op]) -> None:
                 if a == 0:
                     assert type(instruction.jmp) == int, 'Jump address must be `int`'
                     i = instruction.jmp
-            elif instruction.type == OpType.MACRO:
-                i += 1
-                continue
             elif instruction.type == OpType.MEM:
                 stack.append(0)
             elif instruction.type == OpType.LOAD:
@@ -354,7 +364,7 @@ def simulate_program(program: List[Op]) -> None:
 
 
 def compile_program(program: List[Op]) -> None:
-    assert len(OpType) == 33, 'Exhaustive handling of operators in compilation'
+    assert len(OpType) == 34, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -540,19 +550,20 @@ def usage_help() -> None:
     print('     com     Compile the program')
     print('         --run   Used with `com` to run immediately')
 
-
+# TODO: cross_reference_blocks is too bloated
 def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
-    assert len(OpType) == 33, 'Exhaustive handling of code block'
+    assert len(OpType) == 34, 'Exhaustive handling of code block'
+    home_dir = os.path.dirname(token_program[0].loc.filename)
     stack = []
     rprogram = list(reversed(token_program))
     program: List[Op] = []
-    macros: Dict[str, List[Token]] = {}
+    macros: Dict[str, Macro] = {}
     i = 0
     while len(rprogram) > 0:
         token = rprogram.pop()
         if token.value in macros:
             assert type(token.value) == str, 'Compiler Error: non string macro name was saved'
-            rprogram.extend(reversed(macros[token.value]))
+            rprogram.extend(reversed(macros[token.value].tokens))
             continue
         else:
             op = parse_token(token)
@@ -562,6 +573,9 @@ def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
         elif op.type == OpType.ELSE:
             if_index = stack.pop()
             if program[if_index].type != OpType.IF:
+                for macro in macros.values():
+                    print([token.value for token in macro.tokens])
+                    print('=' * 100, end='\n' * 3)
                 raise_error(f'Else can only be used with an `if`', program[if_index].loc)
             program[if_index].jmp = i
             stack.append(i)
@@ -582,7 +596,26 @@ def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
             else:
                 raise_error('End can only be used with an `if`, `else` or `while`',
                             program[block_index].loc)
+        elif op.type == OpType.INCLUDE:
+            program.pop()
+            i -= 1
+            if len(rprogram) == 0:
+                raise_error('Expected name of the include file but found nothing', op.loc)
+            include_name = rprogram.pop()
+            if include_name.type != TokenType.STR or type(include_name.value) != str:
+                raise_error(f'Expected macro name to be: `string`, but found: `{include_name.name}`', include_name.loc)
+            if not include_name.value.endswith('phtn'):
+                raise_error(
+                    f'Expected include file to end with `.phtn`, but found: `{include_name.value.split(".")[-1]}`',
+                    include_name.loc)
+            include_filepath = os.path.join(home_dir, include_name.value)
+            if not os.path.isfile(include_filepath):
+                raise_error(f'Photon file with name: {include_name.value} not found', include_name.loc)
+            lexed_include = lex_file(os.path.abspath(include_filepath))
+            rprogram.extend(reversed(lexed_include))
         elif op.type == OpType.MACRO:
+            program.pop()
+            i -= 1
             if len(rprogram) == 0:
                 raise_error('Expected name of the macro but found nothing', op.loc)
             macro_name = rprogram.pop()
@@ -591,11 +624,12 @@ def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
             if macro_name.value in BUILTIN_WORDS:
                 raise_error(f'Redefinition of builtin word: `{macro_name.value}`', macro_name.loc)
             if macro_name.value in macros:
-                raise_error(f'Redefinition of existing macro: `{macro_name.value}`', macro_name.loc)
+                notify_user(f'Macro `{macro_name.value}` was defined at this location', macros[macro_name.value].loc)
+                raise_error(f'Redefinition of existing macro: `{macro_name.value}`\n', macro_name.loc)
             if len(rprogram) == 0:
                 raise_error(f'Expected `endmacro` at the end of empty macro definition but found: `{macro_name.value}`',
                             macro_name.loc)
-            macros[macro_name.value] = []
+            macros[macro_name.value] = Macro([], op.loc)
             rec_macro_count = 0
             while len(rprogram) > 0:
                 token = rprogram.pop()
@@ -605,7 +639,7 @@ def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
                     rec_macro_count -= 1
                 elif token.type == TokenType.WORD and token.value == 'macro':
                     rec_macro_count += 1
-                macros[macro_name.value].append(token)
+                macros[macro_name.value].tokens.append(token)
             if token.type != TokenType.WORD or token.value != 'endmacro':
                 raise_error(f'Expected `endmacro` at the end of macro definition but found: `{token.value}`',
                             token.loc)
@@ -616,7 +650,7 @@ def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
 
 
 def parse_token(token: Token) -> Op | NoReturn:
-    assert len(OpType) == 33, 'Exhaustive handling of built-in words'
+    assert len(OpType) == 34, 'Exhaustive handling of built-in words'
     assert len(TokenType) == 3, "Exhaustive handling of tokens"
 
     if token.type == TokenType.INT:
