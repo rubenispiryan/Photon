@@ -43,3 +43,10 @@ jobs:
           gh pr merge ${{ github.event.pull_request.number }} --merge --repo ${{ github.repository }} --admin --body "Automatically merged after checks passed."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete branch after merge
+        run: |
+          BRANCH_NAME=${{ github.event.pull_request.head.ref }}
+          gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/${BRANCH_NAME}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
