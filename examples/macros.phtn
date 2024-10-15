@@ -19,3 +19,21 @@ macro while<10 while dup 10 < do
 endmacro
 
 0 while<10
+
+macro wrapper
+    macro writeargln
+    dup2
+    write
+    "\n" write
+    endmacro
+endmacro
+
+"hello" wrapper
+
+writeargln
+
+
+writeargln
+writeargln
+writeargln
+writeargln

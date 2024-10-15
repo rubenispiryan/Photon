@@ -15,7 +15,7 @@ mem N 2 - + 1 .
         1 +
     end
     mem + N + 10 .
-    101 mem N + 1 4 syscall3
+    N 1 + mem N + 1 4 syscall3
 
     mem , 1 <<
     mem 1 + ,

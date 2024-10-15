@@ -593,18 +593,24 @@ def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
             if macro_name.value in macros:
                 raise_error(f'Redefinition of existing macro: `{macro_name.value}`', macro_name.loc)
             if len(rprogram) == 0:
-                raise_error(f'Expected `endmacro` at the end of macro definition but found: `{macro_name.value}`',
+                raise_error(f'Expected `endmacro` at the end of empty macro definition but found: `{macro_name.value}`',
                             macro_name.loc)
             macros[macro_name.value] = []
+            rec_macro_count = 0
             while len(rprogram) > 0:
                 token = rprogram.pop()
                 if token.type == TokenType.WORD and token.value == 'endmacro':
-                    break
-                else:
-                    macros[macro_name.value].append(token)
+                    if rec_macro_count == 0:
+                        break
+                    rec_macro_count -= 1
+                elif token.type == TokenType.WORD and token.value == 'macro':
+                    rec_macro_count += 1
+                macros[macro_name.value].append(token)
             if token.type != TokenType.WORD or token.value != 'endmacro':
                 raise_error(f'Expected `endmacro` at the end of macro definition but found: `{token.value}`',
                             token.loc)
+        elif op.type == OpType.END_MACRO:
+            raise_error('Corresponding macro definition not found for `endmacro`', op.loc)
         i += 1
     return program
 
