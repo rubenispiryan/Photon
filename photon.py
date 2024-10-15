@@ -96,6 +96,7 @@ class Intrinsic(Enum):
     ADD = auto()
     SUB = auto()
     MUL = auto()
+    DIV = auto()
     PRINT = auto()
     OP_EQUAL = auto()
     LT = auto()
@@ -170,7 +171,6 @@ class Macro:
     tokens: List[Token]
     loc: Loc
 
-
 KEYWORD_NAMES = {
     'if': Keyword.IF,
     'end': Keyword.END,
@@ -182,11 +182,14 @@ KEYWORD_NAMES = {
     'include': Keyword.INCLUDE,
 }
 
+assert len(KEYWORD_NAMES) == len(Keyword), 'Exhaustive handling of keywords'
+
 INTRINSIC_NAMES = {
     'print': Intrinsic.PRINT,
     '+': Intrinsic.ADD,
     '-': Intrinsic.SUB,
     '*': Intrinsic.MUL,
+    '/': Intrinsic.DIV,
     '==': Intrinsic.OP_EQUAL,
     '>': Intrinsic.GT,
     '<': Intrinsic.LT,
@@ -207,6 +210,8 @@ INTRINSIC_NAMES = {
     '<=': Intrinsic.LTE,
     '!=': Intrinsic.NE,
 }
+
+assert len(INTRINSIC_NAMES) == len(Intrinsic), 'Exhaustive handling of intrinsics'
 
 STR_CAPACITY = 640_000
 MEM_CAPACITY = 640_000
@@ -259,7 +264,7 @@ def simulate_program(program: List[Op]) -> None:
                     assert type(operation.operand) == int, 'Jump address must be `int`'
                     i = operation.operand
             elif operation.type == OpType.INTRINSIC:
-                assert len(Intrinsic) == 23, 'Exhaustive handling of intrinsics in simulation'
+                assert len(Intrinsic) == 24, 'Exhaustive handling of intrinsics in simulation'
                 if operation.operand == Intrinsic.ADD:
                     a = stack.pop()
                     b = stack.pop()
@@ -275,6 +280,11 @@ def simulate_program(program: List[Op]) -> None:
                     b = stack.pop()
                     assert type(a) == type(b) == int, 'Arguments for `*` must be `int`'
                     stack.append(a * b)
+                elif operation.operand == Intrinsic.DIV:
+                    a = stack.pop()
+                    b = stack.pop()
+                    assert type(a) == type(b) == int, 'Arguments for `/` must be `int`'
+                    stack.append(b // a)
                 elif operation.operand == Intrinsic.PRINT:
                     a = stack.pop()
                     assert type(a) == int, 'Arguments for `print` must be `int`'
@@ -436,7 +446,7 @@ def compile_program(program: List[Op]) -> None:
         elif operation.type == OpType.WHILE:
             write_base(f'while_{i}:')
         elif operation.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 23, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 24, 'Exhaustive handling of intrinsics in simulation'
             if operation.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -451,6 +461,11 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('mul x0, x0, x1')
+                write_level1('push x0')
+            elif operation.operand == Intrinsic.DIV:
+                write_level1('pop x0')
+                write_level1('pop x1')
+                write_level1('udiv x0, x1, x0')
                 write_level1('push x0')
             elif operation.operand == Intrinsic.PRINT:
                 write_level1('pop x0')
