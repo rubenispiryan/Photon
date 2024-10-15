@@ -1,4 +1,4 @@
-name: Run tests and mypy checks
+name: Run tests and auto-merge PR
 
 on:
   pull_request:
@@ -23,3 +23,23 @@ jobs:
 
     - name: Run make test
       run: make test
+
+  auto-merge:
+    needs: test
+    runs-on: macos-latest
+    if: github.event.pull_request.merged == false
+  
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v3
+
+      - name: Set up GitHub credentials for auto-merge
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Automatically merge the PR
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} --merge --repo ${{ github.repository }} --admin --body "Automatically merged after checks passed."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
