@@ -3,11 +3,24 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Tuple, Generator, List, NoReturn, Callable, Dict, TextIO
+from typing import Generator, List, NoReturn, Callable, Dict, TextIO
 
 
-def raise_error(message: str, loc: Tuple[str, int, int]) -> NoReturn:
-    print(f'{loc[0]}:{loc[1] + 1}:{loc[2]}: {message}')
+@dataclass
+class Loc:
+    filename: str
+    line: int
+    col: int
+
+
+def make_log_message(message: str, loc: Loc) -> str:
+    return f'{loc.filename}:{loc.line + 1}:{loc.col + 1}: {message}'
+
+def notify_user(message: str, loc: Loc) -> None:
+    print(make_log_message('[NOTE] ' + message, loc))
+
+def raise_error(message: str, loc: Loc) -> NoReturn:
+    print(make_log_message('[ERROR] ' + message, loc))
     exit(1)
 
 
@@ -84,6 +97,9 @@ class OpType(Enum):
     ELSE = auto()
     WHILE = auto()
     DO = auto()
+    MACRO = auto()
+    END_MACRO = auto()
+    INCLUDE = auto()
     MEM = auto()
     LOAD = auto()
     STORE = auto()
@@ -104,7 +120,7 @@ class OpType(Enum):
 @dataclass
 class Op:
     type: OpType
-    loc: Tuple[str, int, int]
+    loc: Loc
     name: str
     value: int | str | None = None
     jmp: int | None = None
@@ -121,8 +137,49 @@ class TokenType(Enum):
 class Token:
     type: TokenType
     value: int | str
-    loc: Tuple[str, int, int]
+    loc: Loc
+    name: str
 
+@dataclass
+class Macro:
+    tokens: List[Token]
+    loc: Loc
+
+
+BUILTIN_WORDS = {
+    'print': OpType.PRINT,
+    '+': OpType.ADD,
+    '-': OpType.SUB,
+    '==': OpType.OP_EQUAL,
+    '>': OpType.GT,
+    '<': OpType.LT,
+    'if': OpType.IF,
+    'end': OpType.END,
+    'else': OpType.ELSE,
+    'dup': OpType.DUP,
+    'while': OpType.WHILE,
+    'do': OpType.DO,
+    'mem': OpType.MEM,
+    '.': OpType.STORE,
+    ',': OpType.LOAD,
+    'syscall3': OpType.SYSCALL3,
+    'dup2': OpType.DUP2,
+    'drop': OpType.DROP,
+    '&': OpType.BITAND,
+    '|': OpType.BITOR,
+    '>>': OpType.SHIFT_RIGHT,
+    '<<': OpType.SHIFT_LEFT,
+    'swap': OpType.SWAP,
+    'over': OpType.OVER,
+    'drop2': OpType.DROP2,
+    '%': OpType.MOD,
+    '>=': OpType.GTE,
+    '<=': OpType.LTE,
+    '!=': OpType.NE,
+    'macro': OpType.MACRO,
+    'endmacro': OpType.END_MACRO,
+    'include': OpType.INCLUDE,
+}
 
 STR_CAPACITY = 640_000
 MEM_CAPACITY = 640_000
@@ -130,7 +187,7 @@ MEM_CAPACITY = 640_000
 
 def simulate_program(program: List[Op]) -> None:
     stack = []
-    assert len(OpType) == 31, 'Exhaustive handling of operators in simulation'
+    assert len(OpType) == 34, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(STR_CAPACITY + MEM_CAPACITY)
     str_size = 0
@@ -307,7 +364,7 @@ def simulate_program(program: List[Op]) -> None:
 
 
 def compile_program(program: List[Op]) -> None:
-    assert len(OpType) == 31, 'Exhaustive handling of operators in compilation'
+    assert len(OpType) == 34, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -468,6 +525,8 @@ def compile_program(program: List[Op]) -> None:
             write_level1('pop x1')
             write_level1('pop x2')
             write_level1('svc #0')
+        elif instruction.type == OpType.MACRO:
+            continue
         else:
             raise_error(f'Unhandled instruction: {instruction.name}',
                         instruction.loc)
@@ -491,24 +550,40 @@ def usage_help() -> None:
     print('     com     Compile the program')
     print('         --run   Used with `com` to run immediately')
 
-
-def cross_reference_blocks(program: List[Op]) -> List[Op]:
-    assert len(OpType) == 31, 'Exhaustive handling of code block'
+# TODO: cross_reference_blocks is too bloated
+def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
+    assert len(OpType) == 34, 'Exhaustive handling of code block'
+    home_dir = os.path.dirname(token_program[0].loc.filename)
     stack = []
-    for i in range(len(program)):
-        if program[i].type == OpType.IF:
+    rprogram = list(reversed(token_program))
+    program: List[Op] = []
+    macros: Dict[str, Macro] = {}
+    i = 0
+    while len(rprogram) > 0:
+        token = rprogram.pop()
+        if token.value in macros:
+            assert type(token.value) == str, 'Compiler Error: non string macro name was saved'
+            rprogram.extend(reversed(macros[token.value].tokens))
+            continue
+        else:
+            op = parse_token(token)
+        program.append(op)
+        if op.type == OpType.IF:
             stack.append(i)
-        elif program[i].type == OpType.ELSE:
+        elif op.type == OpType.ELSE:
             if_index = stack.pop()
             if program[if_index].type != OpType.IF:
+                for macro in macros.values():
+                    print([token.value for token in macro.tokens])
+                    print('=' * 100, end='\n' * 3)
                 raise_error(f'Else can only be used with an `if`', program[if_index].loc)
             program[if_index].jmp = i
             stack.append(i)
-        elif program[i].type == OpType.WHILE:
+        elif op.type == OpType.WHILE:
             stack.append(i)
-        elif program[i].type == OpType.DO:
+        elif op.type == OpType.DO:
             stack.append(i)
-        elif program[i].type == OpType.END:
+        elif op.type == OpType.END:
             block_index = stack.pop()
             if program[block_index].type in (OpType.IF, OpType.ELSE):
                 program[block_index].jmp = i
@@ -517,46 +592,65 @@ def cross_reference_blocks(program: List[Op]) -> List[Op]:
                 while_index = stack.pop()
                 if program[while_index].type != OpType.WHILE:
                     raise_error('`while` must be present before `do`', program[while_index].loc)
-                program[i].jmp = while_index
+                op.jmp = while_index
             else:
                 raise_error('End can only be used with an `if`, `else` or `while`',
                             program[block_index].loc)
+        elif op.type == OpType.INCLUDE:
+            program.pop()
+            i -= 1
+            if len(rprogram) == 0:
+                raise_error('Expected name of the include file but found nothing', op.loc)
+            include_name = rprogram.pop()
+            if include_name.type != TokenType.STR or type(include_name.value) != str:
+                raise_error(f'Expected macro name to be: `string`, but found: `{include_name.name}`', include_name.loc)
+            if not include_name.value.endswith('phtn'):
+                raise_error(
+                    f'Expected include file to end with `.phtn`, but found: `{include_name.value.split(".")[-1]}`',
+                    include_name.loc)
+            include_filepath = os.path.join(home_dir, include_name.value)
+            if not os.path.isfile(include_filepath):
+                raise_error(f'Photon file with name: {include_name.value} not found', include_name.loc)
+            lexed_include = lex_file(os.path.abspath(include_filepath))
+            rprogram.extend(reversed(lexed_include))
+        elif op.type == OpType.MACRO:
+            program.pop()
+            i -= 1
+            if len(rprogram) == 0:
+                raise_error('Expected name of the macro but found nothing', op.loc)
+            macro_name = rprogram.pop()
+            if macro_name.type != TokenType.WORD or type(macro_name.value) != str:
+                raise_error(f'Expected macro name to be: `word`, but found: `{macro_name.name}`', macro_name.loc)
+            if macro_name.value in BUILTIN_WORDS:
+                raise_error(f'Redefinition of builtin word: `{macro_name.value}`', macro_name.loc)
+            if macro_name.value in macros:
+                notify_user(f'Macro `{macro_name.value}` was defined at this location', macros[macro_name.value].loc)
+                raise_error(f'Redefinition of existing macro: `{macro_name.value}`\n', macro_name.loc)
+            if len(rprogram) == 0:
+                raise_error(f'Expected `endmacro` at the end of empty macro definition but found: `{macro_name.value}`',
+                            macro_name.loc)
+            macros[macro_name.value] = Macro([], op.loc)
+            rec_macro_count = 0
+            while len(rprogram) > 0:
+                token = rprogram.pop()
+                if token.type == TokenType.WORD and token.value == 'endmacro':
+                    if rec_macro_count == 0:
+                        break
+                    rec_macro_count -= 1
+                elif token.type == TokenType.WORD and token.value == 'macro':
+                    rec_macro_count += 1
+                macros[macro_name.value].tokens.append(token)
+            if token.type != TokenType.WORD or token.value != 'endmacro':
+                raise_error(f'Expected `endmacro` at the end of macro definition but found: `{token.value}`',
+                            token.loc)
+        elif op.type == OpType.END_MACRO:
+            raise_error('Corresponding macro definition not found for `endmacro`', op.loc)
+        i += 1
     return program
 
 
 def parse_token(token: Token) -> Op | NoReturn:
-    assert len(OpType) == 31, 'Exhaustive handling of built-in words'
-    builtin_words = {
-        'print': OpType.PRINT,
-        '+': OpType.ADD,
-        '-': OpType.SUB,
-        '==': OpType.OP_EQUAL,
-        '>': OpType.GT,
-        '<': OpType.LT,
-        'if': OpType.IF,
-        'end': OpType.END,
-        'else': OpType.ELSE,
-        'dup': OpType.DUP,
-        'while': OpType.WHILE,
-        'do': OpType.DO,
-        'mem': OpType.MEM,
-        '.': OpType.STORE,
-        ',': OpType.LOAD,
-        'syscall3': OpType.SYSCALL3,
-        'dup2': OpType.DUP2,
-        'drop': OpType.DROP,
-        '&': OpType.BITAND,
-        '|': OpType.BITOR,
-        '>>': OpType.SHIFT_RIGHT,
-        '<<': OpType.SHIFT_LEFT,
-        'swap': OpType.SWAP,
-        'over': OpType.OVER,
-        'drop2': OpType.DROP2,
-        '%': OpType.MOD,
-        '>=': OpType.GTE,
-        '<=': OpType.LTE,
-        '!=': OpType.NE,
-    }
+    assert len(OpType) == 34, 'Exhaustive handling of built-in words'
     assert len(TokenType) == 3, "Exhaustive handling of tokens"
 
     if token.type == TokenType.INT:
@@ -565,7 +659,9 @@ def parse_token(token: Token) -> Op | NoReturn:
         return Op(type=OpType.PUSH_STR, loc=token.loc, value=token.value, name='str')
     elif token.type == TokenType.WORD:
         assert type(token.value) == str, "`word` must be a string"
-        return Op(type=builtin_words[token.value], loc=token.loc, name=token.value)
+        if token.value not in BUILTIN_WORDS:
+            raise_error(f'Unknown word token `{token.value}`', token.loc)
+        return Op(type=BUILTIN_WORDS[token.value], loc=token.loc, name=token.value)
     else:
         raise_error(f'Unhandled token: {token}', token.loc)
 
@@ -576,32 +672,38 @@ def seek_until(line: str, start: int, predicate: Callable[[str], bool]) -> int:
     return start
 
 
-def lex_line(line: str, file_path: str, line_number: int) -> Generator[Op, None, None]:
+def lex_word(word: str, location: Loc) -> Token:
+    if word[0] == '"':
+        return Token(type=TokenType.STR,
+                     value=word.strip('"').encode('utf-8').decode('unicode_escape'),
+                     loc=location,
+                     name='string')
+    else:
+        try:
+            return Token(type=TokenType.INT, value=int(word), loc=location, name='integer')
+        except ValueError:
+            return Token(type=TokenType.WORD, value=word, loc=location, name='word')
+
+
+def lex_line(line: str, file_path: str, line_number: int) -> Generator[Token, None, None]:
     col = seek_until(line, 0, lambda x: not x.isspace())
     while col < len(line):
-        location = (file_path, line_number, col)
+        location = Loc(file_path, line_number, col)
         if line[col] == '"':
             col_end = seek_until(line, col + 1, lambda x: x == '"')
             if col_end >= len(line):
-                raise_error('String literal was not closed', (file_path, line_number, col + 1))
-            word = line[col + 1:col_end]
-            yield parse_token(Token(type=TokenType.STR, value=word.encode('utf-8').decode('unicode_escape'),
-                                    loc=location))
+                raise_error('String literal was not closed', location)
+            word = line[col:col_end + 1]
             col = seek_until(line, col_end + 1, lambda x: not x.isspace())
         else:
             col_end = seek_until(line, col, lambda x: x.isspace())
             word = line[col:col_end]
-            try:
-                yield parse_token(Token(type=TokenType.INT, value=int(word),
-                                        loc=location))
-            except ValueError:
-                yield parse_token(Token(type=TokenType.WORD, value=word,
-                                        loc=location))
             col = seek_until(line, col_end, lambda x: not x.isspace())
+        yield lex_word(word, location)
 
 
-def lex_file(file_path: str) -> List[Op]:
-    program: List[Op] = []
+def lex_file(file_path: str) -> List[Token]:
+    program: List[Token] = []
     with open(file_path, 'r') as f:
         for i, line in enumerate(f):
             program.extend(lex_line(line.split('//')[0], file_path, i))
@@ -619,9 +721,9 @@ if __name__ == '__main__':
     program_stack = lex_file(file_path_arg)
     program_referenced = cross_reference_blocks(program_stack)
     if subcommand == 'sim':
-        simulate_program(program_stack)
+        simulate_program(program_referenced)
     elif subcommand == 'com':
-        compile_program(program_stack)
+        compile_program(program_referenced)
         exit_code = subprocess.call('as -o output.o output.s', shell=True)
         if exit_code != 0:
             exit(exit_code)

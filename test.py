@@ -13,7 +13,7 @@ def get_files(folder: str) -> List[str]:
     for filename in os.listdir(folder):
         file_path = os.path.join(folder, filename)
         if os.path.isdir(file_path):
-            get_files(file_path)
+            output.extend(get_files(file_path))
         else:
             output.append(file_path)
     return output

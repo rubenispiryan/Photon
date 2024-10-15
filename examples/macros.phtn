@@ -1,0 +1,39 @@
+macro write 1 4 syscall3 endmacro
+
+macro writeln write "\n" write endmacro
+
+"hello world" writeln
+
+macro ifc if
+    "hello 2024" writeln
+    else
+    "hello 2025" writeln
+    end
+endmacro
+
+macro while<10 while dup 10 < do
+    dup 2 % ifc
+    1 +
+    end
+    drop
+endmacro
+
+0 while<10
+
+macro wrapper
+    macro writeargln
+    dup2
+    write
+    "\n" write
+    endmacro
+endmacro
+
+"hello" wrapper
+
+writeargln
+
+
+writeargln
+writeargln
+writeargln
+writeargln
