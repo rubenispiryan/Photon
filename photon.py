@@ -85,6 +85,7 @@ class OpType(Enum):
     PUSH_STR = auto()
     ADD = auto()
     SUB = auto()
+    MUL = auto()
     PRINT = auto()
     OP_EQUAL = auto()
     LT = auto()
@@ -151,6 +152,7 @@ BUILTIN_WORDS = {
     'print': OpType.PRINT,
     '+': OpType.ADD,
     '-': OpType.SUB,
+    '*': OpType.MUL,
     '==': OpType.OP_EQUAL,
     '>': OpType.GT,
     '<': OpType.LT,
@@ -188,7 +190,7 @@ MEM_CAPACITY = 640_000
 
 def simulate_program(program: List[Op]) -> None:
     stack = []
-    assert len(OpType) == 34, 'Exhaustive handling of operators in simulation'
+    assert len(OpType) == 35, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(STR_CAPACITY + MEM_CAPACITY)
     str_size = 0
@@ -220,6 +222,11 @@ def simulate_program(program: List[Op]) -> None:
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `-` must be `int`'
                 stack.append(b - a)
+            elif instruction.type == OpType.MUL:
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `*` must be `int`'
+                stack.append(a * b)
             elif instruction.type == OpType.PRINT:
                 a = stack.pop()
                 assert type(a) == int, 'Arguments for `print` must be `int`'
@@ -365,7 +372,7 @@ def simulate_program(program: List[Op]) -> None:
 
 
 def compile_program(program: List[Op]) -> None:
-    assert len(OpType) == 34, 'Exhaustive handling of operators in compilation'
+    assert len(OpType) == 35, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -402,6 +409,11 @@ def compile_program(program: List[Op]) -> None:
             write_level1('pop x0')
             write_level1('pop x1')
             write_level1('sub x0, x1, x0')
+            write_level1('push x0')
+        elif instruction.type == OpType.MUL:
+            write_level1('pop x0')
+            write_level1('pop x1')
+            write_level1('mul x0, x0, x1')
             write_level1('push x0')
         elif instruction.type == OpType.PRINT:
             write_level1('pop x0')
@@ -553,7 +565,7 @@ def usage_help() -> None:
 
 # TODO: cross_reference_blocks is too bloated
 def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
-    assert len(OpType) == 34, 'Exhaustive handling of code block'
+    assert len(OpType) == 35, 'Exhaustive handling of code block'
     home_dir = os.path.dirname(token_program[0].loc.filename)
     stack = []
     rprogram = list(reversed(token_program))
@@ -651,7 +663,7 @@ def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
 
 
 def parse_token(token: Token) -> Op | NoReturn:
-    assert len(OpType) == 34, 'Exhaustive handling of built-in words'
+    assert len(OpType) == 35, 'Exhaustive handling of built-in words'
     assert len(TokenType) == 4, "Exhaustive handling of tokens in parser"
 
     if token.type == TokenType.INT:
