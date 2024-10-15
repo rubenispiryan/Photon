@@ -1,12 +1,14 @@
-"Hello World\n" 1 4 syscall3
+include "io.phtn"
 
-"Photon Strings\n" 1 4 syscall3
+"Hello World" writeln
 
-"Uno\n" 1 4 syscall3
-"Dos\n" 1 4 syscall3
-"Tres\n" 1 4 syscall3
+"Photon Strings" writeln
 
-"Hello World\n" 1 4 syscall3
-"Hello World\n" 1 4 syscall3
-"Hello World\n" 1 4 syscall3
-"Hello World\n" 1 4 syscall3
+"Uno" writeln
+"Dos" writeln
+"Tres" writeln
+
+"Hello World" writeln
+"Hello World" writeln
+"Hello World" writeln
+"Hello World" writeln

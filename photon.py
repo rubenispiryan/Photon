@@ -566,7 +566,6 @@ def usage_help() -> None:
 # TODO: cross_reference_blocks is too bloated
 def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
     assert len(OpType) == 35, 'Exhaustive handling of code block'
-    home_dir = os.path.dirname(token_program[0].loc.filename)
     stack = []
     rprogram = list(reversed(token_program))
     program: List[Op] = []
@@ -621,8 +620,8 @@ def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
                 raise_error(
                     f'Expected include file to end with `.phtn`, but found: `{include_name.value.split(".")[-1]}`',
                     include_name.loc)
-            include_filepath = os.path.join(home_dir, include_name.value)
-            std_filepath = os.path.join(home_dir, 'std/', include_name.value)
+            include_filepath = os.path.join('.', include_name.value)
+            std_filepath = os.path.join('./std/', include_name.value)
             found = False
             for include_filepath in (include_filepath, std_filepath):
                 if os.path.isfile(include_filepath):

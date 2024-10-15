@@ -1,5 +1,0 @@
-include "std_test.phtn"
-
-"hello world from std_test library" writeln
-
-N M + print

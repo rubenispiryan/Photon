@@ -1,6 +1,4 @@
-macro write 1 4 syscall3 endmacro
-
-macro writeln write "\n" write endmacro
+include "io.phtn"
 
 "hello world" writeln
 

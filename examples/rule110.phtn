@@ -1,6 +1,8 @@
 // Implementation of Rule 110 cellular automata
 // Shows the turing completeness of Photon
 
+include "io.phtn"
+
 macro N 100 endmacro
 
 mem N 2 - + 1 .
@@ -15,7 +17,7 @@ mem N 2 - + 1 .
         1 +
     end
     mem + N + '\n' .
-    N 1 + mem N + 1 4 syscall3
+    N 1 + mem N + write
 
     mem , 1 <<
     mem 1 + ,
