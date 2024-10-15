@@ -5,7 +5,13 @@ from typing import List
 
 
 def execute(subcommand: str, filename: str, flag: str ='') -> bytes:
-    return subprocess.check_output(f'python3 photon.py {subcommand} {filename} {flag}', shell=True)
+    try:
+        return subprocess.check_output(f'python3 photon.py {subcommand} {filename} {flag}', shell=True,
+                                       stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as e:
+        print(f'Command: "python3 photon.py {subcommand} {filename} {flag}" failed with error:')
+        print(e.output.decode('utf-8'))
+        exit(1)
 
 
 def get_files(folder: str) -> List[str]:
