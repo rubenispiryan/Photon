@@ -1,14 +1,12 @@
-name: Run tests and mypy checks on merge to main
+name: Run tests and mypy checks
 
 on:
   pull_request:
-    branches:
-      - main
-    types: [closed]
+  push:
+    branches: [main]
 
 jobs:
   test:
-    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
     runs-on: macos-latest
 
     steps:
