@@ -131,6 +131,7 @@ class TokenType(Enum):
     WORD = auto()
     INT = auto()
     STR = auto()
+    CHAR = auto()
 
 
 @dataclass
@@ -651,12 +652,14 @@ def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
 
 def parse_token(token: Token) -> Op | NoReturn:
     assert len(OpType) == 34, 'Exhaustive handling of built-in words'
-    assert len(TokenType) == 3, "Exhaustive handling of tokens"
+    assert len(TokenType) == 4, "Exhaustive handling of tokens in parser"
 
     if token.type == TokenType.INT:
-        return Op(type=OpType.PUSH_INT, loc=token.loc, value=token.value, name='int')
+        return Op(type=OpType.PUSH_INT, loc=token.loc, value=token.value, name=token.name)
+    elif token.type == TokenType.CHAR:
+        return Op(type=OpType.PUSH_INT, loc=token.loc, value=token.value, name=token.name)
     elif token.type == TokenType.STR:
-        return Op(type=OpType.PUSH_STR, loc=token.loc, value=token.value, name='str')
+        return Op(type=OpType.PUSH_STR, loc=token.loc, value=token.value, name=token.name)
     elif token.type == TokenType.WORD:
         assert type(token.value) == str, "`word` must be a string"
         if token.value not in BUILTIN_WORDS:
@@ -673,11 +676,17 @@ def seek_until(line: str, start: int, predicate: Callable[[str], bool]) -> int:
 
 
 def lex_word(word: str, location: Loc) -> Token:
+    assert len(TokenType) == 4, "Exhaustive handling of tokens in lexer"
     if word[0] == '"':
         return Token(type=TokenType.STR,
                      value=word.strip('"').encode('utf-8').decode('unicode_escape'),
                      loc=location,
                      name='string')
+    elif word[0] == "'":
+        return Token(type=TokenType.CHAR,
+                     value=ord(word.strip("'").encode('utf-8').decode('unicode_escape')),
+                     loc=location,
+                     name='char')
     else:
         try:
             return Token(type=TokenType.INT, value=int(word), loc=location, name='integer')
@@ -694,6 +703,14 @@ def lex_line(line: str, file_path: str, line_number: int) -> Generator[Token, No
             if col_end >= len(line):
                 raise_error('String literal was not closed', location)
             word = line[col:col_end + 1]
+            col = seek_until(line, col_end + 1, lambda x: not x.isspace())
+        elif line[col] == "'":
+            col_end = seek_until(line, col + 1, lambda x: x == "'")
+            if col_end >= len(line):
+                raise_error('Char literal was not closed', location)
+            word = line[col:col_end + 1]
+            if len(word) > 4 or len(word.replace('\\', '')) > 3:
+                raise_error('Char literal must have length 1', location)
             col = seek_until(line, col_end + 1, lambda x: not x.isspace())
         else:
             col_end = seek_until(line, col, lambda x: x.isspace())
