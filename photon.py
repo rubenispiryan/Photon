@@ -16,8 +16,10 @@ class Loc:
 def make_log_message(message: str, loc: Loc) -> str:
     return f'{loc.filename}:{loc.line + 1}:{loc.col + 1}: {message}'
 
+
 def notify_user(message: str, loc: Loc) -> None:
     print(make_log_message('[NOTE] ' + message, loc))
+
 
 def raise_error(message: str, loc: Loc) -> NoReturn:
     print(make_log_message('[ERROR] ' + message, loc))
@@ -93,14 +95,13 @@ class OpType(Enum):
     LTE = auto()
     GTE = auto()
     NE = auto()
+
     IF = auto()
     END = auto()
     ELSE = auto()
     WHILE = auto()
     DO = auto()
-    MACRO = auto()
-    END_MACRO = auto()
-    INCLUDE = auto()
+
     MEM = auto()
     LOAD = auto()
     STORE = auto()
@@ -127,8 +128,20 @@ class Op:
     addr: int | None = None
 
 
+class Keyword(Enum):
+    IF = auto()
+    END = auto()
+    ELSE = auto()
+    WHILE = auto()
+    DO = auto()
+    MACRO = auto()
+    END_MACRO = auto()
+    INCLUDE = auto()
+
+
 class TokenType(Enum):
     WORD = auto()
+    KEYWORD = auto()
     INT = auto()
     STR = auto()
     CHAR = auto()
@@ -137,15 +150,27 @@ class TokenType(Enum):
 @dataclass
 class Token:
     type: TokenType
-    value: int | str
+    value: int | str | Keyword
     loc: Loc
     name: str
+
 
 @dataclass
 class Macro:
     tokens: List[Token]
     loc: Loc
 
+
+KEYWORD_NAMES = {
+    'if': Keyword.IF,
+    'end': Keyword.END,
+    'else': Keyword.ELSE,
+    'while': Keyword.WHILE,
+    'do': Keyword.DO,
+    'macro': Keyword.MACRO,
+    'endmacro': Keyword.END_MACRO,
+    'include': Keyword.INCLUDE,
+}
 
 BUILTIN_WORDS = {
     'print': OpType.PRINT,
@@ -155,12 +180,7 @@ BUILTIN_WORDS = {
     '==': OpType.OP_EQUAL,
     '>': OpType.GT,
     '<': OpType.LT,
-    'if': OpType.IF,
-    'end': OpType.END,
-    'else': OpType.ELSE,
     'dup': OpType.DUP,
-    'while': OpType.WHILE,
-    'do': OpType.DO,
     'mem': OpType.MEM,
     '.': OpType.STORE,
     ',': OpType.LOAD,
@@ -177,9 +197,6 @@ BUILTIN_WORDS = {
     '>=': OpType.GTE,
     '<=': OpType.LTE,
     '!=': OpType.NE,
-    'macro': OpType.MACRO,
-    'endmacro': OpType.END_MACRO,
-    'include': OpType.INCLUDE,
 }
 
 STR_CAPACITY = 640_000
@@ -188,7 +205,7 @@ MEM_CAPACITY = 640_000
 
 def simulate_program(program: List[Op]) -> None:
     stack = []
-    assert len(OpType) == 34, 'Exhaustive handling of operators in simulation'
+    assert len(OpType) == 31, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(STR_CAPACITY + MEM_CAPACITY)
     str_size = 0
@@ -362,7 +379,7 @@ def simulate_program(program: List[Op]) -> None:
 
 
 def compile_program(program: List[Op]) -> None:
-    assert len(OpType) == 34, 'Exhaustive handling of operators in compilation'
+    assert len(OpType) == 31, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -521,8 +538,6 @@ def compile_program(program: List[Op]) -> None:
             write_level1('pop x1')
             write_level1('pop x2')
             write_level1('svc #0')
-        elif instruction.type == OpType.MACRO:
-            continue
         else:
             raise_error(f'Unhandled instruction: {instruction.name}',
                         instruction.loc)
@@ -546,10 +561,102 @@ def usage_help() -> None:
     print('     com     Compile the program')
     print('         --run   Used with `com` to run immediately')
 
-# TODO: cross_reference_blocks is too bloated
-def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
-    assert len(OpType) == 34, 'Exhaustive handling of code block'
-    stack = []
+
+def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op],
+                  rprogram: List[Token], macros: Dict[str, Macro]) -> NoReturn | Op | None:
+    if type(token.value) != Keyword:
+        raise_error(f'Token value `{token.value}` must be a Keyword, but found: {type(token.value)}', token.loc)
+    if token.value == Keyword.IF:
+        stack.append(i)
+        return Op(type=OpType.IF, loc=token.loc, name=token.name)
+    elif token.value == Keyword.ELSE:
+        if_index = stack.pop()
+        if program[if_index].type != OpType.IF:
+            raise_error(f'Else can only be used with an `if`', program[if_index].loc)
+        program[if_index].jmp = i
+        stack.append(i)
+        return Op(type=OpType.ELSE, loc=token.loc, name=token.name)
+    elif token.value == Keyword.WHILE:
+        stack.append(i)
+        return Op(type=OpType.WHILE, loc=token.loc, name=token.name)
+    elif token.value == Keyword.DO:
+        stack.append(i)
+        return Op(type=OpType.DO, loc=token.loc, name=token.name)
+    elif token.value == Keyword.END:
+        block_index = stack.pop()
+        if program[block_index].type in (OpType.IF, OpType.ELSE):
+            program[block_index].jmp = i
+            return Op(type=OpType.END, loc=token.loc, name=token.name)
+        elif program[block_index].type == OpType.DO:
+            program[block_index].jmp = i
+            while_index = stack.pop()
+            if program[while_index].type != OpType.WHILE:
+                raise_error('`while` must be present before `do`', program[while_index].loc)
+            jmp = while_index
+            return Op(type=OpType.END, loc=token.loc, name=token.name, jmp=jmp)
+        else:
+            raise_error('End can only be used with an `if`, `else` or `while`',
+                        program[block_index].loc)
+    elif token.value == Keyword.INCLUDE:
+        if len(rprogram) == 0:
+            raise_error('Expected name of the include file but found nothing', token.loc)
+        include_name = rprogram.pop()
+        if include_name.type != TokenType.STR or type(include_name.value) != str:
+            raise_error(f'Expected macro name to be: `string`, but found: `{include_name.name}`', include_name.loc)
+        if not include_name.value.endswith('phtn'):
+            raise_error(
+                f'Expected include file to end with `.phtn`, but found: `{include_name.value.split(".")[-1]}`',
+                include_name.loc)
+        include_filepath = os.path.join('.', include_name.value)
+        std_filepath = os.path.join('./std/', include_name.value)
+        found = False
+        for include_filepath in (include_filepath, std_filepath):
+            if os.path.isfile(include_filepath):
+                lexed_include = lex_file(os.path.abspath(include_filepath))
+                rprogram.extend(reversed(lexed_include))
+                found = True
+        if not found:
+            raise_error(f'Photon file with name: {include_name.value} not found', include_name.loc)
+        return None
+    elif token.value == Keyword.MACRO:
+        if len(rprogram) == 0:
+            raise_error('Expected name of the macro but found nothing', token.loc)
+        macro_name = rprogram.pop()
+        if macro_name.type != TokenType.WORD or type(macro_name.value) != str:
+            raise_error(f'Expected macro name to be: `word`, but found: `{macro_name.name}`', macro_name.loc)
+        if macro_name.value in BUILTIN_WORDS:
+            raise_error(f'Redefinition of builtin word: `{macro_name.value}`', macro_name.loc)
+        if macro_name.value in macros:
+            notify_user(f'Macro `{macro_name.value}` was defined at this location', macros[macro_name.value].loc)
+            raise_error(f'Redefinition of existing macro: `{macro_name.value}`\n', macro_name.loc)
+        if len(rprogram) == 0:
+            raise_error(f'Expected `endmacro` at the end of empty macro definition but found: `{macro_name.value}`',
+                        macro_name.loc)
+        macros[macro_name.value] = Macro([], token.loc)
+        rec_macro_count = 0
+        while len(rprogram) > 0:
+            next_token = rprogram.pop()
+            if next_token.type == TokenType.KEYWORD and next_token.value == Keyword.END_MACRO:
+                if rec_macro_count == 0:
+                    break
+                rec_macro_count -= 1
+            elif next_token.type == TokenType.KEYWORD and next_token.value == Keyword.MACRO:
+                rec_macro_count += 1
+            macros[macro_name.value].tokens.append(next_token)
+        if next_token.type != TokenType.KEYWORD or next_token.value != Keyword.END_MACRO:
+            raise_error(f'Expected `endmacro` at the end of macro definition but found: `{next_token.value}`',
+                        next_token.loc)
+        return None
+    elif token.value == Keyword.END_MACRO:
+        raise_error('Corresponding macro definition not found for `endmacro`', token.loc)
+    else:
+        raise_error(f'Unknown keyword token: {token.value}', token.loc)
+
+
+def compile_tokens_to_program(token_program: List[Token]) -> List[Op]:
+    assert len(OpType) == 31, 'Exhaustive handling of code block'
+    assert len(TokenType) == 5, "Exhaustive handling of tokens in compile_tokens_to_program."
+    stack: List[int] = []
     rprogram = list(reversed(token_program))
     program: List[Op] = []
     macros: Dict[str, Macro] = {}
@@ -560,105 +667,32 @@ def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
             assert type(token.value) == str, 'Compiler Error: non string macro name was saved'
             rprogram.extend(reversed(macros[token.value].tokens))
             continue
-        else:
-            op = parse_token(token)
-        program.append(op)
-        if op.type == OpType.IF:
-            stack.append(i)
-        elif op.type == OpType.ELSE:
-            if_index = stack.pop()
-            if program[if_index].type != OpType.IF:
-                for macro in macros.values():
-                    print([token.value for token in macro.tokens])
-                    print('=' * 100, end='\n' * 3)
-                raise_error(f'Else can only be used with an `if`', program[if_index].loc)
-            program[if_index].jmp = i
-            stack.append(i)
-        elif op.type == OpType.WHILE:
-            stack.append(i)
-        elif op.type == OpType.DO:
-            stack.append(i)
-        elif op.type == OpType.END:
-            block_index = stack.pop()
-            if program[block_index].type in (OpType.IF, OpType.ELSE):
-                program[block_index].jmp = i
-            elif program[block_index].type == OpType.DO:
-                program[block_index].jmp = i
-                while_index = stack.pop()
-                if program[while_index].type != OpType.WHILE:
-                    raise_error('`while` must be present before `do`', program[while_index].loc)
-                op.jmp = while_index
-            else:
-                raise_error('End can only be used with an `if`, `else` or `while`',
-                            program[block_index].loc)
-        elif op.type == OpType.INCLUDE:
-            program.pop()
-            i -= 1
-            if len(rprogram) == 0:
-                raise_error('Expected name of the include file but found nothing', op.loc)
-            include_name = rprogram.pop()
-            if include_name.type != TokenType.STR or type(include_name.value) != str:
-                raise_error(f'Expected macro name to be: `string`, but found: `{include_name.name}`', include_name.loc)
-            if not include_name.value.endswith('phtn'):
-                raise_error(
-                    f'Expected include file to end with `.phtn`, but found: `{include_name.value.split(".")[-1]}`',
-                    include_name.loc)
-            include_filepath = os.path.join('.', include_name.value)
-            std_filepath = os.path.join('./std/', include_name.value)
-            found = False
-            for include_filepath in (include_filepath, std_filepath):
-                if os.path.isfile(include_filepath):
-                    lexed_include = lex_file(os.path.abspath(include_filepath))
-                    rprogram.extend(reversed(lexed_include))
-                    found = True
-            if not found:
-                raise_error(f'Photon file with name: {include_name.value} not found', include_name.loc)
-        elif op.type == OpType.MACRO:
-            program.pop()
-            i -= 1
-            if len(rprogram) == 0:
-                raise_error('Expected name of the macro but found nothing', op.loc)
-            macro_name = rprogram.pop()
-            if macro_name.type != TokenType.WORD or type(macro_name.value) != str:
-                raise_error(f'Expected macro name to be: `word`, but found: `{macro_name.name}`', macro_name.loc)
-            if macro_name.value in BUILTIN_WORDS:
-                raise_error(f'Redefinition of builtin word: `{macro_name.value}`', macro_name.loc)
-            if macro_name.value in macros:
-                notify_user(f'Macro `{macro_name.value}` was defined at this location', macros[macro_name.value].loc)
-                raise_error(f'Redefinition of existing macro: `{macro_name.value}`\n', macro_name.loc)
-            if len(rprogram) == 0:
-                raise_error(f'Expected `endmacro` at the end of empty macro definition but found: `{macro_name.value}`',
-                            macro_name.loc)
-            macros[macro_name.value] = Macro([], op.loc)
-            rec_macro_count = 0
-            while len(rprogram) > 0:
-                token = rprogram.pop()
-                if token.type == TokenType.WORD and token.value == 'endmacro':
-                    if rec_macro_count == 0:
-                        break
-                    rec_macro_count -= 1
-                elif token.type == TokenType.WORD and token.value == 'macro':
-                    rec_macro_count += 1
-                macros[macro_name.value].tokens.append(token)
-            if token.type != TokenType.WORD or token.value != 'endmacro':
-                raise_error(f'Expected `endmacro` at the end of macro definition but found: `{token.value}`',
-                            token.loc)
-        elif op.type == OpType.END_MACRO:
-            raise_error('Corresponding macro definition not found for `endmacro`', op.loc)
-        i += 1
+        op = parse_token_as_op(stack, token, i, program, rprogram, macros)
+        if op is not None:
+            program.append(op)
+            i += 1
     return program
 
 
-def parse_token(token: Token) -> Op | NoReturn:
-    assert len(OpType) == 34, 'Exhaustive handling of built-in words'
-    assert len(TokenType) == 4, "Exhaustive handling of tokens in parser"
+def parse_token_as_op(stack: List[int], token: Token, i: int, program: List[Op],
+                      rprogram: List[Token], macros: Dict[str, Macro]) -> Op | NoReturn | None:
+    assert len(OpType) == 31, 'Exhaustive handling of built-in words'
+    assert len(TokenType) == 5, 'Exhaustive handling of tokens in parser'
 
     if token.type == TokenType.INT:
+        if type(token.value) != int:
+            raise_error('Token value must be an integer', token.loc)
         return Op(type=OpType.PUSH_INT, loc=token.loc, value=token.value, name=token.name)
     elif token.type == TokenType.CHAR:
+        if type(token.value) != int:
+            raise_error('Token value must be an integer', token.loc)
         return Op(type=OpType.PUSH_INT, loc=token.loc, value=token.value, name=token.name)
     elif token.type == TokenType.STR:
+        if type(token.value) != str:
+            raise_error('Token value must be an string', token.loc)
         return Op(type=OpType.PUSH_STR, loc=token.loc, value=token.value, name=token.name)
+    elif token.type == TokenType.KEYWORD:
+        return parse_keyword(stack, token, i, program, rprogram, macros)
     elif token.type == TokenType.WORD:
         assert type(token.value) == str, "`word` must be a string"
         if token.value not in BUILTIN_WORDS:
@@ -675,7 +709,7 @@ def seek_until(line: str, start: int, predicate: Callable[[str], bool]) -> int:
 
 
 def lex_word(word: str, location: Loc) -> Token:
-    assert len(TokenType) == 4, "Exhaustive handling of tokens in lexer"
+    assert len(TokenType) == 5, "Exhaustive handling of tokens in lexer"
     if word[0] == '"':
         return Token(type=TokenType.STR,
                      value=word.strip('"').encode('utf-8').decode('unicode_escape'),
@@ -690,6 +724,8 @@ def lex_word(word: str, location: Loc) -> Token:
         try:
             return Token(type=TokenType.INT, value=int(word), loc=location, name='integer')
         except ValueError:
+            if word in KEYWORD_NAMES:
+                return Token(type=TokenType.KEYWORD, value=KEYWORD_NAMES[word], loc=location, name='Keyword')
             return Token(type=TokenType.WORD, value=word, loc=location, name='word')
 
 
@@ -735,7 +771,7 @@ if __name__ == '__main__':
     filename_arg, *argv = argv
     file_path_arg = os.path.abspath(filename_arg)
     program_stack = lex_file(file_path_arg)
-    program_referenced = cross_reference_blocks(program_stack)
+    program_referenced = compile_tokens_to_program(program_stack)
     if subcommand == 'sim':
         simulate_program(program_referenced)
     elif subcommand == 'com':
