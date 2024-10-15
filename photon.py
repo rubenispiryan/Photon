@@ -625,10 +625,12 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
         if len(rprogram) == 0:
             raise_error('Expected name of the macro but found nothing', token.loc)
         macro_name = rprogram.pop()
+        if type(macro_name.value) == Keyword:
+            raise_error(f'Redefinition of keyword: `{macro_name.value.name.lower()}`', macro_name.loc)
         if macro_name.type != TokenType.WORD or type(macro_name.value) != str:
             raise_error(f'Expected macro name to be: `word`, but found: `{macro_name.name}`', macro_name.loc)
         if macro_name.value in INTRINSIC_NAMES:
-            raise_error(f'Redefinition of builtin word: `{macro_name.value}`', macro_name.loc)
+            raise_error(f'Redefinition of intrinsic word: `{macro_name.value}`', macro_name.loc)
         if macro_name.value in macros:
             notify_user(f'Macro `{macro_name.value}` was defined at this location', macros[macro_name.value].loc)
             raise_error(f'Redefinition of existing macro: `{macro_name.value}`\n', macro_name.loc)
