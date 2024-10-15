@@ -1,0 +1,14 @@
+// Solution for: https://projecteuler.net/problem=1
+
+include "std.phtn"
+
+0 3 while dup 1000 < do
+    dup 3 % 0 ==
+    over 5 % 0 ==
+    | if
+        swap over + swap
+    end
+    1 +
+end drop
+
+print
