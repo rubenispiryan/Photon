@@ -1,10 +1,10 @@
+import inspect
 import os
 import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Generator, List, NoReturn, Callable, Dict, TextIO
-import inspect
 
 
 @dataclass
@@ -17,15 +17,17 @@ class Loc:
 def make_log_message(message: str, loc: Loc) -> str:
     return f'{loc.filename}:{loc.line + 1}:{loc.col + 1}: {message}'
 
+
 def notify_user(message: str, loc: Loc) -> None:
     print(make_log_message('[NOTE] ' + message, loc))
+
 
 def raise_error(message: str, loc: Loc) -> NoReturn:
     current_frame = inspect.currentframe()
     caller_frame = inspect.getouterframes(current_frame, 2)
     caller_info = caller_frame[1]
     caller_function = caller_info.function
-    trace_message = f'Error message originated from: {caller_function}'
+    trace_message = f'Error message originated inside: {caller_function}'
     notify_user(trace_message, Loc(filename=os.path.abspath(caller_info.filename),
                                    line=caller_info.lineno - 1,
                                    col=0))
@@ -107,7 +109,6 @@ class Intrinsic(Enum):
     SYSCALL3 = auto()
     DUP = auto()
     DROP = auto()
-    DROP2 = auto()
     BITAND = auto()
     BITOR = auto()
     SHIFT_RIGHT = auto()
@@ -147,6 +148,7 @@ class Keyword(Enum):
     END_MACRO = auto()
     INCLUDE = auto()
 
+
 class TokenType(Enum):
     WORD = auto()
     KEYWORD = auto()
@@ -161,6 +163,7 @@ class Token:
     value: int | str | Keyword
     loc: Loc
     name: str
+
 
 @dataclass
 class Macro:
@@ -199,7 +202,6 @@ INTRINSIC_NAMES = {
     '<<': Intrinsic.SHIFT_LEFT,
     'swap': Intrinsic.SWAP,
     'over': Intrinsic.OVER,
-    'drop2': Intrinsic.DROP2,
     '%': Intrinsic.MOD,
     '>=': Intrinsic.GTE,
     '<=': Intrinsic.LTE,
@@ -257,7 +259,7 @@ def simulate_program(program: List[Op]) -> None:
                     assert type(operation.operand) == int, 'Jump address must be `int`'
                     i = operation.operand
             elif operation.type == OpType.INTRINSIC:
-                assert len(Intrinsic) == 24, 'Exhaustive handling of intrinsics in simulation'
+                assert len(Intrinsic) == 23, 'Exhaustive handling of intrinsics in simulation'
                 if operation.operand == Intrinsic.ADD:
                     a = stack.pop()
                     b = stack.pop()
@@ -313,9 +315,6 @@ def simulate_program(program: List[Op]) -> None:
                     stack.append(a)
                     stack.append(a)
                 elif operation.operand == Intrinsic.DROP:
-                    stack.pop()
-                elif operation.operand == Intrinsic.DROP2:
-                    stack.pop()
                     stack.pop()
                 elif operation.operand == Intrinsic.MEM:
                     stack.append(0)
@@ -383,7 +382,7 @@ def simulate_program(program: List[Op]) -> None:
                         raise_error(f'Unknown syscall number: {syscall_number}', operation.loc)
                 else:
                     raise_error(f'Unhandled intrinsic: {operation.name}',
-                        operation.loc)
+                                operation.loc)
             else:
                 raise_error(f'Unhandled operation: {operation.name}',
                             operation.loc)
@@ -437,7 +436,7 @@ def compile_program(program: List[Op]) -> None:
         elif operation.type == OpType.WHILE:
             write_base(f'while_{i}:')
         elif operation.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 24, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 23, 'Exhaustive handling of intrinsics in simulation'
             if operation.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -498,9 +497,6 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('push x0')
             elif operation.operand == Intrinsic.DROP:
                 write_level1('pop x0')
-            elif operation.operand == Intrinsic.DROP2:
-                write_level1('pop x0')
-                write_level1('pop x0')
             elif operation.operand == Intrinsic.MEM:
                 write_level1('adrp x0, mem@PAGE')
                 write_level1('add x0, x0, mem@PAGEOFF')
@@ -558,7 +554,7 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('svc #0')
             else:
                 raise_error(f'Unhandled intrinsic: {operation.name}',
-                        operation.loc)
+                            operation.loc)
         else:
             raise_error(f'Unhandled operation: {operation.name}',
                         operation.loc)
@@ -694,7 +690,7 @@ def compile_tokens_to_program(token_program: List[Token]) -> List[Op]:
             assert type(token.value) == str, 'Compiler Error: non string macro name was saved'
             rprogram.extend(reversed(macros[token.value].tokens))
             continue
-        if  token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.END_MACRO, Keyword.INCLUDE):
+        if token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.END_MACRO, Keyword.INCLUDE):
             expand_keyword_to_tokens(token, rprogram, macros)
         else:
             program.append(parse_token_as_op(stack, token, i, program))

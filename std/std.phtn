@@ -8,3 +8,4 @@ macro write STDOUT SYS_WRITE syscall3 endmacro
 macro writeln write "\n" write endmacro
 
 macro dup2 over over endmacro
+macro drop2 drop drop endmacro
