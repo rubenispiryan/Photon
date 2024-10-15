@@ -622,10 +622,15 @@ def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
                     f'Expected include file to end with `.phtn`, but found: `{include_name.value.split(".")[-1]}`',
                     include_name.loc)
             include_filepath = os.path.join(home_dir, include_name.value)
-            if not os.path.isfile(include_filepath):
+            std_filepath = os.path.join(home_dir, 'std/', include_name.value)
+            found = False
+            for include_filepath in (include_filepath, std_filepath):
+                if os.path.isfile(include_filepath):
+                    lexed_include = lex_file(os.path.abspath(include_filepath))
+                    rprogram.extend(reversed(lexed_include))
+                    found = True
+            if not found:
                 raise_error(f'Photon file with name: {include_name.value} not found', include_name.loc)
-            lexed_include = lex_file(os.path.abspath(include_filepath))
-            rprogram.extend(reversed(lexed_include))
         elif op.type == OpType.MACRO:
             program.pop()
             i -= 1
