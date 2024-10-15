@@ -116,7 +116,6 @@ class Intrinsic(Enum):
     SHIFT_LEFT = auto()
     SWAP = auto()
     OVER = auto()
-    MOD = auto()
 
 
 class OpType(Enum):
@@ -205,7 +204,6 @@ INTRINSIC_NAMES = {
     '<<': Intrinsic.SHIFT_LEFT,
     'swap': Intrinsic.SWAP,
     'over': Intrinsic.OVER,
-    '%': Intrinsic.MOD,
     '>=': Intrinsic.GTE,
     '<=': Intrinsic.LTE,
     '!=': Intrinsic.NE,
@@ -264,7 +262,7 @@ def simulate_program(program: List[Op]) -> None:
                     assert type(operation.operand) == int, 'Jump address must be `int`'
                     i = operation.operand
             elif operation.type == OpType.INTRINSIC:
-                assert len(Intrinsic) == 24, 'Exhaustive handling of intrinsics in simulation'
+                assert len(Intrinsic) == 23, 'Exhaustive handling of intrinsics in simulation'
                 if operation.operand == Intrinsic.ADD:
                     a = stack.pop()
                     b = stack.pop()
@@ -370,11 +368,6 @@ def simulate_program(program: List[Op]) -> None:
                     stack.append(b)
                     stack.append(a)
                     stack.append(b)
-                elif operation.operand == Intrinsic.MOD:
-                    a = stack.pop()
-                    b = stack.pop()
-                    assert type(a) == type(b) == int, 'Arguments for `mod` must be `int`'
-                    stack.append(b % a)
                 elif operation.operand == Intrinsic.SYSCALL3:
                     syscall_number = stack.pop()
                     arg1 = stack.pop()
@@ -446,7 +439,7 @@ def compile_program(program: List[Op]) -> None:
         elif operation.type == OpType.WHILE:
             write_base(f'while_{i}:')
         elif operation.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 24, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 23, 'Exhaustive handling of intrinsics in simulation'
             if operation.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -555,12 +548,6 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('push x1')
                 write_level1('push x0')
                 write_level1('push x1')
-            elif operation.operand == Intrinsic.MOD:
-                write_level1('pop x0')
-                write_level1('pop x1')
-                write_level1('udiv x2, x1, x0')
-                write_level1('msub x0, x2, x0, x1')
-                write_level1('push x0')
             elif operation.operand == Intrinsic.SYSCALL3:
                 write_level1('pop x16')
                 write_level1('pop x0')
@@ -734,7 +721,7 @@ def parse_token_as_op(stack: List[int], token: Token, i: int, program: List[Op])
     elif token.type == TokenType.WORD:
         assert type(token.value) == str, "`word` must be a string"
         if token.value not in INTRINSIC_NAMES:
-            raise_error(f'Unknown word token `{token.value}`', token.loc)
+            raise_error(f'Unknown intrinsic name: `{token.value}`', token.loc)
         return Op(type=OpType.INTRINSIC, operand=INTRINSIC_NAMES[token.value], loc=token.loc, name=token.value)
     else:
         raise_error(f'Unhandled token: {token}', token.loc)
