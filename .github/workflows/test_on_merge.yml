@@ -2,8 +2,6 @@ name: Run tests and mypy checks
 
 on:
   pull_request:
-  push:
-    branches: [main]
 
 jobs:
   test:
