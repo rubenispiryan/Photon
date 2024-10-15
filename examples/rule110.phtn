@@ -1,7 +1,7 @@
 // Implementation of Rule 110 cellular automata
 // Shows the turing completeness of Photon
 
-include "io.phtn"
+include "std.phtn"
 
 macro N 100 endmacro
 

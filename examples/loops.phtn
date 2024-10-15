@@ -1,3 +1,5 @@
+include "std.phtn"
+
 // While loop where the first argument
 // for the condition is supposed to be changed
 1

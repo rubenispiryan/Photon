@@ -106,7 +106,6 @@ class OpType(Enum):
     STORE = auto()
     SYSCALL3 = auto()
     DUP = auto()
-    DUP2 = auto()
     DROP = auto()
     DROP2 = auto()
     BITAND = auto()
@@ -166,7 +165,6 @@ BUILTIN_WORDS = {
     '.': OpType.STORE,
     ',': OpType.LOAD,
     'syscall3': OpType.SYSCALL3,
-    'dup2': OpType.DUP2,
     'drop': OpType.DROP,
     '&': OpType.BITAND,
     '|': OpType.BITOR,
@@ -190,7 +188,7 @@ MEM_CAPACITY = 640_000
 
 def simulate_program(program: List[Op]) -> None:
     stack = []
-    assert len(OpType) == 35, 'Exhaustive handling of operators in simulation'
+    assert len(OpType) == 34, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(STR_CAPACITY + MEM_CAPACITY)
     str_size = 0
@@ -276,14 +274,6 @@ def simulate_program(program: List[Op]) -> None:
                 a = stack.pop()
                 assert type(a) == int, 'Arguments for `dup` must be `int`'
                 stack.append(a)
-                stack.append(a)
-            elif instruction.type == OpType.DUP2:
-                a = stack.pop()
-                b = stack.pop()
-                assert type(a) == type(b) == int, 'Arguments for `dup2` must be `int`'
-                stack.append(b)
-                stack.append(a)
-                stack.append(b)
                 stack.append(a)
             elif instruction.type == OpType.DROP:
                 stack.pop()
@@ -372,7 +362,7 @@ def simulate_program(program: List[Op]) -> None:
 
 
 def compile_program(program: List[Op]) -> None:
-    assert len(OpType) == 35, 'Exhaustive handling of operators in compilation'
+    assert len(OpType) == 34, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -469,13 +459,6 @@ def compile_program(program: List[Op]) -> None:
             write_level1('pop x0')
             write_level1('push x0')
             write_level1('push x0')
-        elif instruction.type == OpType.DUP2:
-            write_level1('pop x0')
-            write_level1('pop x1')
-            write_level1('push x1')
-            write_level1('push x0')
-            write_level1('push x1')
-            write_level1('push x0')
         elif instruction.type == OpType.DROP:
             write_level1('pop x0')
         elif instruction.type == OpType.DROP2:
@@ -565,7 +548,7 @@ def usage_help() -> None:
 
 # TODO: cross_reference_blocks is too bloated
 def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
-    assert len(OpType) == 35, 'Exhaustive handling of code block'
+    assert len(OpType) == 34, 'Exhaustive handling of code block'
     stack = []
     rprogram = list(reversed(token_program))
     program: List[Op] = []
@@ -667,7 +650,7 @@ def cross_reference_blocks(token_program: List[Token]) -> List[Op]:
 
 
 def parse_token(token: Token) -> Op | NoReturn:
-    assert len(OpType) == 35, 'Exhaustive handling of built-in words'
+    assert len(OpType) == 34, 'Exhaustive handling of built-in words'
     assert len(TokenType) == 4, "Exhaustive handling of tokens in parser"
 
     if token.type == TokenType.INT:

@@ -1,4 +1,4 @@
-include "io.phtn"
+include "std.phtn"
 
 // Storing 'abc' in memory using ascii
 mem 0 + 97 .

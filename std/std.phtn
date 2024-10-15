@@ -4,6 +4,7 @@ macro STDIN 0 endmacro
 macro STDOUT 1 endmacro
 macro STDERR 2 endmacro
 
-
 macro write STDOUT SYS_WRITE syscall3 endmacro
 macro writeln write "\n" write endmacro
+
+macro dup2 over over endmacro
