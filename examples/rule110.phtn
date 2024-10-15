@@ -3,37 +3,41 @@
 
 include "std.phtn"
 
+// Width of the row
 macro N 100 endmacro
 
-mem N 2 - + 1 .
+// Memory layout
+macro row mem endmacro
+macro display row N + endmacro
+
+row N 2 - + 1 .
+display N + 10 .
 
 0 while dup N 2 - < do
-    0 while dup N < do
-        dup mem + , if
-            dup mem + N + '*' .
-        else
-            dup mem + N + ' ' .
-        end
-        1 +
-    end
-    mem + N + '\n' .
-    N 1 + mem N + write
+   0 while dup N < do
+      dup row + , if
+         dup display + '*' .
+      else
+         dup display + ' ' .
+      end
+      1 +
+   end drop
 
-    mem , 1 <<
-    mem 1 + ,
-    |
+   N 1 + display write
 
-    1 while dup N 2 - < do
-    swap 1 << 7 &
-    over 1 + mem + ,
-    |
-    dup2
-    110 swap >> 1 &
-    swap mem + swap .
-    swap
-    1 +
-    end
-    drop2
-1 +
-end
-drop
+   row     , 1 <<
+   row 1 + ,
+   |
+
+   1 while dup N 2 - < do
+      swap 1 << 7 &
+      over row + 1 + , |
+      dup2 110 swap >> 1 &
+      swap row + swap .
+      swap
+
+      1 +
+   end drop2
+
+   1 +
+end drop
