@@ -4,6 +4,7 @@ import sys
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Generator, List, NoReturn, Callable, Dict, TextIO
+import inspect
 
 
 @dataclass
@@ -20,6 +21,15 @@ def notify_user(message: str, loc: Loc) -> None:
     print(make_log_message('[NOTE] ' + message, loc))
 
 def raise_error(message: str, loc: Loc) -> NoReturn:
+    current_frame = inspect.currentframe()
+    caller_frame = inspect.getouterframes(current_frame, 2)
+    caller_info = caller_frame[1]
+    caller_function = caller_info.function
+    trace_message = f'Error message originated from: {caller_function}'
+    notify_user(trace_message, Loc(filename=os.path.abspath(caller_info.filename),
+                                   line=caller_info.lineno - 1,
+                                   col=0))
+
     print(make_log_message('[ERROR] ' + message, loc))
     exit(1)
 
