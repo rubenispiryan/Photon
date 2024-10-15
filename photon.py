@@ -16,10 +16,8 @@ class Loc:
 def make_log_message(message: str, loc: Loc) -> str:
     return f'{loc.filename}:{loc.line + 1}:{loc.col + 1}: {message}'
 
-
 def notify_user(message: str, loc: Loc) -> None:
     print(make_log_message('[NOTE] ' + message, loc))
-
 
 def raise_error(message: str, loc: Loc) -> NoReturn:
     print(make_log_message('[ERROR] ' + message, loc))
@@ -138,7 +136,6 @@ class Keyword(Enum):
     END_MACRO = auto()
     INCLUDE = auto()
 
-
 class TokenType(Enum):
     WORD = auto()
     KEYWORD = auto()
@@ -153,7 +150,6 @@ class Token:
     value: int | str | Keyword
     loc: Loc
     name: str
-
 
 @dataclass
 class Macro:
@@ -562,8 +558,8 @@ def usage_help() -> None:
     print('         --run   Used with `com` to run immediately')
 
 
-def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op],
-                  rprogram: List[Token], macros: Dict[str, Macro]) -> NoReturn | Op | None:
+def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> NoReturn | Op:
+    assert len(Keyword) == 8, 'Exhaustive handling of keywords in parse_keyword'
     if type(token.value) != Keyword:
         raise_error(f'Token value `{token.value}` must be a Keyword, but found: {type(token.value)}', token.loc)
     if token.value == Keyword.IF:
@@ -597,28 +593,13 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op],
         else:
             raise_error('End can only be used with an `if`, `else` or `while`',
                         program[block_index].loc)
-    elif token.value == Keyword.INCLUDE:
-        if len(rprogram) == 0:
-            raise_error('Expected name of the include file but found nothing', token.loc)
-        include_name = rprogram.pop()
-        if include_name.type != TokenType.STR or type(include_name.value) != str:
-            raise_error(f'Expected macro name to be: `string`, but found: `{include_name.name}`', include_name.loc)
-        if not include_name.value.endswith('phtn'):
-            raise_error(
-                f'Expected include file to end with `.phtn`, but found: `{include_name.value.split(".")[-1]}`',
-                include_name.loc)
-        include_filepath = os.path.join('.', include_name.value)
-        std_filepath = os.path.join('./std/', include_name.value)
-        found = False
-        for include_filepath in (include_filepath, std_filepath):
-            if os.path.isfile(include_filepath):
-                lexed_include = lex_file(os.path.abspath(include_filepath))
-                rprogram.extend(reversed(lexed_include))
-                found = True
-        if not found:
-            raise_error(f'Photon file with name: {include_name.value} not found', include_name.loc)
-        return None
-    elif token.value == Keyword.MACRO:
+    else:
+        raise_error(f'Unknown keyword token: {token.value}', token.loc)
+
+
+def compile_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[str, Macro]) -> NoReturn | None:
+    assert len(Keyword) == 8, 'Exhaustive handling of keywords in compile_keyword_to_program'
+    if token.value == Keyword.MACRO:
         if len(rprogram) == 0:
             raise_error('Expected name of the macro but found nothing', token.loc)
         macro_name = rprogram.pop()
@@ -646,11 +627,31 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op],
         if next_token.type != TokenType.KEYWORD or next_token.value != Keyword.END_MACRO:
             raise_error(f'Expected `endmacro` at the end of macro definition but found: `{next_token.value}`',
                         next_token.loc)
-        return None
     elif token.value == Keyword.END_MACRO:
         raise_error('Corresponding macro definition not found for `endmacro`', token.loc)
+    elif token.value == Keyword.INCLUDE:
+        if len(rprogram) == 0:
+            raise_error('Expected name of the include file but found nothing', token.loc)
+        include_name = rprogram.pop()
+        if include_name.type != TokenType.STR or type(include_name.value) != str:
+            raise_error(f'Expected macro name to be: `string`, but found: `{include_name.name}`', include_name.loc)
+        if not include_name.value.endswith('phtn'):
+            raise_error(
+                f'Expected include file to end with `.phtn`, but found: `{include_name.value.split(".")[-1]}`',
+                include_name.loc)
+        include_filepath = os.path.join('.', include_name.value)
+        std_filepath = os.path.join('./std/', include_name.value)
+        found = False
+        for include_filepath in (include_filepath, std_filepath):
+            if os.path.isfile(include_filepath):
+                lexed_include = lex_file(os.path.abspath(include_filepath))
+                rprogram.extend(reversed(lexed_include))
+                found = True
+        if not found:
+            raise_error(f'Photon file with name: {include_name.value} not found', include_name.loc)
     else:
-        raise_error(f'Unknown keyword token: {token.value}', token.loc)
+        raise_error(f'Keyword token not compilable to tokens: {token.value}', token.loc)
+    return None
 
 
 def compile_tokens_to_program(token_program: List[Token]) -> List[Op]:
@@ -667,15 +668,15 @@ def compile_tokens_to_program(token_program: List[Token]) -> List[Op]:
             assert type(token.value) == str, 'Compiler Error: non string macro name was saved'
             rprogram.extend(reversed(macros[token.value].tokens))
             continue
-        op = parse_token_as_op(stack, token, i, program, rprogram, macros)
-        if op is not None:
-            program.append(op)
+        if  token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.END_MACRO, Keyword.INCLUDE):
+            compile_keyword_to_tokens(token, rprogram, macros)
+        else:
+            program.append(parse_token_as_op(stack, token, i, program))
             i += 1
     return program
 
 
-def parse_token_as_op(stack: List[int], token: Token, i: int, program: List[Op],
-                      rprogram: List[Token], macros: Dict[str, Macro]) -> Op | NoReturn | None:
+def parse_token_as_op(stack: List[int], token: Token, i: int, program: List[Op]) -> Op | NoReturn:
     assert len(OpType) == 31, 'Exhaustive handling of built-in words'
     assert len(TokenType) == 5, 'Exhaustive handling of tokens in parser'
 
@@ -692,7 +693,7 @@ def parse_token_as_op(stack: List[int], token: Token, i: int, program: List[Op],
             raise_error('Token value must be an string', token.loc)
         return Op(type=OpType.PUSH_STR, loc=token.loc, value=token.value, name=token.name)
     elif token.type == TokenType.KEYWORD:
-        return parse_keyword(stack, token, i, program, rprogram, macros)
+        return parse_keyword(stack, token, i, program)
     elif token.type == TokenType.WORD:
         assert type(token.value) == str, "`word` must be a string"
         if token.value not in BUILTIN_WORDS:
