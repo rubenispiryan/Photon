@@ -124,7 +124,6 @@ class Op:
     loc: Loc
     name: str
     value: int | str | Intrinsic | None = None
-    jmp: int | None = None
     addr: int | None = None
 
 
@@ -228,14 +227,15 @@ def simulate_program(program: List[Op]) -> None:
             elif instruction.type == OpType.IF:
                 a = stack.pop()
                 if a == 0:
-                    assert type(instruction.jmp) == int, 'Jump address must be `int`'
-                    i = instruction.jmp
+                    assert type(instruction.value) == int, 'Jump address must be `int`'
+                    i = instruction.value
             elif instruction.type == OpType.ELSE:
-                assert type(instruction.jmp) == int, 'Jump address must be `int`'
-                i = instruction.jmp
+                assert type(instruction.value) == int, 'Jump address must be `int`'
+                i = instruction.value
             elif instruction.type == OpType.END:
-                if instruction.jmp is not None:
-                    i = instruction.jmp
+                if instruction.value is not None:
+                    assert type(instruction.value) == int, 'Jump address must be `int`'
+                    i = instruction.value
             elif instruction.type == OpType.WHILE:
                 i += 1
                 continue
@@ -243,8 +243,8 @@ def simulate_program(program: List[Op]) -> None:
                 a = stack.pop()
                 assert type(a) == int, 'Arguments for `do` must be `int`'
                 if a == 0:
-                    assert type(instruction.jmp) == int, 'Jump address must be `int`'
-                    i = instruction.jmp
+                    assert type(instruction.value) == int, 'Jump address must be `int`'
+                    i = instruction.value
             elif instruction.type == OpType.INTRINSIC:
                 assert len(Intrinsic) == 24, 'Exhaustive handling of intrinsics in simulation'
                 if instruction.value == Intrinsic.ADD:
@@ -413,13 +413,13 @@ def compile_program(program: List[Op]) -> None:
         elif instruction.type in (OpType.IF, OpType.DO):
             write_level1('pop x0')
             write_level1('tst x0, x0')
-            write_level1(f'b.eq end_{instruction.jmp}')
+            write_level1(f'b.eq end_{instruction.value}')
         elif instruction.type == OpType.ELSE:
-            write_level1(f'b end_{instruction.jmp}')
+            write_level1(f'b end_{instruction.value}')
             write_base(f'end_{i}:')
         elif instruction.type == OpType.END:
-            if instruction.jmp is not None:
-                write_level1(f'b while_{instruction.jmp}')
+            if instruction.value is not None:
+                write_level1(f'b while_{instruction.value}')
             write_base(f'end_{i}:')
         elif instruction.type == OpType.WHILE:
             write_base(f'while_{i}:')
@@ -581,7 +581,7 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> 
         if_index = stack.pop()
         if program[if_index].type != OpType.IF:
             raise_error(f'Else can only be used with an `if`', program[if_index].loc)
-        program[if_index].jmp = i
+        program[if_index].value = i
         stack.append(i)
         return Op(type=OpType.ELSE, loc=token.loc, name=token.name)
     elif token.value == Keyword.WHILE:
@@ -593,15 +593,15 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> 
     elif token.value == Keyword.END:
         block_index = stack.pop()
         if program[block_index].type in (OpType.IF, OpType.ELSE):
-            program[block_index].jmp = i
+            program[block_index].value = i
             return Op(type=OpType.END, loc=token.loc, name=token.name)
         elif program[block_index].type == OpType.DO:
-            program[block_index].jmp = i
+            program[block_index].value = i
             while_index = stack.pop()
             if program[while_index].type != OpType.WHILE:
                 raise_error('`while` must be present before `do`', program[while_index].loc)
-            jmp = while_index
-            return Op(type=OpType.END, loc=token.loc, name=token.name, jmp=jmp)
+            value = while_index
+            return Op(type=OpType.END, loc=token.loc, name=token.name, value=value)
         else:
             raise_error('End can only be used with an `if`, `else` or `while`',
                         program[block_index].loc)
