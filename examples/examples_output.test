@@ -99,6 +99,10 @@
  **      ******   ******** ** * *** **   *  *******  * *****   *  ** ***  **        * ***  ** ***** 
 
 end./examples/rule110.phtn
+./examples/euler/problem_4.phtn
+906609
+
+end./examples/euler/problem_4.phtn
 ./examples/euler/problem_5.phtn
 232792560
 

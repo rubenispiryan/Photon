@@ -1,0 +1,16 @@
+// Solution for: https://projecteuler.net/problem=4
+
+include "math.phtn"
+include "std.phtn"
+
+100 while dup 1000 < do
+    100 while dup 1000 < do
+        dup2 * dup dup invertN == swap mem load64 > & if
+            dup2 * mem swap store64
+        end
+        1 +
+    end drop
+    1 +
+end drop
+
+mem load64 print
