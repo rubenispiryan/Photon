@@ -32,7 +32,7 @@ def raise_error(message: str, loc: Loc) -> NoReturn:
                                    line=caller_info.lineno - 1,
                                    col=0))
 
-    print(make_log_message('[ERROR] ' + message, loc))
+    print(make_log_message('[ERROR] ' + message, loc), file=sys.stderr)
     exit(1)
 
 
