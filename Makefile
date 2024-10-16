@@ -16,15 +16,15 @@ $(OUT).o: com
 	as -g -o $(OUT).o $(OUT).s
 
 sim: photon.py ./$(OUT).phtn
-	python3 photon.py sim ./$(OUT).phtn
+	pypy3.10 photon.py sim ./$(OUT).phtn
 
 com: photon.py ./$(OUT).phtn
-	python3 photon.py com ./$(OUT).phtn
+	pypy3.10 photon.py com ./$(OUT).phtn
 
 test: photon.py test.py
 	mypy --disallow-untyped-defs photon.py
 	mypy --disallow-untyped-defs test.py
-	python3 test.py
+	pypy3.10 test.py
 
 snap: photon.py test.py
-	python3 test.py --snapshot
+	pypy3.10 test.py --snapshot
