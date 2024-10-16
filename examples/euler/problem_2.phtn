@@ -1,0 +1,13 @@
+// Solution for: https://projecteuler.net/problem=2
+
+include "std.phtn"
+
+1 1 while dup 4000000 < do
+    dup 2 % 0 == if
+        dup mem load64 +
+        mem swap store64
+    end
+    swap over +
+end
+
+mem load64 print
