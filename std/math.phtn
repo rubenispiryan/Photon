@@ -1,0 +1,7 @@
+macro invertN
+    0
+    while over 0 != do
+        over 10 % swap 10 * +
+        swap 10 / swap
+    end swap drop
+endmacro

@@ -1,0 +1,12 @@
+// Solution for: https://projecteuler.net/problem=3
+
+include "std.phtn"
+
+600851475143 2 while over 1 > do
+    dup2 % 0 == if
+        dup print
+        swap over / swap
+    else
+        1 +
+    end
+end drop

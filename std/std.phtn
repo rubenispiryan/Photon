@@ -7,6 +7,33 @@ macro STDERR 2 endmacro
 macro write STDOUT SYS_WRITE syscall3 endmacro
 macro writeln write "\n" write endmacro
 
+macro store64
+    dup2 255 & . 8 >> swap 1 + swap
+    dup2 255 & . 8 >> swap 1 + swap
+    dup2 255 & . 8 >> swap 1 + swap
+    dup2 255 & . 8 >> swap 1 + swap
+    dup2 255 & . 8 >> swap 1 + swap
+    dup2 255 & . 8 >> swap 1 + swap
+    dup2 255 & . 8 >> swap 1 + swap
+    dup2 255 & . drop drop
+endmacro
+
+macro load64
+    7 + 0
+    8 << over , + swap 1 - swap
+    8 << over , + swap 1 - swap
+    8 << over , + swap 1 - swap
+    8 << over , + swap 1 - swap
+    8 << over , + swap 1 - swap
+    8 << over , + swap 1 - swap
+    8 << over , + swap 1 - swap
+    8 << over , + swap drop
+endmacro
+
+macro inc64
+  dup load64 1 + store64
+endmacro
+
 macro dup2 over over endmacro
 macro drop2 drop drop endmacro
 
