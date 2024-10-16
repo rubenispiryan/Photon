@@ -9,10 +9,10 @@ TEST_FILE_NAME = 'examples/examples_output.test'
 
 def execute(subcommand: str, filename: str, flag: str ='') -> str:
     try:
-        return subprocess.check_output(f'python3 photon.py {subcommand} {filename} {flag}', shell=True,
+        return subprocess.check_output(f'pypy3.10 photon.py {subcommand} {filename} {flag}', shell=True,
                                        stderr=subprocess.STDOUT).decode('utf-8')
     except subprocess.CalledProcessError as e:
-        print(f'Command: "python3 photon.py {subcommand} {filename} {flag}" failed with error:')
+        print(f'Command: "pypy3.10 photon.py {subcommand} {filename} {flag}" failed with error:')
         print(e.output.decode('utf-8'))
         exit(1)
 
@@ -28,7 +28,7 @@ def get_files(folder: str) -> List[str]:
     return output
 
 
-def read_expected(filename: str) -> str:
+def read_expected(filename: str) -> str | None:
     with open(TEST_FILE_NAME, 'r') as f:
         pattern = rf'{filename}\n(.*?)\nend{filename}\n'
 
@@ -37,7 +37,7 @@ def read_expected(filename: str) -> str:
         if match:
             return match.group(1)
         else:
-            raise Exception(f'No output was found for this filename: {filename}')
+            return None
 
 def create_expected_file(filename: str) -> None:
     with open(filename, 'w') as f:
@@ -67,13 +67,11 @@ def create_examples() -> None:
 def check_examples() -> None:
     filenames = filter(lambda x: x.endswith('.phtn'), get_files('./examples'))
     for filename in filenames:
-        expected_filename = filename[:-4] + 'test'
-        if not os.path.exists(expected_filename):
+        if (expected := read_expected(filename)) is None:
             print(f'Tests for {filename} do not exist')
             continue
         simulated_out = execute('sim', filename)
         compiled_out = execute('com', filename, flag='--run')
-        expected = read_expected(filename)
         assert compiled_out == expected, (
             f'Output from compilation:\n'
             f'  {compiled_out!r}\n'
