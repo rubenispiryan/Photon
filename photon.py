@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Generator, List, NoReturn, Callable, Dict, TextIO
 
+MACRO_EXPANSION_LIMIT = 100_000
 
 @dataclass
 class Loc:
@@ -171,6 +172,7 @@ class Token:
 class Macro:
     tokens: List[Token]
     loc: Loc
+    expand_count: int = 0
 
 KEYWORD_NAMES = {
     'if': Keyword.IF,
@@ -714,7 +716,11 @@ def compile_tokens_to_program(token_program: List[Token]) -> List[Op]:
         token = rprogram.pop()
         if token.value in macros:
             assert type(token.value) == str, 'Compiler Error: non string macro name was saved'
-            rprogram.extend(reversed(macros[token.value].tokens))
+            current_macro = macros[token.value]
+            current_macro.expand_count += 1
+            if current_macro.expand_count > MACRO_EXPANSION_LIMIT:
+                raise_error(f'Expansion limit reached for macro: {token.value}', current_macro.loc)
+            rprogram.extend(reversed(current_macro.tokens))
             continue
         if token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.END_MACRO, Keyword.INCLUDE):
             expand_keyword_to_tokens(token, rprogram, macros)

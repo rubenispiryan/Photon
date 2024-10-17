@@ -1,4 +1,4 @@
-name: Run tests and auto-merge PR
+name: Run tests
 
 on:
   pull_request:
