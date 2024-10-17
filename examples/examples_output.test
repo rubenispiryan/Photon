@@ -199,7 +199,9 @@ end./examples/language_features/basic_operators.phtn
 
 end./examples/language_features/stack_operations.phtn
 ./examples/language_features/memory.phtn
-abcbcd
+abcbcd9223372036854775809
+18446744073709551615
+
 end./examples/language_features/memory.phtn
 ./examples/language_features/loops.phtn
 1

@@ -4,10 +4,10 @@ include "std.phtn"
 
 1 1 while dup 4000000 < do
     dup 2 % 0 == if
-        dup mem load64 +
-        mem swap store64
+        dup mem ,64 +
+        mem swap .64
     end
     swap over +
 end
 
-mem load64 print
+mem ,64 print
