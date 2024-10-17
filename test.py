@@ -13,7 +13,10 @@ def execute(subcommand: str, filename: str, flag: str ='') -> str:
                                        stderr=subprocess.STDOUT).decode('utf-8')
     except subprocess.CalledProcessError as e:
         print(f'Command: "pypy3.10 photon.py {subcommand} {filename} {flag}" failed with error:')
-        print(e.output.decode('utf-8'))
+        if e.output.decode('utf-8'):
+            print(e.output.decode('utf-8'))
+        else:
+            print(e)
         exit(1)
 
 

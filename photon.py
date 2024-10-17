@@ -107,6 +107,8 @@ class Intrinsic(Enum):
     MEM = auto()
     LOAD = auto()
     STORE = auto()
+    LOAD64 = auto()
+    STORE64 = auto()
     SYSCALL3 = auto()
     DUP = auto()
     DROP = auto()
@@ -196,6 +198,8 @@ INTRINSIC_NAMES = {
     'mem': Intrinsic.MEM,
     '.': Intrinsic.STORE,
     ',': Intrinsic.LOAD,
+    '.64': Intrinsic.STORE64,
+    ',64': Intrinsic.LOAD64,
     'syscall3': Intrinsic.SYSCALL3,
     'drop': Intrinsic.DROP,
     '&': Intrinsic.BITAND,
@@ -216,7 +220,7 @@ MEM_CAPACITY = 640_000
 
 
 def simulate_program(program: List[Op]) -> None:
-    stack = []
+    stack: List = []
     assert len(OpType) == 8, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(STR_CAPACITY + MEM_CAPACITY)
@@ -262,7 +266,7 @@ def simulate_program(program: List[Op]) -> None:
                     assert type(operation.operand) == int, 'Jump address must be `int`'
                     i = operation.operand
             elif operation.type == OpType.INTRINSIC:
-                assert len(Intrinsic) == 23, 'Exhaustive handling of intrinsics in simulation'
+                assert len(Intrinsic) == 25, 'Exhaustive handling of intrinsics in simulation'
                 if operation.operand == Intrinsic.ADD:
                     a = stack.pop()
                     b = stack.pop()
@@ -325,7 +329,7 @@ def simulate_program(program: List[Op]) -> None:
                 elif operation.operand == Intrinsic.DROP:
                     stack.pop()
                 elif operation.operand == Intrinsic.MEM:
-                    stack.append(0)
+                    stack.append(STR_CAPACITY)
                 elif operation.operand == Intrinsic.LOAD:
                     address = stack.pop()
                     assert type(address) == int, 'Arguments for `,` must be `int`'
@@ -335,6 +339,18 @@ def simulate_program(program: List[Op]) -> None:
                     address = stack.pop()
                     assert type(value) == type(address) == int, 'Arguments for `.` must be `int`'
                     mem[address] = value & 0xFF
+                elif operation.operand == Intrinsic.LOAD64:
+                    addr = stack.pop()
+                    _bytes = bytearray(8)
+                    for offset in range(0, 8):
+                        _bytes[offset] = mem[addr + offset]
+                    stack.append(int.from_bytes(_bytes, byteorder="little"))
+                elif operation.operand == Intrinsic.STORE64:
+                    store_value64 = stack.pop().to_bytes(length=8, byteorder="little")
+                    store_addr64 = stack.pop()
+                    for byte in store_value64:
+                        mem[store_addr64] = byte
+                        store_addr64 += 1
                 elif operation.operand == Intrinsic.BITOR:
                     a = stack.pop()
                     b = stack.pop()
@@ -439,7 +455,7 @@ def compile_program(program: List[Op]) -> None:
         elif operation.type == OpType.WHILE:
             write_base(f'while_{i}:')
         elif operation.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 23, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 25, 'Exhaustive handling of intrinsics in simulation'
             if operation.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -517,6 +533,14 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('pop x0')
                 write_level1('ldrb w1, [x0]')
                 write_level1('pushw w1')
+            elif operation.operand == Intrinsic.STORE64:
+                write_level1('pop x0')
+                write_level1('pop x1')
+                write_level1('str x0, [x1]')
+            elif operation.operand == Intrinsic.LOAD64:
+                write_level1('pop x0')
+                write_level1('ldr x1, [x0]')
+                write_level1('push x1')
             elif operation.operand == Intrinsic.BITOR:
                 write_level1('pop x0')
                 write_level1('pop x1')
