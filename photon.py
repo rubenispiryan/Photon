@@ -600,7 +600,7 @@ def compile_program(program: List[Op]) -> None:
 
 
 def usage_help() -> None:
-    print('Usage: photon.py <SUBCOMMAND> <FILENAME> <FLAGS>')
+    print('Usage: photon.py <SUBCOMMAND> <FLAGS> <FILENAME> ')
     print('Subcommands:')
     print('     sim     Simulate the program')
     print('     com     Compile the program')
