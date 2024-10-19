@@ -643,9 +643,8 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> 
             return Op(type=OpType.END, loc=token.loc, name=token.name)
         elif program[block_index].type == OpType.DO:
             program[block_index].operand = i
-            while_index = stack.pop()
-            if program[while_index].type != OpType.WHILE:
-                raise_error('`while` must be present before `do`', program[while_index].loc)
+            if len(stack) == 0 or (while_index := stack.pop(), program[while_index].type)[-1] != OpType.WHILE:
+                raise_error('`while` must be present before `do`', program[block_index].loc)
             value = while_index
             return Op(type=OpType.END, loc=token.loc, name=token.name, operand=value)
         else:
