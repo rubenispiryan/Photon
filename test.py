@@ -5,7 +5,7 @@ import sys
 from typing import List
 
 TEST_FILE_NAME = 'examples/examples_output.test'
-
+SEPARATOR = '-#-' * 20
 
 def execute(subcommand: str, filename: str) -> str:
     try:
@@ -36,7 +36,7 @@ def get_files(folder: str) -> List[str]:
 
 def read_expected(filename: str) -> str | None:
     with open(TEST_FILE_NAME, 'r') as f:
-        pattern = rf'{filename}\n(.*?)\nend{filename}\n'
+        pattern = rf'{filename}\n(.*?)\n{SEPARATOR}\n'
 
         match = re.search(pattern, f.read(), re.DOTALL)
 
@@ -65,8 +65,7 @@ def create_examples() -> None:
             f'Output from simulation:\n'
             f'  {simulated_out!r}\n'
             f'Compilation and Simulation of {filename} do not match during snapshot')
-        separator = '-#-' * 20
-        snapshot_output = f'{filename}\n{compiled_out}\n{separator}\n'
+        snapshot_output = f'{filename}\n{compiled_out}\n{SEPARATOR}\n'
         add_expected_output(TEST_FILE_NAME, snapshot_output)
         print(f'Snapshot of {filename} added successfully')
 
