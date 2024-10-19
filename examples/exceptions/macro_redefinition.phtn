@@ -1,0 +1,5 @@
+macro print1 1 print end
+
+print1
+
+macro print1 2 print end

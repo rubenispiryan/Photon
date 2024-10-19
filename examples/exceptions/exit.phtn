@@ -1,0 +1,7 @@
+include "std.phtn"
+
+mem 23452345 .64
+
+255 exit
+
+mem ,64 print
