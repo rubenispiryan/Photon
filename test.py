@@ -7,15 +7,16 @@ from typing import List
 TEST_FILE_NAME = 'examples/examples_output.test'
 
 
-def execute(subcommand: str, filename: str, flag: str ='') -> str:
+def execute(subcommand: str, filename: str) -> str:
     try:
-        return subprocess.check_output(f'pypy3.10 photon.py {subcommand} {filename} {flag}', shell=True,
+        filename = ''.join(filename.split('.')[:-1])
+        return subprocess.check_output(f'make {subcommand} INPUT={filename}', shell=True,
                                        stderr=subprocess.STDOUT).decode('utf-8')
     except subprocess.CalledProcessError as e:
-        print(f'Command: "pypy3.10 photon.py {subcommand} {filename} {flag}" failed with error:')
         if e.output.decode('utf-8'):
-            print(e.output.decode('utf-8'))
+            return e.output.decode('utf-8').split(f'*** [{subcommand}] ')[-1]
         else:
+            print(f'Command: "pypy3.10 photon.py {subcommand} {filename}" failed with error:')
             print(e)
         exit(1)
 
@@ -55,14 +56,15 @@ def create_examples() -> None:
     filenames = filter(lambda x: x.endswith('.phtn'), get_files('./examples'))
     for filename in filenames:
         simulated_out = execute('sim', filename)
-        compiled_out = execute('com', filename, flag='--run')
+        compiled_out = execute('run', filename)
         assert compiled_out == simulated_out, (
             f'Output from compilation:\n'
             f'  {compiled_out!r}\n'
             f'Output from simulation:\n'
             f'  {simulated_out!r}\n'
             f'Compilation and Simulation of {filename} do not match during snapshot')
-        snapshot_output = f'{filename}\n{compiled_out}\nend{filename}\n'
+        separator = '-#-' * 20
+        snapshot_output = f'{filename}\n{compiled_out}\n{separator}\n'
         add_expected_output(TEST_FILE_NAME, snapshot_output)
         print(f'Snapshot of {filename} added successfully')
 
@@ -74,7 +76,7 @@ def check_examples() -> None:
             print(f'Tests for {filename} do not exist')
             continue
         simulated_out = execute('sim', filename)
-        compiled_out = execute('com', filename, flag='--run')
+        compiled_out = execute('run', filename)
         assert compiled_out == expected, (
             f'Output from compilation:\n'
             f'  {compiled_out!r}\n'
