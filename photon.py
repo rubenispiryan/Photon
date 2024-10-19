@@ -24,7 +24,7 @@ def notify_user(message: str, loc: Loc) -> None:
     print(make_log_message('[NOTE] ' + message, loc))
 
 
-def traceback_message(frame=1) -> None:
+def traceback_message(frame:int = 1) -> None:
     current_frame = inspect.currentframe()
     caller_frame = inspect.getouterframes(current_frame)
     caller_info = caller_frame[frame]
