@@ -4,11 +4,11 @@
 include "std.phtn"
 
 // Width of the row
-macro N 100 endmacro
+macro N 100 end
 
 // Memory layout
-macro row mem endmacro
-macro display row N + endmacro
+macro row mem end
+macro display row N + end
 
 row N 2 - + 1 .
 display N + 10 .

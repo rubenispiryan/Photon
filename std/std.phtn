@@ -1,18 +1,18 @@
 include "macos.phtn"
 
-macro STDIN 0 endmacro
-macro STDOUT 1 endmacro
-macro STDERR 2 endmacro
+macro STDIN 0 end
+macro STDOUT 1 end
+macro STDERR 2 end
 
-macro write STDOUT SYS_WRITE syscall3 endmacro
-macro writeln write "\n" write endmacro
-macro exit SYS_EXIT syscall1 endmacro
+macro write STDOUT SYS_WRITE syscall3 end
+macro writeln write "\n" write end
+macro exit SYS_EXIT syscall1 end
 
 macro inc64
   dup ,64 1 + .64
-endmacro
+end
 
-macro dup2 over over endmacro
-macro drop2 drop drop endmacro
+macro dup2 over over end
+macro drop2 drop drop end
 
-macro % dup2 / * - endmacro
+macro % dup2 / * - end

@@ -1,3 +1,3 @@
-macro SYS_EXIT 1 endmacro
-macro SYS_READ 3 endmacro
-macro SYS_WRITE 4 endmacro
+macro SYS_EXIT 1 end
+macro SYS_READ 3 end
+macro SYS_WRITE 4 end

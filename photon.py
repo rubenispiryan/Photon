@@ -33,7 +33,7 @@ def raise_error(message: str, loc: Loc) -> NoReturn:
                                    line=caller_info.lineno - 1,
                                    col=0))
 
-    print(make_log_message('[ERROR] ' + message, loc), file=sys.stderr)
+    print(make_log_message('[ERROR] ' + message, loc))
     exit(1)
 
 
@@ -149,7 +149,6 @@ class Keyword(Enum):
     WHILE = auto()
     DO = auto()
     MACRO = auto()
-    END_MACRO = auto()
     INCLUDE = auto()
 
 
@@ -182,7 +181,6 @@ KEYWORD_NAMES = {
     'while': Keyword.WHILE,
     'do': Keyword.DO,
     'macro': Keyword.MACRO,
-    'endmacro': Keyword.END_MACRO,
     'include': Keyword.INCLUDE,
 }
 
@@ -619,7 +617,7 @@ def usage_help() -> None:
 
 
 def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> NoReturn | Op:
-    assert len(Keyword) == 8, 'Exhaustive handling of keywords in parse_keyword'
+    assert len(Keyword) == 7, 'Exhaustive handling of keywords in parse_keyword'
     if type(token.value) != Keyword:
         raise_error(f'Token value `{token.value}` must be a Keyword, but found: {type(token.value)}', token.loc)
     if token.value == Keyword.IF:
@@ -651,14 +649,14 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> 
             value = while_index
             return Op(type=OpType.END, loc=token.loc, name=token.name, operand=value)
         else:
-            raise_error('End can only be used with an `if`, `else` or `while`',
+            raise_error('End can only be used with an `if`, `else`, `while` or `macro`',
                         program[block_index].loc)
     else:
         raise_error(f'Unknown keyword token: {token.value}', token.loc)
 
 
 def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[str, Macro]) -> NoReturn | None:
-    assert len(Keyword) == 8, 'Exhaustive handling of keywords in compile_keyword_to_program'
+    assert len(Keyword) == 7, 'Exhaustive handling of keywords in compile_keyword_to_program'
     if token.value == Keyword.MACRO:
         if len(rprogram) == 0:
             raise_error('Expected name of the macro but found nothing', token.loc)
@@ -673,24 +671,22 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
             notify_user(f'Macro `{macro_name.value}` was defined at this location', macros[macro_name.value].loc)
             raise_error(f'Redefinition of existing macro: `{macro_name.value}`\n', macro_name.loc)
         if len(rprogram) == 0:
-            raise_error(f'Expected `endmacro` at the end of empty macro definition but found: `{macro_name.value}`',
+            raise_error(f'Expected `end` at the end of empty macro definition but found: `{macro_name.value}`',
                         macro_name.loc)
         macros[macro_name.value] = Macro([], token.loc)
-        rec_macro_count = 0
+        block_count = 0
         while len(rprogram) > 0:
             next_token = rprogram.pop()
-            if next_token.type == TokenType.KEYWORD and next_token.value == Keyword.END_MACRO:
-                if rec_macro_count == 0:
+            if next_token.type == TokenType.KEYWORD and next_token.value == Keyword.END:
+                if block_count == 0:
                     break
-                rec_macro_count -= 1
-            elif next_token.type == TokenType.KEYWORD and next_token.value == Keyword.MACRO:
-                rec_macro_count += 1
+                block_count -= 1
+            elif next_token.type == TokenType.KEYWORD and next_token.value in (Keyword.MACRO, Keyword.IF, Keyword.WHILE):
+                block_count += 1
             macros[macro_name.value].tokens.append(next_token)
-        if next_token.type != TokenType.KEYWORD or next_token.value != Keyword.END_MACRO:
-            raise_error(f'Expected `endmacro` at the end of macro definition but found: `{next_token.value}`',
+        if next_token.type != TokenType.KEYWORD or next_token.value != Keyword.END:
+            raise_error(f'Expected `end` at the end of macro definition but found: `{next_token.value}`',
                         next_token.loc)
-    elif token.value == Keyword.END_MACRO:
-        raise_error('Corresponding macro definition not found for `endmacro`', token.loc)
     elif token.value == Keyword.INCLUDE:
         if len(rprogram) == 0:
             raise_error('Expected name of the include file but found nothing', token.loc)
@@ -733,7 +729,7 @@ def compile_tokens_to_program(token_program: List[Token]) -> List[Op]:
                 raise_error(f'Expansion limit reached for macro: {token.value}', current_macro.loc)
             rprogram.extend(reversed(current_macro.tokens))
             continue
-        if token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.END_MACRO, Keyword.INCLUDE):
+        if token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.INCLUDE):
             expand_keyword_to_tokens(token, rprogram, macros)
         else:
             program.append(parse_token_as_op(stack, token, i, program))

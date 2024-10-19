@@ -2,12 +2,12 @@
 
 include "std.phtn"
 
-macro N 20 endmacro
+macro N 20 end
 
 // |acc          |tmp           |ans|
-macro acc mem endmacro
-macro tmp mem 8 N * + endmacro
-macro ans tmp 8 N * + endmacro
+macro acc mem end
+macro tmp mem 8 N * + end
+macro ans tmp 8 N * + end
 
 2 while dup N <= do
   // clean up the tmp table

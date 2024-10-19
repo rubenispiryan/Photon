@@ -7,14 +7,14 @@ macro ifc if
     else
     "hello 2025" writeln
     end
-endmacro
+end
 
 macro while<10 while dup 10 < do
     dup 2 % ifc
     1 +
     end
     drop
-endmacro
+end
 
 0 while<10
 
@@ -23,8 +23,8 @@ macro wrapper
     dup2
     write
     "\n" write
-    endmacro
-endmacro
+    end
+end
 
 "hello" wrapper
 
