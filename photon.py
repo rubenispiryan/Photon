@@ -8,6 +8,7 @@ from typing import Generator, List, NoReturn, Callable, Dict, TextIO
 
 MACRO_EXPANSION_LIMIT = 100_000
 
+
 @dataclass
 class Loc:
     filename: str
@@ -23,16 +24,19 @@ def notify_user(message: str, loc: Loc) -> None:
     print(make_log_message('[NOTE] ' + message, loc))
 
 
-def raise_error(message: str, loc: Loc) -> NoReturn:
+def traceback_message(frame=1) -> None:
     current_frame = inspect.currentframe()
-    caller_frame = inspect.getouterframes(current_frame, 2)
-    caller_info = caller_frame[1]
+    caller_frame = inspect.getouterframes(current_frame)
+    caller_info = caller_frame[frame]
     caller_function = caller_info.function
     trace_message = f'Error message originated inside: {caller_function}'
-    notify_user(trace_message, Loc(filename=os.path.abspath(caller_info.filename),
-                                   line=caller_info.lineno - 1,
-                                   col=0))
+    print(make_log_message('[ERROR] ' + trace_message, Loc(filename=os.path.abspath(caller_info.filename),
+                                                           line=caller_info.lineno - 1,
+                                                           col=0)))
 
+
+def raise_error(message: str, loc: Loc) -> NoReturn:
+    traceback_message(frame=2)
     print(make_log_message('[ERROR] ' + message, loc))
     exit(1)
 
@@ -173,6 +177,7 @@ class Macro:
     tokens: List[Token]
     loc: Loc
     expand_count: int = 0
+
 
 KEYWORD_NAMES = {
     'if': Keyword.IF,
@@ -668,7 +673,7 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
             raise_error(f'Redefinition of intrinsic word: `{macro_name.value}`', macro_name.loc)
         if macro_name.value in macros:
             notify_user(f'Macro `{macro_name.value}` was defined at this location', macros[macro_name.value].loc)
-            raise_error(f'Redefinition of existing macro: `{macro_name.value}`\n', macro_name.loc)
+            raise_error(f'Redefinition of existing macro: `{macro_name.value}`', macro_name.loc)
         if len(rprogram) == 0:
             raise_error(f'Expected `end` at the end of empty macro definition but found: `{macro_name.value}`',
                         macro_name.loc)
@@ -680,7 +685,8 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
                 if block_count == 0:
                     break
                 block_count -= 1
-            elif next_token.type == TokenType.KEYWORD and next_token.value in (Keyword.MACRO, Keyword.IF, Keyword.WHILE):
+            elif next_token.type == TokenType.KEYWORD and next_token.value in (
+            Keyword.MACRO, Keyword.IF, Keyword.WHILE):
                 block_count += 1
             macros[macro_name.value].tokens.append(next_token)
         if next_token.type != TokenType.KEYWORD or next_token.value != Keyword.END:
