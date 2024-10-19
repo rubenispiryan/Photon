@@ -629,9 +629,8 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> 
         stack.append(i)
         return Op(type=OpType.IF, loc=token.loc, name=token.name)
     elif token.value == Keyword.ELSE:
-        if_index = stack.pop()
-        if program[if_index].type != OpType.IF:
-            raise_error(f'Else can only be used with an `if`', program[if_index].loc)
+        if len(stack) == 0 or (if_index := stack.pop(), program[if_index].type)[-1] != OpType.IF:
+            raise_error(f'`else` can only be used with an `if`', token.loc)
         program[if_index].operand = i
         stack.append(i)
         return Op(type=OpType.ELSE, loc=token.loc, name=token.name)
@@ -642,6 +641,9 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> 
         stack.append(i)
         return Op(type=OpType.DO, loc=token.loc, name=token.name)
     elif token.value == Keyword.END:
+        if len(stack) == 0:
+            raise_error('`end` can only be used with an `if`, `else`, `while` or `macro`',
+                        token.loc)
         block_index = stack.pop()
         if program[block_index].type in (OpType.IF, OpType.ELSE):
             program[block_index].operand = i
@@ -653,8 +655,8 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> 
             value = while_index
             return Op(type=OpType.END, loc=token.loc, name=token.name, operand=value)
         else:
-            raise_error('End can only be used with an `if`, `else`, `while` or `macro`',
-                        program[block_index].loc)
+            raise_error('`end` can only be used with an `if`, `else`, `while` or `macro`',
+                        token.loc)
     else:
         raise_error(f'Unknown keyword token: {token.value}', token.loc)
 
