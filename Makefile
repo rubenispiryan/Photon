@@ -1,3 +1,5 @@
+.SILENT:
+
 OUT ?= output
 
 .PHONY: run
