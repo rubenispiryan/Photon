@@ -8,6 +8,7 @@ from typing import Generator, List, NoReturn, Callable, Dict, TextIO
 
 MACRO_EXPANSION_LIMIT = 100_000
 
+
 @dataclass
 class Loc:
     filename: str
@@ -23,16 +24,19 @@ def notify_user(message: str, loc: Loc) -> None:
     print(make_log_message('[NOTE] ' + message, loc))
 
 
-def raise_error(message: str, loc: Loc) -> NoReturn:
+def traceback_message(frame:int = 1) -> None:
     current_frame = inspect.currentframe()
-    caller_frame = inspect.getouterframes(current_frame, 2)
-    caller_info = caller_frame[1]
+    caller_frame = inspect.getouterframes(current_frame)
+    caller_info = caller_frame[frame]
     caller_function = caller_info.function
     trace_message = f'Error message originated inside: {caller_function}'
-    notify_user(trace_message, Loc(filename=os.path.abspath(caller_info.filename),
-                                   line=caller_info.lineno - 1,
-                                   col=0))
+    print(make_log_message('[ERROR] ' + trace_message, Loc(filename=os.path.abspath(caller_info.filename),
+                                                           line=caller_info.lineno - 1,
+                                                           col=0)))
 
+
+def raise_error(message: str, loc: Loc) -> NoReturn:
+    traceback_message(frame=2)
     print(make_log_message('[ERROR] ' + message, loc))
     exit(1)
 
@@ -173,6 +177,7 @@ class Macro:
     tokens: List[Token]
     loc: Loc
     expand_count: int = 0
+
 
 KEYWORD_NAMES = {
     'if': Keyword.IF,
@@ -624,9 +629,8 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> 
         stack.append(i)
         return Op(type=OpType.IF, loc=token.loc, name=token.name)
     elif token.value == Keyword.ELSE:
-        if_index = stack.pop()
-        if program[if_index].type != OpType.IF:
-            raise_error(f'Else can only be used with an `if`', program[if_index].loc)
+        if len(stack) == 0 or (if_index := stack.pop(), program[if_index].type)[-1] != OpType.IF:
+            raise_error(f'`else` can only be used with an `if`', token.loc)
         program[if_index].operand = i
         stack.append(i)
         return Op(type=OpType.ELSE, loc=token.loc, name=token.name)
@@ -637,20 +641,22 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> 
         stack.append(i)
         return Op(type=OpType.DO, loc=token.loc, name=token.name)
     elif token.value == Keyword.END:
+        if len(stack) == 0:
+            raise_error('`end` can only be used with an `if`, `else`, `while` or `macro`',
+                        token.loc)
         block_index = stack.pop()
         if program[block_index].type in (OpType.IF, OpType.ELSE):
             program[block_index].operand = i
             return Op(type=OpType.END, loc=token.loc, name=token.name)
         elif program[block_index].type == OpType.DO:
             program[block_index].operand = i
-            while_index = stack.pop()
-            if program[while_index].type != OpType.WHILE:
-                raise_error('`while` must be present before `do`', program[while_index].loc)
+            if len(stack) == 0 or (while_index := stack.pop(), program[while_index].type)[-1] != OpType.WHILE:
+                raise_error('`while` must be present before `do`', program[block_index].loc)
             value = while_index
             return Op(type=OpType.END, loc=token.loc, name=token.name, operand=value)
         else:
-            raise_error('End can only be used with an `if`, `else`, `while` or `macro`',
-                        program[block_index].loc)
+            raise_error('`end` can only be used with an `if`, `else`, `while` or `macro`',
+                        token.loc)
     else:
         raise_error(f'Unknown keyword token: {token.value}', token.loc)
 
@@ -669,7 +675,7 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
             raise_error(f'Redefinition of intrinsic word: `{macro_name.value}`', macro_name.loc)
         if macro_name.value in macros:
             notify_user(f'Macro `{macro_name.value}` was defined at this location', macros[macro_name.value].loc)
-            raise_error(f'Redefinition of existing macro: `{macro_name.value}`\n', macro_name.loc)
+            raise_error(f'Redefinition of existing macro: `{macro_name.value}`', macro_name.loc)
         if len(rprogram) == 0:
             raise_error(f'Expected `end` at the end of empty macro definition but found: `{macro_name.value}`',
                         macro_name.loc)
@@ -681,7 +687,8 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
                 if block_count == 0:
                     break
                 block_count -= 1
-            elif next_token.type == TokenType.KEYWORD and next_token.value in (Keyword.MACRO, Keyword.IF, Keyword.WHILE):
+            elif next_token.type == TokenType.KEYWORD and next_token.value in (
+            Keyword.MACRO, Keyword.IF, Keyword.WHILE):
                 block_count += 1
             macros[macro_name.value].tokens.append(next_token)
         if next_token.type != TokenType.KEYWORD or next_token.value != Keyword.END:
@@ -830,13 +837,16 @@ if __name__ == '__main__':
         usage_help()
         exit(1)
     subcommand, *argv = argv
+    if subcommand not in ('sim', 'com'):
+        usage_help()
+        exit(1)
     filename_arg, *argv = argv
     file_path_arg = os.path.abspath(filename_arg)
     program_stack = lex_file(file_path_arg)
     program_referenced = compile_tokens_to_program(program_stack)
     if subcommand == 'sim':
         simulate_program(program_referenced)
-    elif subcommand == 'com':
+    else:
         compile_program(program_referenced)
         exit_code = subprocess.call('as -o output.o output.s', shell=True)
         if exit_code != 0:
@@ -848,6 +858,3 @@ if __name__ == '__main__':
             exit(exit_code)
         if '--run' in argv:
             exit(subprocess.call('./output', shell=True))
-    else:
-        usage_help()
-        exit(1)

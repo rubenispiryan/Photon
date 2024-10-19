@@ -5,17 +5,27 @@ import sys
 from typing import List
 
 TEST_FILE_NAME = 'examples/examples_output.test'
+SEPARATOR = '-#-' * 20
 
 
-def execute(subcommand: str, filename: str, flag: str ='') -> str:
+def process_exception_message(message: str) -> str:
+    pattern = r"make\[1\]: \*\*\* \[(sim|com|run)\]"
+    output = ''
+    for line in message.splitlines():
+        output += re.split('\[(ERROR|NOTE)\] ', line)[-1] + '\n'
+    return re.sub(pattern, 'Exit Code: ', output)
+
+
+def execute(subcommand: str, filename: str) -> str:
     try:
-        return subprocess.check_output(f'pypy3.10 photon.py {subcommand} {filename} {flag}', shell=True,
+        filename = ''.join(filename.split('.')[:-1])
+        return subprocess.check_output(f'make {subcommand} INPUT={filename}', shell=True,
                                        stderr=subprocess.STDOUT).decode('utf-8')
     except subprocess.CalledProcessError as e:
-        print(f'Command: "pypy3.10 photon.py {subcommand} {filename} {flag}" failed with error:')
         if e.output.decode('utf-8'):
-            print(e.output.decode('utf-8'))
+            return process_exception_message(e.output.decode('utf-8'))
         else:
+            print(f'Command: "pypy3.10 photon.py {subcommand} {filename}" failed with error:')
             print(e)
         exit(1)
 
@@ -33,7 +43,7 @@ def get_files(folder: str) -> List[str]:
 
 def read_expected(filename: str) -> str | None:
     with open(TEST_FILE_NAME, 'r') as f:
-        pattern = rf'{filename}\n(.*?)\nend{filename}\n'
+        pattern = rf'{filename}\n(.*?)\n{SEPARATOR}\n'
 
         match = re.search(pattern, f.read(), re.DOTALL)
 
@@ -55,14 +65,14 @@ def create_examples() -> None:
     filenames = filter(lambda x: x.endswith('.phtn'), get_files('./examples'))
     for filename in filenames:
         simulated_out = execute('sim', filename)
-        compiled_out = execute('com', filename, flag='--run')
+        compiled_out = execute('run', filename)
         assert compiled_out == simulated_out, (
             f'Output from compilation:\n'
             f'  {compiled_out!r}\n'
             f'Output from simulation:\n'
             f'  {simulated_out!r}\n'
             f'Compilation and Simulation of {filename} do not match during snapshot')
-        snapshot_output = f'{filename}\n{compiled_out}\nend{filename}\n'
+        snapshot_output = f'{filename}\n{compiled_out}\n{SEPARATOR}\n'
         add_expected_output(TEST_FILE_NAME, snapshot_output)
         print(f'Snapshot of {filename} added successfully')
 
@@ -74,7 +84,7 @@ def check_examples() -> None:
             print(f'Tests for {filename} do not exist')
             continue
         simulated_out = execute('sim', filename)
-        compiled_out = execute('com', filename, flag='--run')
+        compiled_out = execute('run', filename)
         assert compiled_out == expected, (
             f'Output from compilation:\n'
             f'  {compiled_out!r}\n'

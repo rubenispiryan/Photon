@@ -98,30 +98,77 @@
   ******** ** ***** * ** *  ***  **  *****   * ** ****  ** *****   *  **   **********  **   *  ** * 
  **      ******   ******** ** * *** **   *  *******  * *****   *  ** ***  **        * ***  ** ***** 
 
-end./examples/rule110.phtn
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/exceptions/else_without_if.phtn
+Error message originated inside: parse_keyword
+`else` can only be used with an `if`
+Exit Code:  Error 1
+
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/exceptions/do_without_while.phtn
+Error message originated inside: parse_keyword
+`while` must be present before `do`
+Exit Code:  Error 1
+
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/exceptions/macro_without_end.phtn
+Error message originated inside: expand_keyword_to_tokens
+Expected `end` at the end of macro definition but found: `print`
+Exit Code:  Error 1
+
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/exceptions/only_end.phtn
+Error message originated inside: parse_keyword
+`end` can only be used with an `if`, `else`, `while` or `macro`
+Exit Code:  Error 1
+
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/exceptions/infinite_macro.phtn
+Error message originated inside: compile_tokens_to_program
+Expansion limit reached for macro: a
+Exit Code:  Error 1
+
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/exceptions/exit.phtn
+Exit Code:  Error 255
+
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/exceptions/intrinsic_redefinition.phtn
+Error message originated inside: expand_keyword_to_tokens
+Redefinition of intrinsic word: `print`
+Exit Code:  Error 1
+
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/exceptions/macro_redefinition.phtn
+Macro `print1` was defined at this location
+Error message originated inside: expand_keyword_to_tokens
+Redefinition of existing macro: `print1`
+Exit Code:  Error 1
+
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/euler/problem_4.phtn
 906609
 
-end./examples/euler/problem_4.phtn
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/euler/problem_5.phtn
 232792560
 
-end./examples/euler/problem_5.phtn
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/euler/problem_2.phtn
 4613732
 
-end./examples/euler/problem_2.phtn
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/euler/problem_3.phtn
 71
 839
 1471
 6857
 
-end./examples/euler/problem_3.phtn
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/euler/problem_1.phtn
 233168
 
-end./examples/euler/problem_1.phtn
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/language_features/macros.phtn
 hello world
 hello 2025
@@ -140,7 +187,7 @@ hello
 hello
 hello
 
-end./examples/language_features/macros.phtn
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/language_features/bit_manipulations.phtn
 1
 0
@@ -149,7 +196,7 @@ end./examples/language_features/macros.phtn
 16
 1
 
-end./examples/language_features/bit_manipulations.phtn
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/language_features/strings.phtn
 Hello World
 Photon Strings
@@ -161,7 +208,7 @@ Hello World
 Hello World
 Hello World
 
-end./examples/language_features/strings.phtn
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/language_features/basic_operators.phtn
 96
 1723
@@ -185,7 +232,7 @@ end./examples/language_features/strings.phtn
 2025
 1234567890987654321
 
-end./examples/language_features/basic_operators.phtn
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/language_features/stack_operations.phtn
 1
 2
@@ -197,12 +244,12 @@ end./examples/language_features/basic_operators.phtn
 4
 5
 
-end./examples/language_features/stack_operations.phtn
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/language_features/memory.phtn
 abcbcd9223372036854775809
 18446744073709551615
 
-end./examples/language_features/memory.phtn
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/language_features/loops.phtn
 1
 2
@@ -310,4 +357,4 @@ end./examples/language_features/memory.phtn
 2
 1
 
-end./examples/language_features/loops.phtn
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-

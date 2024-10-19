@@ -1,0 +1,4 @@
+0 dup 2 < do
+    dup print
+    1 +
+end
