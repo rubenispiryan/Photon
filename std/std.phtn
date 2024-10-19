@@ -6,6 +6,7 @@ macro STDERR 2 endmacro
 
 macro write STDOUT SYS_WRITE syscall3 endmacro
 macro writeln write "\n" write endmacro
+macro exit SYS_EXIT syscall1 endmacro
 
 macro inc64
   dup ,64 1 + .64

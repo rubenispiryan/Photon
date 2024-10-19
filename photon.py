@@ -110,6 +110,7 @@ class Intrinsic(Enum):
     STORE = auto()
     LOAD64 = auto()
     STORE64 = auto()
+    SYSCALL1 = auto()
     SYSCALL3 = auto()
     DUP = auto()
     DROP = auto()
@@ -202,6 +203,7 @@ INTRINSIC_NAMES = {
     ',': Intrinsic.LOAD,
     '.64': Intrinsic.STORE64,
     ',64': Intrinsic.LOAD64,
+    'syscall1': Intrinsic.SYSCALL1,
     'syscall3': Intrinsic.SYSCALL3,
     'drop': Intrinsic.DROP,
     '&': Intrinsic.BITAND,
@@ -268,7 +270,7 @@ def simulate_program(program: List[Op]) -> None:
                     assert type(operation.operand) == int, 'Jump address must be `int`'
                     i = operation.operand
             elif operation.type == OpType.INTRINSIC:
-                assert len(Intrinsic) == 25, 'Exhaustive handling of intrinsics in simulation'
+                assert len(Intrinsic) == 26, 'Exhaustive handling of intrinsics in simulation'
                 if operation.operand == Intrinsic.ADD:
                     a = stack.pop()
                     b = stack.pop()
@@ -386,6 +388,11 @@ def simulate_program(program: List[Op]) -> None:
                     stack.append(b)
                     stack.append(a)
                     stack.append(b)
+                elif operation.operand == Intrinsic.SYSCALL1:
+                    syscall_number = stack.pop()
+                    arg1 = stack.pop()
+                    if syscall_number == 1:
+                        exit(arg1)
                 elif operation.operand == Intrinsic.SYSCALL3:
                     syscall_number = stack.pop()
                     arg1 = stack.pop()
@@ -457,7 +464,7 @@ def compile_program(program: List[Op]) -> None:
         elif operation.type == OpType.WHILE:
             write_base(f'while_{i}:')
         elif operation.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 25, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 26, 'Exhaustive handling of intrinsics in simulation'
             if operation.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -574,6 +581,10 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('push x1')
                 write_level1('push x0')
                 write_level1('push x1')
+            elif operation.operand == Intrinsic.SYSCALL1:
+                write_level1('pop x16')
+                write_level1('pop x0')
+                write_level1('svc #0')
             elif operation.operand == Intrinsic.SYSCALL3:
                 write_level1('pop x16')
                 write_level1('pop x0')
@@ -600,7 +611,7 @@ def compile_program(program: List[Op]) -> None:
 
 
 def usage_help() -> None:
-    print('Usage: photon.py <SUBCOMMAND> <FLAGS> <FILENAME> ')
+    print('Usage: photon.py <SUBCOMMAND> <FLAGS> <FILENAME>')
     print('Subcommands:')
     print('     sim     Simulate the program')
     print('     com     Compile the program')
