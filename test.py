@@ -14,7 +14,9 @@ def execute(subcommand: str, filename: str) -> str:
                                        stderr=subprocess.STDOUT).decode('utf-8')
     except subprocess.CalledProcessError as e:
         if e.output.decode('utf-8'):
-            return e.output.decode('utf-8').split(f'*** [{subcommand}] ')[-1]
+            text = e.output.decode('utf-8')
+            pattern = r"make\[1\]: \*\*\* \[(sim|com|run)\]"
+            return re.sub(pattern, 'Exit Code: ', text)
         else:
             print(f'Command: "pypy3.10 photon.py {subcommand} {filename}" failed with error:')
             print(e)
