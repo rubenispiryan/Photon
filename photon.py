@@ -829,13 +829,16 @@ if __name__ == '__main__':
         usage_help()
         exit(1)
     subcommand, *argv = argv
+    if subcommand not in ('sim', 'com'):
+        usage_help()
+        exit(1)
     filename_arg, *argv = argv
     file_path_arg = os.path.abspath(filename_arg)
     program_stack = lex_file(file_path_arg)
     program_referenced = compile_tokens_to_program(program_stack)
     if subcommand == 'sim':
         simulate_program(program_referenced)
-    elif subcommand == 'com':
+    else:
         compile_program(program_referenced)
         exit_code = subprocess.call('as -o output.o output.s', shell=True)
         if exit_code != 0:
@@ -847,6 +850,3 @@ if __name__ == '__main__':
             exit(exit_code)
         if '--run' in argv:
             exit(subprocess.call('./output', shell=True))
-    else:
-        usage_help()
-        exit(1)
