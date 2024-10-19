@@ -7,6 +7,15 @@ from typing import List
 TEST_FILE_NAME = 'examples/examples_output.test'
 SEPARATOR = '-#-' * 20
 
+
+def process_exception_message(message: str) -> str:
+    pattern = r"make\[1\]: \*\*\* \[(sim|com|run)\]"
+    output = ''
+    for line in message.splitlines():
+        output += re.split('\[(ERROR|NOTE)\] ', line)[-1] + '\n'
+    return re.sub(pattern, 'Exit Code: ', output)
+
+
 def execute(subcommand: str, filename: str) -> str:
     try:
         filename = ''.join(filename.split('.')[:-1])
@@ -14,9 +23,7 @@ def execute(subcommand: str, filename: str) -> str:
                                        stderr=subprocess.STDOUT).decode('utf-8')
     except subprocess.CalledProcessError as e:
         if e.output.decode('utf-8'):
-            text = e.output.decode('utf-8')
-            pattern = r"make\[1\]: \*\*\* \[(sim|com|run)\]"
-            return re.sub(pattern, 'Exit Code: ', text)
+            return process_exception_message(e.output.decode('utf-8'))
         else:
             print(f'Command: "pypy3.10 photon.py {subcommand} {filename}" failed with error:')
             print(e)

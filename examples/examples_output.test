@@ -100,32 +100,32 @@
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/else_without_if.phtn
-/Users/ruben/PycharmProjects/Photon/photon.py:633:1: [ERROR] Error message originated inside: parse_keyword
-/Users/ruben/PycharmProjects/Photon/examples/exceptions/else_without_if.phtn:1:1: [ERROR] `else` can only be used with an `if`
+Error message originated inside: parse_keyword
+`else` can only be used with an `if`
 Exit Code:  Error 1
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/do_without_while.phtn
-/Users/ruben/PycharmProjects/Photon/photon.py:654:1: [ERROR] Error message originated inside: parse_keyword
-/Users/ruben/PycharmProjects/Photon/examples/exceptions/do_without_while.phtn:1:11: [ERROR] `while` must be present before `do`
+Error message originated inside: parse_keyword
+`while` must be present before `do`
 Exit Code:  Error 1
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/macro_without_end.phtn
-/Users/ruben/PycharmProjects/Photon/photon.py:695:1: [ERROR] Error message originated inside: expand_keyword_to_tokens
-/Users/ruben/PycharmProjects/Photon/examples/exceptions/macro_without_end.phtn:1:13: [ERROR] Expected `end` at the end of macro definition but found: `print`
+Error message originated inside: expand_keyword_to_tokens
+Expected `end` at the end of macro definition but found: `print`
 Exit Code:  Error 1
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/only_end.phtn
-/Users/ruben/PycharmProjects/Photon/photon.py:645:1: [ERROR] Error message originated inside: parse_keyword
-/Users/ruben/PycharmProjects/Photon/examples/exceptions/only_end.phtn:1:7: [ERROR] `end` can only be used with an `if`, `else`, `while` or `macro`
+Error message originated inside: parse_keyword
+`end` can only be used with an `if`, `else`, `while` or `macro`
 Exit Code:  Error 1
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/infinite_macro.phtn
-/Users/ruben/PycharmProjects/Photon/photon.py:736:1: [ERROR] Error message originated inside: compile_tokens_to_program
-/Users/ruben/PycharmProjects/Photon/examples/exceptions/infinite_macro.phtn:1:1: [ERROR] Expansion limit reached for macro: a
+Error message originated inside: compile_tokens_to_program
+Expansion limit reached for macro: a
 Exit Code:  Error 1
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
@@ -134,15 +134,15 @@ Exit Code:  Error 255
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/intrinsic_redefinition.phtn
-/Users/ruben/PycharmProjects/Photon/photon.py:675:1: [ERROR] Error message originated inside: expand_keyword_to_tokens
-/Users/ruben/PycharmProjects/Photon/examples/exceptions/intrinsic_redefinition.phtn:1:7: [ERROR] Redefinition of intrinsic word: `print`
+Error message originated inside: expand_keyword_to_tokens
+Redefinition of intrinsic word: `print`
 Exit Code:  Error 1
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/macro_redefinition.phtn
-/Users/ruben/PycharmProjects/Photon/examples/exceptions/macro_redefinition.phtn:1:1: [NOTE] Macro `print1` was defined at this location
-/Users/ruben/PycharmProjects/Photon/photon.py:678:1: [ERROR] Error message originated inside: expand_keyword_to_tokens
-/Users/ruben/PycharmProjects/Photon/examples/exceptions/macro_redefinition.phtn:5:7: [ERROR] Redefinition of existing macro: `print1`
+Macro `print1` was defined at this location
+Error message originated inside: expand_keyword_to_tokens
+Redefinition of existing macro: `print1`
 Exit Code:  Error 1
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
