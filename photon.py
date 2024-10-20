@@ -109,13 +109,6 @@ class Intrinsic(Enum):
     LTE = auto()
     GTE = auto()
     NE = auto()
-    MEM = auto()
-    LOAD = auto()
-    STORE = auto()
-    LOAD64 = auto()
-    STORE64 = auto()
-    SYSCALL1 = auto()
-    SYSCALL3 = auto()
     DUP = auto()
     DROP = auto()
     BITAND = auto()
@@ -124,6 +117,15 @@ class Intrinsic(Enum):
     SHIFT_LEFT = auto()
     SWAP = auto()
     OVER = auto()
+    MEM = auto()
+    LOAD = auto()
+    STORE = auto()
+    LOAD64 = auto()
+    STORE64 = auto()
+    SYSCALL1 = auto()
+    SYSCALL3 = auto()
+    ARGC = auto()
+    ARGV = auto()
 
 
 class OpType(Enum):
@@ -201,13 +203,6 @@ INTRINSIC_NAMES = {
     '>': Intrinsic.GT,
     '<': Intrinsic.LT,
     'dup': Intrinsic.DUP,
-    'mem': Intrinsic.MEM,
-    '.': Intrinsic.STORE,
-    ',': Intrinsic.LOAD,
-    '.64': Intrinsic.STORE64,
-    ',64': Intrinsic.LOAD64,
-    'syscall1': Intrinsic.SYSCALL1,
-    'syscall3': Intrinsic.SYSCALL3,
     'drop': Intrinsic.DROP,
     '&': Intrinsic.BITAND,
     '|': Intrinsic.BITOR,
@@ -218,26 +213,34 @@ INTRINSIC_NAMES = {
     '>=': Intrinsic.GTE,
     '<=': Intrinsic.LTE,
     '!=': Intrinsic.NE,
+    'mem': Intrinsic.MEM,
+    '.': Intrinsic.STORE,
+    ',': Intrinsic.LOAD,
+    '.64': Intrinsic.STORE64,
+    ',64': Intrinsic.LOAD64,
+    'syscall1': Intrinsic.SYSCALL1,
+    'syscall3': Intrinsic.SYSCALL3,
+    'argc': Intrinsic.ARGC,
+    'argv': Intrinsic.ARGV,
 }
 
 assert len(INTRINSIC_NAMES) == len(Intrinsic), 'Exhaustive handling of intrinsics'
 
 NULL_POINTER_PADDING = 1 # padding to make 0 an invalid address
-PTR_CAPACITY = 640 + NULL_POINTER_PADDING
-STR_CAPACITY = 640_000 + PTR_CAPACITY
+ARG_PTR_CAPACITY = 640 + NULL_POINTER_PADDING
+STR_CAPACITY = 640_000 + ARG_PTR_CAPACITY
 MEM_CAPACITY = 640_000 + STR_CAPACITY
 
 
-def simulate_program(program: List[Op], argv: List[str]) -> None:
+def simulate_program(program: List[Op], input_arguments: List[str]) -> None:
     stack: List = []
     assert len(OpType) == 8, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(MEM_CAPACITY)
     allocated_strs = {}
     ptr_size = NULL_POINTER_PADDING
-    str_size = PTR_CAPACITY
-    stack.append(ptr_size)
-    for arg in argv:
+    str_size = ARG_PTR_CAPACITY
+    for arg in input_arguments:
         arg_value = arg.encode('utf-8')
         n = len(arg_value)
         mem[str_size:str_size + n] = arg_value
@@ -246,8 +249,9 @@ def simulate_program(program: List[Op], argv: List[str]) -> None:
         ptr_size += 8
         str_size += n + 1
         assert str_size <= STR_CAPACITY, "String buffer overflow"
-        assert ptr_size <= PTR_CAPACITY, "Pointer buffer overflow"
-    stack.append(len(argv))
+        assert ptr_size <= ARG_PTR_CAPACITY, "Argument pointer buffer overflow"
+    argc = len(input_arguments)
+    argv_start = NULL_POINTER_PADDING
     while i < len(program):
         operation = program[i]
         if operation.type == OpType.PUSH_INT:
@@ -287,7 +291,7 @@ def simulate_program(program: List[Op], argv: List[str]) -> None:
                 assert type(operation.operand) == int, 'Jump address must be `int`'
                 i = operation.operand
         elif operation.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 26, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 28, 'Exhaustive handling of intrinsics in simulation'
             if operation.operand == Intrinsic.ADD:
                 a = stack.pop()
                 b = stack.pop()
@@ -351,6 +355,10 @@ def simulate_program(program: List[Op], argv: List[str]) -> None:
                 stack.pop()
             elif operation.operand == Intrinsic.MEM:
                 stack.append(STR_CAPACITY)
+            elif operation.operand == Intrinsic.ARGC:
+                stack.append(argc)
+            elif operation.operand == Intrinsic.ARGV:
+                stack.append(argv_start)
             elif operation.operand == Intrinsic.LOAD:
                 address = stack.pop()
                 assert type(address) == int, 'Arguments for `,` must be `int`'
@@ -444,8 +452,12 @@ def compile_program(program: List[Op]) -> None:
     write_base('.align 3')
     asm_setup(write_base, write_level1)
     write_base('_start:')
-    write_level1('push x1')
-    write_level1('push x0')
+    write_level1('adrp x2, argc@PAGE')
+    write_level1('add x2, x2, argc@PAGEOFF')
+    write_level1('str x0, [x2]')
+    write_level1('adrp x2, argv@PAGE')
+    write_level1('add x2, x2, argv@PAGEOFF')
+    write_level1('str x1, [x2]')
     strs: List[str] = []
     allocated_strs: Dict[str, int] = {}
     for i in range(len(program)):
@@ -479,7 +491,7 @@ def compile_program(program: List[Op]) -> None:
         elif operation.type == OpType.WHILE:
             write_base(f'while_{i}:')
         elif operation.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 26, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 28, 'Exhaustive handling of intrinsics in simulation'
             if operation.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -549,6 +561,16 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('adrp x0, mem@PAGE')
                 write_level1('add x0, x0, mem@PAGEOFF')
                 write_level1('push x0')
+            elif operation.operand == Intrinsic.ARGC:
+                write_level1('adrp x0, argc@PAGE')
+                write_level1('add x0, x0, argc@PAGEOFF')
+                write_level1('ldr x0, [x0]')
+                write_level1('push x0')
+            elif operation.operand == Intrinsic.ARGV:
+                write_level1('adrp x0, argv@PAGE')
+                write_level1('add x0, x0, argv@PAGEOFF')
+                write_level1('ldr x0, [x0]')
+                write_level1('push x0')
             elif operation.operand == Intrinsic.STORE:
                 write_level1('popw w0')
                 write_level1('pop x1')
@@ -616,9 +638,11 @@ def compile_program(program: List[Op]) -> None:
     write_level1('mov x0, #0')
     write_level1('svc #0')
     write_base('.section __DATA, __data')
+    write_level1('argc: .quad 0')
+    write_level1('argv: .quad 0')
     for i in range(len(strs)):
         word = repr(strs[i]).strip("'")
-        write_level1(f'str_{i}: .ascii "{word}"')
+        write_level1(f'str_{i}: .asciz "{word}"')
     write_base('.section __DATA, __bss')
     write_base('mem:')
     write_level1(f'.skip {MEM_CAPACITY}')

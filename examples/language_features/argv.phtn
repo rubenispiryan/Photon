@@ -1,5 +1,11 @@
 include "std.phtn"
 
+// to check if memory was allocated correctly for strings
+"important test of string functionality" strlen dup print print
+
+
+argv argc
+
 // skip the file name (argv[0])
 swap 8 + swap 1 -
 
