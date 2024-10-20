@@ -238,9 +238,9 @@ def simulate_program(program: List[Op], argv: List[str]) -> None:
     str_size = PTR_CAPACITY
     stack.append(ptr_size)
     for arg in argv:
-        value = arg.encode('utf-8')
-        n = len(value)
-        mem[str_size:str_size + n] = value
+        arg_value = arg.encode('utf-8')
+        n = len(arg_value)
+        mem[str_size:str_size + n] = arg_value
         mem[str_size + n] = 0
         mem[ptr_size:ptr_size + 8] = str_size.to_bytes(8, 'little')
         ptr_size += 8
