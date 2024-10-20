@@ -232,7 +232,7 @@ STR_CAPACITY = 640_000 + ARG_PTR_CAPACITY
 MEM_CAPACITY = 640_000 + STR_CAPACITY
 
 
-def simulate_program(program: List[Op], input_arguments: List[str]) -> None:
+def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) -> None:
     stack: List = []
     assert len(OpType) == 8, 'Exhaustive handling of operators in simulation'
     i = 0
@@ -652,7 +652,7 @@ def compile_program(program: List[Op]) -> None:
 def usage_help() -> None:
     print('Usage: photon.py <SUBCOMMAND> <FLAGS> <FILENAME>')
     print('Subcommands:')
-    print('     sim     Simulate the program')
+    print('     sim     Simulate the program in a macos little endian environment')
     print('     com     Compile the program')
     print('         --run   Used with `com` to run immediately')
 
@@ -881,7 +881,7 @@ if __name__ == '__main__':
     program_stack = lex_file(file_path_arg)
     program_referenced = compile_tokens_to_program(program_stack)
     if subcommand == 'sim':
-        simulate_program(program_referenced, argv)
+        simulate_little_endian_macos(program_referenced, argv)
     else:
         compile_program(program_referenced)
         exit_code = subprocess.call('as -o output.o output.s', shell=True)
