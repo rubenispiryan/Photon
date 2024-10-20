@@ -4,7 +4,7 @@ INPUT ?= output
 
 .PHONY: run
 
-run: output
+run: output com
 	./output
 
 output: output.o
@@ -14,7 +14,7 @@ output: output.o
         -e _start \
         -arch arm64
 
-output.o: com
+output.o: output.s
 	as -g -o output.o output.s
 
 sim: photon.py ./$(INPUT).phtn

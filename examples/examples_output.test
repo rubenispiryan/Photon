@@ -100,51 +100,51 @@
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/else_without_if.phtn
+STDOUT:
 Error message originated inside: parse_keyword
 `else` can only be used with an `if`
-Exit Code:  Error 1
-
+Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/do_without_while.phtn
+STDOUT:
 Error message originated inside: parse_keyword
 `while` must be present before `do`
-Exit Code:  Error 1
-
+Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/macro_without_end.phtn
+STDOUT:
 Error message originated inside: expand_keyword_to_tokens
 Expected `end` at the end of macro definition but found: `print`
-Exit Code:  Error 1
-
+Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/only_end.phtn
+STDOUT:
 Error message originated inside: parse_keyword
 `end` can only be used with an `if`, `else`, `while` or `macro`
-Exit Code:  Error 1
-
+Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/infinite_macro.phtn
+STDOUT:
 Error message originated inside: compile_tokens_to_program
 Expansion limit reached for macro: a
-Exit Code:  Error 1
-
+Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/exit.phtn
-Exit Code:  Error 255
-
+STDOUT:
+Exit code: 255
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/intrinsic_redefinition.phtn
+STDOUT:
 Error message originated inside: expand_keyword_to_tokens
 Redefinition of intrinsic word: `print`
-Exit Code:  Error 1
-
+Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/macro_redefinition.phtn
-Macro `print1` was defined at this location
+STDOUT:
 Error message originated inside: expand_keyword_to_tokens
 Redefinition of existing macro: `print1`
-Exit Code:  Error 1
-
+Macro `print1` was defined at this location
+Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/euler/problem_4.phtn
 906609
@@ -195,6 +195,9 @@ hello
 9
 16
 1
+
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/language_features/argv.phtn
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/language_features/strings.phtn

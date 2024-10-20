@@ -1,0 +1,12 @@
+include "std.phtn"
+
+// skip the file name (argv[0])
+swap 8 + swap 1 -
+
+while dup 0 > do
+  swap
+  dup ,64 dup strlen swap writeln
+  8 +
+  swap
+  1 -
+end
