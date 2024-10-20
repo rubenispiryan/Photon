@@ -9,25 +9,19 @@ SEPARATOR = '-#-' * 20
 
 
 def process_exception_message(message: str) -> str:
-    pattern = r"make\[1\]: \*\*\* \[(sim|com|run)\]"
     output = ''
     for line in message.splitlines():
         output += re.split('\[(ERROR|NOTE)\] ', line)[-1] + '\n'
-    return re.sub(pattern, 'Exit Code: ', output)
+    return output
 
 
-def execute(subcommand: str, filename: str) -> str:
+def execute(subcommand: str, filename: str, flags: str = '') -> str:
     try:
-        filename = ''.join(filename.split('.')[:-1])
-        return subprocess.check_output(f'make {subcommand} INPUT={filename}', shell=True,
+        return subprocess.check_output(f'pypy3.10 photon.py {subcommand} {filename} {flags}', shell=True,
                                        stderr=subprocess.STDOUT).decode('utf-8')
     except subprocess.CalledProcessError as e:
-        if e.output.decode('utf-8'):
-            return process_exception_message(e.output.decode('utf-8'))
-        else:
-            print(f'Command: "pypy3.10 photon.py {subcommand} {filename}" failed with error:')
-            print(e)
-        exit(1)
+        output = 'STDOUT:\n' + process_exception_message(e.output.decode('utf-8'))
+        return output + 'Exit code: ' + str(e.returncode)
 
 
 def get_files(folder: str) -> List[str]:
@@ -65,7 +59,7 @@ def create_examples() -> None:
     filenames = filter(lambda x: x.endswith('.phtn'), get_files('./examples'))
     for filename in filenames:
         simulated_out = execute('sim', filename)
-        compiled_out = execute('run', filename)
+        compiled_out = execute('com', filename, flags='--run')
         assert compiled_out == simulated_out, (
             f'Output from compilation:\n'
             f'  {compiled_out!r}\n'
@@ -84,7 +78,7 @@ def check_examples() -> None:
             print(f'Tests for {filename} do not exist')
             continue
         simulated_out = execute('sim', filename)
-        compiled_out = execute('run', filename)
+        compiled_out = execute('com', filename, flags='--run')
         assert compiled_out == expected, (
             f'Output from compilation:\n'
             f'  {compiled_out!r}\n'
