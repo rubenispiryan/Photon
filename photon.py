@@ -103,7 +103,7 @@ class Intrinsic(Enum):
     MUL = auto()
     DIV = auto()
     PRINT = auto()
-    OP_EQUAL = auto()
+    EQUAL = auto()
     LT = auto()
     GT = auto()
     LTE = auto()
@@ -199,7 +199,7 @@ INTRINSIC_NAMES = {
     '-': Intrinsic.SUB,
     '*': Intrinsic.MUL,
     '/': Intrinsic.DIV,
-    '==': Intrinsic.OP_EQUAL,
+    '==': Intrinsic.EQUAL,
     '>': Intrinsic.GT,
     '<': Intrinsic.LT,
     'dup': Intrinsic.DUP,
@@ -316,7 +316,7 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 a = stack.pop()
                 assert type(a) == int, 'Arguments for `print` must be `int`'
                 print(a)
-            elif operation.operand == Intrinsic.OP_EQUAL:
+            elif operation.operand == Intrinsic.EQUAL:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `==` must be `int`'
@@ -515,7 +515,7 @@ def compile_program(program: List[Op]) -> None:
             elif operation.operand == Intrinsic.PRINT:
                 write_level1('pop x0')
                 write_level1('bl dump')
-            elif operation.operand == Intrinsic.OP_EQUAL:
+            elif operation.operand == Intrinsic.EQUAL:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('cmp x0, x1')
