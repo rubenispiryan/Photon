@@ -4,7 +4,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Generator, List, NoReturn, Callable, Dict, TextIO
+from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple
 
 MACRO_EXPANSION_LIMIT = 100_000
 
@@ -165,6 +165,11 @@ class TokenType(Enum):
     STR = auto()
     CHAR = auto()
 
+class DataType(Enum):
+    INT = auto()
+    PTR = auto()
+    BOOL = auto()
+
 
 @dataclass
 class Token:
@@ -230,6 +235,17 @@ NULL_POINTER_PADDING = 1 # padding to make 0 an invalid address
 ARG_PTR_CAPACITY = 640 + NULL_POINTER_PADDING
 STR_CAPACITY = 640_000 + ARG_PTR_CAPACITY
 MEM_CAPACITY = 640_000 + STR_CAPACITY
+
+
+def ensure_argument_count(stack_length, op: Op, required: int) -> None | NoReturn:
+    if stack_length < required:
+        raise_error(f'Not enough arguments for: {op.name}, found: {stack_length} but required: {required}', op.loc)
+    return None
+
+def ensure_argument_type(op: Op, arg: Tuple[DataType, Loc], required: DataType, order: int = 1) -> None | NoReturn:
+    if arg[0] != required:
+        notify_user(f'Argument {order} was created at this location', arg[1])
+        raise_error(f'Argument {order} for `{op.name}` must be {required.name}', op.loc)
 
 
 def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) -> None:
