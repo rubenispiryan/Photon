@@ -248,6 +248,223 @@ def ensure_argument_type(op: Op, arg: Tuple[DataType, Loc], required: DataType, 
         raise_error(f'Argument {order} for `{op.name}` must be {required.name}', op.loc)
 
 
+def type_check_program(program: List[Op]) -> None:
+    stack: List[Tuple[DataType, Loc]] = []
+    for op in program:
+        if op.type == OpType.PUSH_INT:
+            assert type(op.operand) == int, 'Value for `PUSH_INT` must be `int`'
+            stack.append((DataType.INT, op.loc))
+        elif op.type == OpType.PUSH_STR:
+            assert type(op.operand) == str, 'Value for `PUSH_STR` must be `str`'
+            stack.append((DataType.INT, op.loc))
+            stack.append((DataType.PTR, op.loc))
+        elif op.type == OpType.IF:
+            raise NotImplementedError
+            a = stack.pop()
+            if a == 0:
+                assert type(op.operand) == int, 'Jump address must be `int`'
+                i = op.operand
+        elif op.type == OpType.ELSE:
+            raise NotImplementedError
+            assert type(op.operand) == int, 'Jump address must be `int`'
+            i = op.operand
+        elif op.type == OpType.END:
+            raise NotImplementedError
+            if op.operand is not None:
+                assert type(op.operand) == int, 'Jump address must be `int`'
+                i = op.operand
+        elif op.type == OpType.WHILE:
+            raise NotImplementedError
+            i += 1
+            continue
+        elif op.type == OpType.DO:
+            raise NotImplementedError
+            a = stack.pop()
+            assert type(a) == int, 'Arguments for `do` must be `int`'
+            if a == 0:
+                assert type(op.operand) == int, 'Jump address must be `int`'
+                i = op.operand
+        elif op.type == OpType.INTRINSIC:
+            assert len(Intrinsic) == 28, 'Exhaustive handling of intrinsics in simulation'
+            if op.operand == Intrinsic.ADD:
+                raise NotImplementedError
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `+` must be `int`'
+                stack.append(a + b)
+            elif op.operand == Intrinsic.SUB:
+                raise NotImplementedError
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `-` must be `int`'
+                stack.append(b - a)
+            elif op.operand == Intrinsic.MUL:
+                raise NotImplementedError
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `*` must be `int`'
+                stack.append(a * b)
+            elif op.operand == Intrinsic.DIV:
+                raise NotImplementedError
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `/` must be `int`'
+                stack.append(b // a)
+            elif op.operand == Intrinsic.PRINT:
+                raise NotImplementedError
+                a = stack.pop()
+                assert type(a) == int, 'Arguments for `print` must be `int`'
+                print(a)
+            elif op.operand == Intrinsic.EQUAL:
+                raise NotImplementedError
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `==` must be `int`'
+                stack.append(int(a == b))
+            elif op.operand == Intrinsic.LT:
+                raise NotImplementedError
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `<` must be `int`'
+                stack.append(int(b < a))
+            elif op.operand == Intrinsic.GT:
+                raise NotImplementedError
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `>` must be `int`'
+                stack.append(int(b > a))
+            elif op.operand == Intrinsic.GTE:
+                raise NotImplementedError
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `>=` must be `int`'
+                stack.append(int(b >= a))
+            elif op.operand == Intrinsic.LTE:
+                raise NotImplementedError
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `<=` must be `int`'
+                stack.append(int(b <= a))
+            elif op.operand == Intrinsic.NE:
+                raise NotImplementedError
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `!=` must be `int`'
+                stack.append(int(a != b))
+            elif op.operand == Intrinsic.DUP:
+                raise NotImplementedError
+                a = stack.pop()
+                assert type(a) == int, 'Arguments for `dup` must be `int`'
+                stack.append(a)
+                stack.append(a)
+            elif op.operand == Intrinsic.DROP:
+                raise NotImplementedError
+                stack.pop()
+            elif op.operand == Intrinsic.MEM:
+                raise NotImplementedError
+                stack.append(STR_CAPACITY)
+            elif op.operand == Intrinsic.ARGC:
+                raise NotImplementedError
+                stack.append(argc)
+            elif op.operand == Intrinsic.ARGV:
+                raise NotImplementedError
+                stack.append(argv_start)
+            elif op.operand == Intrinsic.LOAD:
+                raise NotImplementedError
+                address = stack.pop()
+                assert type(address) == int, 'Arguments for `,` must be `int`'
+                stack.append(mem[address])
+            elif op.operand == Intrinsic.STORE:
+                raise NotImplementedError
+                value = stack.pop()
+                address = stack.pop()
+                assert type(value) == type(address) == int, 'Arguments for `.` must be `int`'
+                mem[address] = value & 0xFF
+            elif op.operand == Intrinsic.LOAD64:
+                raise NotImplementedError
+                addr = stack.pop()
+                _bytes = bytearray(8)
+                for offset in range(0, 8):
+                    _bytes[offset] = mem[addr + offset]
+                stack.append(int.from_bytes(_bytes, byteorder="little"))
+            elif op.operand == Intrinsic.STORE64:
+                raise NotImplementedError
+                store_value64 = stack.pop().to_bytes(length=8, byteorder="little")
+                store_addr64 = stack.pop()
+                for byte in store_value64:
+                    mem[store_addr64] = byte
+                    store_addr64 += 1
+            elif op.operand == Intrinsic.BITOR:
+                raise NotImplementedError
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `|` must be `int`'
+                stack.append(a | b)
+            elif op.operand == Intrinsic.BITAND:
+                raise NotImplementedError
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `&` must be `int`'
+                stack.append(a & b)
+            elif op.operand == Intrinsic.SHIFT_RIGHT:
+                raise NotImplementedError
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `>>` must be `int`'
+                stack.append(b >> a)
+            elif op.operand == Intrinsic.SHIFT_LEFT:
+                raise NotImplementedError
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `<<` must be `int`'
+                stack.append(b << a)
+            elif op.operand == Intrinsic.SWAP:
+                raise NotImplementedError
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `swap` must be `int`'
+                stack.append(a)
+                stack.append(b)
+            elif op.operand == Intrinsic.OVER:
+                raise NotImplementedError
+                a = stack.pop()
+                b = stack.pop()
+                assert type(a) == type(b) == int, 'Arguments for `over` must be `int`'
+                stack.append(b)
+                stack.append(a)
+                stack.append(b)
+            elif op.operand == Intrinsic.SYSCALL1:
+                raise NotImplementedError
+                syscall_number = stack.pop()
+                arg1 = stack.pop()
+                if syscall_number == 1:
+                    exit(arg1)
+            elif op.operand == Intrinsic.SYSCALL3:
+                raise NotImplementedError
+                syscall_number = stack.pop()
+                arg1 = stack.pop()
+                arg2 = stack.pop()
+                arg3 = stack.pop()
+                if syscall_number == 4:
+                    assert type(arg1) == type(arg2) == type(arg3) == int, 'Arguments for `syscall3` must be `int`'
+                    if arg1 == 1:
+                        print(mem[arg2:arg2 + arg3].decode(), end='')
+                    elif arg1 == 2:
+                        print(mem[arg2:arg2 + arg3].decode(), end='', file=sys.stderr)
+                    else:
+                        raise_error(f'Unknown file descriptor: {arg1}', op.loc)
+                else:
+                    raise_error(f'Unknown syscall number: {syscall_number}', op.loc)
+            else:
+                raise_error(f'Unhandled intrinsic: {op.name}',
+                            op.loc)
+        else:
+            raise_error(f'Unhandled op: {op.name}',
+                        op.loc)
+    if len(stack) != 0:
+        end = stack.pop()
+        raise_error(f'Unhandled data on the stack: {end[0]}', end[1])
+
 def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) -> None:
     stack: List = []
     assert len(OpType) == 8, 'Exhaustive handling of operators in simulation'
