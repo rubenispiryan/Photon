@@ -4,9 +4,10 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple, Optional
+from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple, Optional, Set
 
 MACRO_EXPANSION_LIMIT = 100_000
+MACRO_TRACEBACK_LIMIT = 10
 
 
 @dataclass
@@ -14,38 +15,6 @@ class Loc:
     filename: str
     line: int
     col: int
-
-
-def make_log_message(message: str, loc: Loc) -> str:
-    return f'{loc.filename}:[{loc.line + 1}:{loc.col}]: {message}'
-
-
-def notify_user(message: str, loc: Loc) -> None:
-    print(make_log_message('[NOTE] ' + message, loc))
-
-
-def traceback_message(frame: int = 1) -> None:
-    current_frame = inspect.currentframe()
-    caller_frame = inspect.getouterframes(current_frame)
-    caller_info = caller_frame[frame]
-    caller_function = caller_info.function
-    trace_message = f'Error message originated inside: {caller_function}'
-    print(make_log_message('[ERROR] ' + trace_message, Loc(filename='./photon.py',
-                                                           line=caller_info.lineno - 1,
-                                                           col=0)), file=sys.stderr)
-
-
-def raise_error(message: str, loc: Loc, frame: int = 2) -> NoReturn:
-    traceback_message(frame=frame)
-    print(make_log_message('[ERROR] ' + message, loc), file=sys.stderr)
-    exit(1)
-
-
-def write_indent(file: TextIO, level: int = 0) -> Callable[[str], None]:
-    def temp(buffer: str) -> None:
-        file.write(' ' * (0 if level == 0 else 4 ** level) + buffer + '\n')
-
-    return temp
 
 
 def asm_setup(write_base: Callable[[str], None], write_level1: Callable[[str], None]) -> None:
@@ -170,6 +139,7 @@ class Token:
     loc: Loc
     name: str
     expanded_from: Optional['Macro'] = None
+    expanded_count: int = 0
 
 
 @dataclass
@@ -184,6 +154,8 @@ class Op:
 class Macro:
     tokens: List[Token]
     loc: Loc
+    name: str
+    expanded_from: Token | None = None
     expand_count: int = 0
 
 
@@ -238,6 +210,46 @@ STR_CAPACITY = 640_000 + ARG_PTR_CAPACITY
 MEM_CAPACITY = 640_000 + STR_CAPACITY
 
 
+def make_log_message(message: str, loc: Loc) -> str:
+    return f'{loc.filename}:[{loc.line + 1}:{loc.col}]: {message}'
+
+
+def notify_user(message: str, loc: Loc) -> None:
+    print(make_log_message('[NOTE] ' + message, loc))
+
+
+def traceback_message(frame: int = 1) -> None:
+    current_frame = inspect.currentframe()
+    caller_frame = inspect.getouterframes(current_frame)
+    caller_info = caller_frame[frame]
+    caller_function = caller_info.function
+    trace_message = f'Error message originated inside: {caller_function}'
+    print(make_log_message('[ERROR] ' + trace_message, Loc(filename='./photon.py',
+                                                           line=caller_info.lineno - 1,
+                                                           col=0)), file=sys.stderr)
+
+
+def raise_error(message: str, place: Loc | Token, frame: int = 2) -> NoReturn:
+    traceback_message(frame=frame)
+    if isinstance(place, Token):
+        i = 0
+        expanded_count = place.expanded_count
+        expand_place = place
+        while i < MACRO_TRACEBACK_LIMIT and i < expanded_count:
+            notify_user(f'Operation expanded from macro: {expand_place.expanded_from.value}', loc=expand_place.expanded_from.loc)
+            expand_place = expand_place.expanded_from
+            i += 1
+        place = place.loc
+    print(make_log_message('[ERROR] ' + message, place), file=sys.stderr)
+    exit(1)
+
+
+def write_indent(file: TextIO, level: int = 0) -> Callable[[str], None]:
+    def temp(buffer: str) -> None:
+        file.write(' ' * (0 if level == 0 else 4 ** level) + buffer + '\n')
+    return temp
+
+
 def ensure_argument_count(stack_length: int, op: Op, required: int) -> None | NoReturn:
     if stack_length < required:
         traceback_message(2)
@@ -249,7 +261,7 @@ def notify_argument_origin(loc: Loc, order: int = 1) -> None:
     notify_user(f'Argument {order} was created at this location', loc)
 
 
-def type_check_program(program: List[Op]) -> None:
+def type_check_program(program: List[Op], debug: bool = False) -> None:
     stack: List[Tuple[DataType, Loc]] = []
     for op in program:
         if op.type == OpType.PUSH_INT:
@@ -298,8 +310,9 @@ def type_check_program(program: List[Op]) -> None:
                 elif a_type == DataType.INT and b_type == DataType.PTR:
                     stack.append((DataType.PTR, op.token.loc))
                 else:
-                    notify_argument_origin(b_loc, order=1)
-                    notify_argument_origin(a_loc, order=2)
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type, a_type)}', op.token.loc)
             elif op.operand == Intrinsic.SUB:
                 ensure_argument_count(len(stack), op, 2)
@@ -312,8 +325,9 @@ def type_check_program(program: List[Op]) -> None:
                 elif a_type == DataType.PTR and b_type == DataType.PTR:
                     stack.append((DataType.PTR, op.token.loc))
                 else:
-                    notify_argument_origin(b_loc, order=1)
-                    notify_argument_origin(a_loc, order=2)
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type, a_type)}', op.token.loc)
             elif op.operand == Intrinsic.MUL:
                 ensure_argument_count(len(stack), op, 2)
@@ -322,8 +336,9 @@ def type_check_program(program: List[Op]) -> None:
                 if a_type == DataType.INT and b_type == DataType.INT:
                     stack.append((DataType.INT, op.token.loc))
                 else:
-                    notify_argument_origin(b_loc, order=1)
-                    notify_argument_origin(a_loc, order=2)
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
             elif op.operand == Intrinsic.DIV:
                 ensure_argument_count(len(stack), op, 2)
@@ -332,8 +347,9 @@ def type_check_program(program: List[Op]) -> None:
                 if a_type == DataType.INT and b_type == DataType.INT:
                     stack.append((DataType.INT, op.token.loc))
                 else:
-                    notify_argument_origin(b_loc, order=1)
-                    notify_argument_origin(a_loc, order=2)
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
             elif op.operand == Intrinsic.PRINT:
                 ensure_argument_count(len(stack), op, 1)
@@ -349,8 +365,9 @@ def type_check_program(program: List[Op]) -> None:
                 elif a_type == DataType.BOOL and b_type == DataType.BOOL:
                     stack.append((DataType.BOOL, op.token.loc))
                 else:
-                    notify_argument_origin(b_loc, order=1)
-                    notify_argument_origin(a_loc, order=2)
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
             elif op.operand == Intrinsic.LT:
                 ensure_argument_count(len(stack), op, 2)
@@ -361,8 +378,9 @@ def type_check_program(program: List[Op]) -> None:
                 elif a_type == DataType.PTR and b_type == DataType.PTR:
                     stack.append((DataType.BOOL, op.token.loc))
                 else:
-                    notify_argument_origin(b_loc, order=1)
-                    notify_argument_origin(a_loc, order=2)
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
             elif op.operand == Intrinsic.GT:
                 ensure_argument_count(len(stack), op, 2)
@@ -373,8 +391,9 @@ def type_check_program(program: List[Op]) -> None:
                 elif a_type == DataType.PTR and b_type == DataType.PTR:
                     stack.append((DataType.BOOL, op.token.loc))
                 else:
-                    notify_argument_origin(b_loc, order=1)
-                    notify_argument_origin(a_loc, order=2)
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
             elif op.operand == Intrinsic.GTE:
                 ensure_argument_count(len(stack), op, 2)
@@ -385,8 +404,9 @@ def type_check_program(program: List[Op]) -> None:
                 elif a_type == DataType.PTR and b_type == DataType.PTR:
                     stack.append((DataType.BOOL, op.token.loc))
                 else:
-                    notify_argument_origin(b_loc, order=1)
-                    notify_argument_origin(a_loc, order=2)
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
             elif op.operand == Intrinsic.LTE:
                 ensure_argument_count(len(stack), op, 2)
@@ -397,8 +417,9 @@ def type_check_program(program: List[Op]) -> None:
                 elif a_type == DataType.PTR and b_type == DataType.PTR:
                     stack.append((DataType.BOOL, op.token.loc))
                 else:
-                    notify_argument_origin(b_loc, order=1)
-                    notify_argument_origin(a_loc, order=2)
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
             elif op.operand == Intrinsic.NE:
                 ensure_argument_count(len(stack), op, 2)
@@ -411,8 +432,9 @@ def type_check_program(program: List[Op]) -> None:
                 elif a_type == DataType.BOOL and b_type == DataType.BOOL:
                     stack.append((DataType.BOOL, op.token.loc))
                 else:
-                    notify_argument_origin(b_loc, order=1)
-                    notify_argument_origin(a_loc, order=2)
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
             elif op.operand == Intrinsic.DUP:
                 ensure_argument_count(len(stack), op, 1)
@@ -443,8 +465,9 @@ def type_check_program(program: List[Op]) -> None:
                 if a_type == DataType.INT and b_type == DataType.INT:
                     stack.append((DataType.INT, op.token.loc))
                 else:
-                    notify_argument_origin(b_loc, order=1)
-                    notify_argument_origin(a_loc, order=2)
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
             elif op.operand == Intrinsic.BITAND:
                 ensure_argument_count(len(stack), op, 2)
@@ -453,8 +476,9 @@ def type_check_program(program: List[Op]) -> None:
                 if a_type == DataType.INT and b_type == DataType.INT:
                     stack.append((DataType.INT, op.token.loc))
                 else:
-                    notify_argument_origin(b_loc, order=1)
-                    notify_argument_origin(a_loc, order=2)
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
             elif op.operand == Intrinsic.SHIFT_RIGHT:
                 ensure_argument_count(len(stack), op, 2)
@@ -463,8 +487,9 @@ def type_check_program(program: List[Op]) -> None:
                 if a_type == DataType.INT and b_type == DataType.INT:
                     stack.append((DataType.INT, op.token.loc))
                 else:
-                    notify_argument_origin(b_loc, order=1)
-                    notify_argument_origin(a_loc, order=2)
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
             elif op.operand == Intrinsic.SHIFT_LEFT:
                 ensure_argument_count(len(stack), op, 2)
@@ -473,8 +498,9 @@ def type_check_program(program: List[Op]) -> None:
                 if a_type == DataType.INT and b_type == DataType.INT:
                     stack.append((DataType.INT, op.token.loc))
                 else:
-                    notify_argument_origin(b_loc, order=1)
-                    notify_argument_origin(a_loc, order=2)
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
             elif op.operand == Intrinsic.SWAP:
                 ensure_argument_count(len(stack), op, 2)
@@ -494,8 +520,9 @@ def type_check_program(program: List[Op]) -> None:
                 syscall_type, syscall_loc = stack.pop()
                 arg1_type, arg1_loc = stack.pop()
                 if syscall_type != DataType.INT or arg1_type != DataType.INT:
-                    notify_argument_origin(arg1_loc, order=1)
-                    notify_argument_origin(syscall_loc, order=2)
+                    if debug:
+                        notify_argument_origin(arg1_loc, order=1)
+                        notify_argument_origin(syscall_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(arg1_type.name, syscall_type.name)}',
                                 op.token.loc)
             elif op.operand == Intrinsic.SYSCALL3:
@@ -505,14 +532,15 @@ def type_check_program(program: List[Op]) -> None:
                 arg2_type, arg2_loc = stack.pop()
                 arg1_type, arg1_loc = stack.pop()
                 if syscall_type != DataType.INT or arg1_type != DataType.INT:
-                    notify_argument_origin(arg1_loc, order=1)
-                    notify_argument_origin(arg2_loc, order=2)
-                    notify_argument_origin(arg3_loc, order=3)
-                    notify_argument_origin(syscall_loc, order=4)
+                    if debug:
+                        notify_argument_origin(arg1_loc, order=1)
+                        notify_argument_origin(arg2_loc, order=2)
+                        notify_argument_origin(arg3_loc, order=3)
+                        notify_argument_origin(syscall_loc, order=4)
                     raise_error(
                         f'Invalid argument types for `{op.name}`: '
                         f'{(arg1_type.name, arg2_type.name, arg3_type.name, syscall_type.name)}',
-                        op.token.loc)
+                        op.token)
             else:
                 raise_error(f'Unhandled intrinsic: {op.name}',
                             op.token.loc)
@@ -1007,7 +1035,7 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
         if len(rprogram) == 0:
             raise_error(f'Expected `end` at the end of empty macro definition but found: `{macro_name.value}`',
                         macro_name.loc)
-        macros[macro_name.value] = Macro([], token.loc)
+        macros[macro_name.value] = Macro([], token.loc, macro_name.value)
         block_count = 0
         while len(rprogram) > 0:
             next_token = rprogram.pop()
@@ -1018,7 +1046,6 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
             elif next_token.type == TokenType.KEYWORD and next_token.value in (
                     Keyword.MACRO, Keyword.IF, Keyword.WHILE):
                 block_count += 1
-            next_token.expanded_from = macros[macro_name.value]
             macros[macro_name.value].tokens.append(next_token)
         if next_token.type != TokenType.KEYWORD or next_token.value != Keyword.END:
             raise_error(f'Expected `end` at the end of macro definition but found: `{next_token.value}`',
@@ -1063,7 +1090,10 @@ def compile_tokens_to_program(token_program: List[Token]) -> List[Op]:
             current_macro.expand_count += 1
             if current_macro.expand_count > MACRO_EXPANSION_LIMIT:
                 raise_error(f'Expansion limit reached for macro: {token.value}', current_macro.loc)
-            rprogram.extend(reversed(current_macro.tokens))
+            for i in range(len(current_macro.tokens) - 1, -1, -1):
+                current_macro.tokens[i].expanded_from = token
+                current_macro.tokens[i].expanded_count = token.expanded_count + 1
+                rprogram.append(current_macro.tokens[i])
             continue
         if token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.INCLUDE):
             expand_keyword_to_tokens(token, rprogram, macros)
