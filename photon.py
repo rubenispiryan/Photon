@@ -30,7 +30,7 @@ def traceback_message(frame: int = 1) -> None:
     caller_info = caller_frame[frame]
     caller_function = caller_info.function
     trace_message = f'Error message originated inside: {caller_function}'
-    print(make_log_message('[ERROR] ' + trace_message, Loc(filename=os.path.abspath(caller_info.filename),
+    print(make_log_message('[ERROR] ' + trace_message, Loc(filename='./photon.py',
                                                            line=caller_info.lineno - 1,
                                                            col=0)), file=sys.stderr)
 
@@ -1038,7 +1038,7 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
         found = False
         for include_filepath in (include_filepath, std_filepath):
             if os.path.isfile(include_filepath):
-                lexed_include = lex_file(os.path.abspath(include_filepath))
+                lexed_include = lex_file(include_filepath)
                 rprogram.extend(reversed(lexed_include))
                 found = True
         if not found:
@@ -1170,7 +1170,7 @@ if __name__ == '__main__':
         usage_help()
         exit(1)
     filename_arg = argv[0]
-    file_path_arg = os.path.abspath(filename_arg)
+    file_path_arg = filename_arg
     program_stack = lex_file(file_path_arg)
     program_referenced = compile_tokens_to_program(program_stack)
     type_check_program(program_referenced)
