@@ -18,6 +18,10 @@ macro strlen
    swap -
 end
 
+macro argv[n]
+    8 * argv + ,64 int->ptr
+end
+
 macro dup2 over over end
 macro drop2 drop drop end
 

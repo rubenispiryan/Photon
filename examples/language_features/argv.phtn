@@ -4,16 +4,7 @@ include "std.phtn"
 "important test of string functionality" strlen == print
 
 
-argv argc
-
-// skip the file name (argv[0])
-swap 8 + swap 1 -
-
-
-while dup 0 > do
-  swap
-  dup ,64 int->ptr dup strlen swap writeln
-  8 +
-  swap
-  1 -
-end drop2
+1 while dup argc < do
+    dup argv[n] dup strlen swap writeln
+    1 +
+end drop
