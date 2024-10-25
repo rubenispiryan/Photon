@@ -46,9 +46,11 @@ def read_expected(filename: str) -> str | None:
         else:
             return None
 
+
 def create_expected_file(filename: str) -> None:
     with open(filename, 'w') as f:
         f.write('')
+
 
 def add_expected_output(filename: str, expected: str) -> None:
     with open(filename, 'a') as f:
@@ -71,32 +73,55 @@ def create_examples() -> None:
         print(f'Snapshot of {filename} added successfully')
 
 
-def check_examples() -> None:
+def check_examples(debug: bool = False) -> dict[str, str]:
     filenames = filter(lambda x: x.endswith('.phtn'), get_files('./examples'))
+    summary = {}
     for filename in filenames:
         if (expected := read_expected(filename)) is None:
             print(f'Tests for {filename} do not exist')
             continue
         simulated_out = execute('sim', filename)
         compiled_out = execute('com', filename, flags='--run')
-        assert compiled_out == expected, (
-            f'Output from compilation:\n'
-            f'  {compiled_out!r}\n'
-            f'Expected:\n'
-            f'  {expected!r}\n'
-            f'Compilation and Test of {filename} do not match')
-        assert simulated_out == expected, (
-            f'Output from simulation:\n'
-            f'{simulated_out!r}\n'
-            f'Expect:\n'
-            f'{expected!r}\n'
-            f'Simulation and Test of {filename} do not match')
-        print(f'Test of {filename} passed successfully')
+        if compiled_out != expected:
+            if debug:
+                print(
+                    f'Expected:\n'
+                    f'  {expected}\n'
+                    f'Output from compilation:\n'
+                    f'  {compiled_out}\n', file=sys.stderr)
+            print(f'Compilation and Test of {filename} do not match', file=sys.stderr)
+            summary[filename] = 'COM:\n' + compiled_out
+        elif simulated_out != expected:
+            if debug:
+                print(
+                    f'Expect:\n'
+                    f'{expected}\n'
+                    f'Output from simulation:\n'
+                    f'{simulated_out}\n', file=sys.stderr)
+            print(f'Simulation and Test of {filename} do not match', file=sys.stderr)
+            summary[filename] = 'SIM:\n' + simulated_out
+        else:
+            print(f'Test of {filename} passed successfully')
+            summary[filename] = ''
+    return summary
+
+
+def print_summary(summary: dict[str, str]) -> None:
+    count_passed = 0
+    failed_outputs = ''
+    for filename in summary:
+        if not summary[filename]:
+            count_passed += 1
+        else:
+            failed_outputs += f'{filename}:\n{summary[filename]}'
+    print(f'Total tests: {len(summary)}, Passed: {count_passed}, Failed: {len(summary) - count_passed}')
+    print(f'Failed tests:\n{failed_outputs}')
+
 
 
 if __name__ == '__main__':
     if len(sys.argv) == 1:
-        check_examples()
+        print_summary(check_examples())
     elif len(sys.argv) == 2 and sys.argv[1] == '--snapshot':
         create_expected_file(TEST_FILE_NAME)
         create_examples()
