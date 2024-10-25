@@ -123,10 +123,26 @@ Error message originated inside: parse_keyword
 `end` can only be used with an `if`, `else`, `while` or `macro`
 Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/exceptions/if_else_overflow.phtn
+STDOUT:
+Error message originated inside: type_check_program
+Both branches of an if-else block must produce the same stack types
+Expected Stack Types: []
+Actual Stack Types: [<DataType.INT: 1>]
+Exit code: 1
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/infinite_macro.phtn
 STDOUT:
 Error message originated inside: compile_tokens_to_program
 Expansion limit reached for macro: a
+Exit code: 1
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/exceptions/if_overflow.phtn
+STDOUT:
+Error message originated inside: type_check_program
+Stack types cannot be altered after an else-less if block
+Expected Stack Types: []
+Actual Stack Types: [<DataType.INT: 1>]
 Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/exit.phtn
@@ -144,6 +160,14 @@ STDOUT:
 Error message originated inside: expand_keyword_to_tokens
 Redefinition of existing macro: `print1`
 Macro `print1` was defined at this location
+Exit code: 1
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/exceptions/while_overflow.phtn
+STDOUT:
+Error message originated inside: type_check_program
+Stack types cannot be altered after a while-do condition
+Expected Stack Types: [<DataType.INT: 1>]
+Actual Stack Types: [<DataType.INT: 1>, <DataType.INT: 1>]
 Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/euler/problem_4.phtn
