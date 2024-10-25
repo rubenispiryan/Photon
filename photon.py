@@ -138,7 +138,8 @@ class Token:
     value: int | str | Keyword
     loc: Loc
     name: str
-    expanded_from: Optional['Macro'] = None
+    tokens: list['Token'] | None = None
+    expanded_from: Optional['Token'] = None
     expanded_count: int = 0
 
 
@@ -149,14 +150,6 @@ class Op:
     name: str
     operand: int | str | Intrinsic | None = None
     addr: int | None = None
-
-@dataclass
-class Macro:
-    tokens: List[Token]
-    loc: Loc
-    name: str
-    expanded_from: Token | None = None
-    expand_count: int = 0
 
 
 KEYWORD_NAMES = {
@@ -236,7 +229,8 @@ def raise_error(message: str, place: Loc | Token, frame: int = 2) -> NoReturn:
         expanded_count = place.expanded_count
         expand_place = place
         while i < MACRO_TRACEBACK_LIMIT and i < expanded_count:
-            notify_user(f'Operation expanded from macro: {expand_place.expanded_from.value}', loc=expand_place.expanded_from.loc)
+            assert expand_place.expanded_from is not None, 'Bug in macro expansion count'
+            notify_user(f'Operation expanded from macro: {expand_place.expanded_from.name}', loc=expand_place.expanded_from.loc)
             expand_place = expand_place.expanded_from
             i += 1
         place = place.loc
@@ -1017,7 +1011,7 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> 
         raise_error(f'Unknown keyword token: {token.value}', token.loc)
 
 
-def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[str, Macro]) -> NoReturn | None:
+def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[str, Token]) -> NoReturn | None:
     assert len(Keyword) == 7, 'Exhaustive handling of keywords in compile_keyword_to_program'
     if token.value == Keyword.MACRO:
         if len(rprogram) == 0:
@@ -1035,7 +1029,8 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
         if len(rprogram) == 0:
             raise_error(f'Expected `end` at the end of empty macro definition but found: `{macro_name.value}`',
                         macro_name.loc)
-        macros[macro_name.value] = Macro([], token.loc, macro_name.value)
+        macros[macro_name.value] = Token(TokenType.KEYWORD, Keyword.MACRO,
+                                         loc=token.loc, name=macro_name.value, tokens=[])
         block_count = 0
         while len(rprogram) > 0:
             next_token = rprogram.pop()
@@ -1046,7 +1041,9 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
             elif next_token.type == TokenType.KEYWORD and next_token.value in (
                     Keyword.MACRO, Keyword.IF, Keyword.WHILE):
                 block_count += 1
-            macros[macro_name.value].tokens.append(next_token)
+            macro_tokens = macros[macro_name.value].tokens
+            assert macro_tokens is not None, 'Macro tokens not saved'
+            macro_tokens.append(next_token)
         if next_token.type != TokenType.KEYWORD or next_token.value != Keyword.END:
             raise_error(f'Expected `end` at the end of macro definition but found: `{next_token.value}`',
                         next_token.loc)
@@ -1080,16 +1077,17 @@ def compile_tokens_to_program(token_program: List[Token]) -> List[Op]:
     stack: List[int] = []
     rprogram = list(reversed(token_program))
     program: List[Op] = []
-    macros: Dict[str, Macro] = {}
+    macros: Dict[str, Token] = {}
     i = 0
     while len(rprogram) > 0:
         token = rprogram.pop()
         if token.value in macros:
             assert type(token.value) == str, 'Compiler Error: non string macro name was saved'
             current_macro = macros[token.value]
-            current_macro.expand_count += 1
-            if current_macro.expand_count > MACRO_EXPANSION_LIMIT:
+            current_macro.expanded_count += 1
+            if current_macro.expanded_count > MACRO_EXPANSION_LIMIT:
                 raise_error(f'Expansion limit reached for macro: {token.value}', current_macro.loc)
+            assert current_macro.tokens is not None, 'Macro tokens not saved'
             for i in range(len(current_macro.tokens) - 1, -1, -1):
                 current_macro.tokens[i].expanded_from = token
                 current_macro.tokens[i].expanded_count = token.expanded_count + 1
