@@ -251,7 +251,7 @@ def ensure_argument_count(stack_length: int, op: Op, required: int) -> None | No
     if stack_length < required:
         traceback_message(2)
         raise_error(f'Not enough arguments for: {op.name}, found: {stack_length} but required: {required}',
-                    op.token.loc)
+                    op.token)
     return None
 
 

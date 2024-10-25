@@ -115,7 +115,8 @@ def print_summary(summary: dict[str, str]) -> None:
         else:
             failed_outputs += f'{filename}:\n{summary[filename]}'
     print(f'Total tests: {len(summary)}, Passed: {count_passed}, Failed: {len(summary) - count_passed}')
-    print(f'Failed tests:\n{failed_outputs}')
+    if failed_outputs:
+        print(f'Failed tests:\n{failed_outputs}')
 
 
 
