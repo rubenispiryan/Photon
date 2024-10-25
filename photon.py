@@ -95,7 +95,7 @@ class Intrinsic(Enum):
     SYSCALL3 = auto()
     ARGC = auto()
     ARGV = auto()
-
+    CAST_PTR = auto()
 
 class OpType(Enum):
     PUSH_INT = auto()
@@ -193,6 +193,7 @@ INTRINSIC_NAMES = {
     'syscall3': Intrinsic.SYSCALL3,
     'argc': Intrinsic.ARGC,
     'argv': Intrinsic.ARGV,
+    'int->ptr': Intrinsic.CAST_PTR
 }
 
 assert len(INTRINSIC_NAMES) == len(Intrinsic), 'Exhaustive handling of intrinsics'
@@ -230,7 +231,7 @@ def raise_error(message: str, place: Loc | Token, frame: int = 2) -> NoReturn:
         expand_place = place
         while i < MACRO_TRACEBACK_LIMIT and i < expanded_count:
             assert expand_place.expanded_from is not None, 'Bug in macro expansion count'
-            notify_user(f'Operation expanded from macro: {expand_place.expanded_from.name}',
+            notify_user(f'Operation expanded from macro: {expand_place.expanded_from.value}',
                         loc=expand_place.expanded_from.loc)
             expand_place = expand_place.expanded_from
             i += 1
@@ -325,7 +326,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
                 raise_error('Stack types cannot be altered after a while-do condition', op.token)
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 28, 'Exhaustive handling of intrinsics in type check'
+            assert len(Intrinsic) == 29, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -350,7 +351,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 elif a_type == DataType.INT and b_type == DataType.PTR:
                     stack.append((DataType.PTR, op.token.loc))
                 elif a_type == DataType.PTR and b_type == DataType.PTR:
-                    stack.append((DataType.PTR, op.token.loc))
+                    stack.append((DataType.INT, op.token.loc))
                 else:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
@@ -478,19 +479,47 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
             elif op.operand == Intrinsic.ARGV:
                 stack.append((DataType.PTR, op.token.loc))
             elif op.operand == Intrinsic.LOAD:
-                raise NotImplementedError
+                ensure_argument_count(len(stack), op, 1)
+                a_type, a_loc = stack.pop()
+                if a_type != DataType.PTR:
+                    if debug:
+                        notify_argument_origin(a_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+                stack.append((DataType.INT, op.token.loc))
             elif op.operand == Intrinsic.STORE:
-                raise NotImplementedError
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type != DataType.INT or b_type != DataType.PTR:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.LOAD64:
-                raise NotImplementedError
+                ensure_argument_count(len(stack), op, 1)
+                a_type, a_loc = stack.pop()
+                if a_type != DataType.PTR:
+                    if debug:
+                        notify_argument_origin(a_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+                stack.append((DataType.INT, op.token.loc))
             elif op.operand == Intrinsic.STORE64:
-                raise NotImplementedError
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type != DataType.INT or b_type != DataType.PTR:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.BITOR:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
                 b_type, b_loc = stack.pop()
                 if a_type == DataType.INT and b_type == DataType.INT:
                     stack.append((DataType.INT, op.token.loc))
+                elif a_type == DataType.BOOL and b_type == DataType.BOOL:
+                    stack.append((DataType.BOOL, op.token.loc))
                 else:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
@@ -502,6 +531,8 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 b_type, b_loc = stack.pop()
                 if a_type == DataType.INT and b_type == DataType.INT:
                     stack.append((DataType.INT, op.token.loc))
+                elif a_type == DataType.BOOL and b_type == DataType.BOOL:
+                    stack.append((DataType.BOOL, op.token.loc))
                 else:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
@@ -542,6 +573,14 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 stack.append(b)
                 stack.append(a)
                 stack.append(b)
+            elif op.operand == Intrinsic.CAST_PTR:
+                ensure_argument_count(len(stack), op, 1)
+                a_type, a_loc = stack.pop()
+                if a_type != DataType.INT:
+                    if debug:
+                        notify_argument_origin(a_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+                stack.append((DataType.PTR, op.token.loc))
             elif op.operand == Intrinsic.SYSCALL1:
                 ensure_argument_count(len(stack), op, 2)
                 syscall_type, syscall_loc = stack.pop()
@@ -638,7 +677,7 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 assert type(op.operand) == int, 'Jump address must be `int`'
                 i = op.operand
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 28, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 29, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 a = stack.pop()
                 b = stack.pop()
@@ -760,6 +799,9 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 stack.append(b)
                 stack.append(a)
                 stack.append(b)
+            elif op.operand == Intrinsic.CAST_PTR:
+                i += 1
+                continue
             elif op.operand == Intrinsic.SYSCALL1:
                 syscall_number = stack.pop()
                 arg1 = stack.pop()
@@ -838,7 +880,7 @@ def compile_program(program: List[Op]) -> None:
         elif op.type == OpType.WHILE:
             write_base(f'while_{i}:')
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 28, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 29, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -965,6 +1007,8 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('push x1')
                 write_level1('push x0')
                 write_level1('push x1')
+            elif op.operand == Intrinsic.CAST_PTR:
+                continue
             elif op.operand == Intrinsic.SYSCALL1:
                 write_level1('pop x16')
                 write_level1('pop x0')
@@ -1244,7 +1288,7 @@ if __name__ == '__main__':
     file_path_arg = filename_arg
     program_stack = lex_file(file_path_arg)
     program_referenced = compile_tokens_to_program(program_stack)
-    type_check_program(program_referenced)
+    type_check_program(program_referenced, '-d' in argv or '--debug' in argv)
     if subcommand == 'sim':
         simulate_little_endian_macos(program_referenced, argv)
     else:
