@@ -10,7 +10,7 @@ macro ifc if
 end
 
 macro while<10 while dup 10 < do
-    dup 2 % ifc
+    dup 2 % 1 == ifc
     1 +
     end
     drop
@@ -35,3 +35,5 @@ writeargln
 writeargln
 writeargln
 writeargln
+
+drop2

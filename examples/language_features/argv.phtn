@@ -1,7 +1,7 @@
 include "std.phtn"
 
 // to check if memory was allocated correctly for strings
-"important test of string functionality" strlen dup print print
+"important test of string functionality" strlen == print
 
 
 argv argc
@@ -9,10 +9,11 @@ argv argc
 // skip the file name (argv[0])
 swap 8 + swap 1 -
 
+
 while dup 0 > do
   swap
-  dup ,64 dup strlen swap writeln
+  dup ,64 int->ptr dup strlen swap writeln
   8 +
   swap
   1 -
-end
+end drop2
