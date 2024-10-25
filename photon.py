@@ -257,7 +257,9 @@ def notify_argument_origin(loc: Loc, order: int = 1) -> None:
 
 def type_check_program(program: List[Op], debug: bool = False) -> None:
     stack: List[Tuple[DataType, Loc]] = []
+    block_stack: List[int, Op] = [] # convert stack to tuple keeping only DataType, hash and store
     for op in program:
+        assert len(OpType) == 8, 'Exhaustive handling of operations in type check'
         if op.type == OpType.PUSH_INT:
             assert type(op.operand) == int, 'Value for `PUSH_INT` must be `int`'
             stack.append((DataType.INT, op.token.loc))
@@ -266,17 +268,31 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
             stack.append((DataType.INT, op.token.loc))
             stack.append((DataType.PTR, op.token.loc))
         elif op.type == OpType.IF:
-            raise NotImplementedError
+            ensure_argument_count(len(stack), op, 1)
+            a_type, a_loc = stack.pop()
+            if a_type != DataType.BOOL:
+                if debug:
+                    notify_argument_origin(a_loc, order=1)
+                raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+            stack_hash = hash(tuple(map(lambda x: x[0], stack)))
+            block_stack.append((stack_hash, op))
         elif op.type == OpType.ELSE:
-            raise NotImplementedError
+            stack_hash = hash(tuple(map(lambda x: x[0], stack)))
+            block_stack.append((stack_hash, op))
         elif op.type == OpType.END:
-            raise NotImplementedError
+            expected_stack_hash, block = block_stack.pop()
+            if block.type == OpType.IF:
+                stack_hash = hash(tuple(map(lambda x: x[0], stack)))
+                if stack_hash != expected_stack_hash:
+                    raise_error('Stack types cannot be altered after an else-less if block', block.token)
+            else:
+                raise NotImplementedError
         elif op.type == OpType.WHILE:
             raise NotImplementedError
         elif op.type == OpType.DO:
             raise NotImplementedError
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 28, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 28, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
