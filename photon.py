@@ -4,7 +4,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple
+from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple, Optional
 
 MACRO_EXPANSION_LIMIT = 100_000
 
@@ -178,6 +178,7 @@ class Token:
     value: int | str | Keyword
     loc: Loc
     name: str
+    expanded_from: Optional['Macro']
 
 
 @dataclass
@@ -1035,6 +1036,7 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
             elif next_token.type == TokenType.KEYWORD and next_token.value in (
                     Keyword.MACRO, Keyword.IF, Keyword.WHILE):
                 block_count += 1
+            next_token.expanded_from = macros[macro_name.value]
             macros[macro_name.value].tokens.append(next_token)
         if next_token.type != TokenType.KEYWORD or next_token.value != Keyword.END:
             raise_error(f'Expected `end` at the end of macro definition but found: `{next_token.value}`',
