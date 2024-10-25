@@ -8,6 +8,6 @@ include "std.phtn"
         mem swap .64
     end
     swap over +
-end
+end drop2
 
 mem ,64 print

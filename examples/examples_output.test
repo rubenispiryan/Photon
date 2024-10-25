@@ -198,6 +198,7 @@ hello
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/language_features/argv.phtn
+1
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/language_features/strings.phtn

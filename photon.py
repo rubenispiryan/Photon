@@ -4,9 +4,10 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Generator, List, NoReturn, Callable, Dict, TextIO
+from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple, Optional
 
 MACRO_EXPANSION_LIMIT = 100_000
+MACRO_TRACEBACK_LIMIT = 10
 
 
 @dataclass
@@ -14,38 +15,6 @@ class Loc:
     filename: str
     line: int
     col: int
-
-
-def make_log_message(message: str, loc: Loc) -> str:
-    return f'{loc.filename}:{loc.line + 1}:{loc.col + 1}: {message}'
-
-
-def notify_user(message: str, loc: Loc) -> None:
-    print(make_log_message('[NOTE] ' + message, loc))
-
-
-def traceback_message(frame:int = 1) -> None:
-    current_frame = inspect.currentframe()
-    caller_frame = inspect.getouterframes(current_frame)
-    caller_info = caller_frame[frame]
-    caller_function = caller_info.function
-    trace_message = f'Error message originated inside: {caller_function}'
-    print(make_log_message('[ERROR] ' + trace_message, Loc(filename=os.path.abspath(caller_info.filename),
-                                                           line=caller_info.lineno - 1,
-                                                           col=0)), file=sys.stderr)
-
-
-def raise_error(message: str, loc: Loc) -> NoReturn:
-    traceback_message(frame=2)
-    print(make_log_message('[ERROR] ' + message, loc), file=sys.stderr)
-    exit(1)
-
-
-def write_indent(file: TextIO, level: int = 0) -> Callable[[str], None]:
-    def temp(buffer: str) -> None:
-        file.write(' ' * (0 if level == 0 else 4 ** level) + buffer + '\n')
-
-    return temp
 
 
 def asm_setup(write_base: Callable[[str], None], write_level1: Callable[[str], None]) -> None:
@@ -103,19 +72,12 @@ class Intrinsic(Enum):
     MUL = auto()
     DIV = auto()
     PRINT = auto()
-    OP_EQUAL = auto()
+    EQUAL = auto()
     LT = auto()
     GT = auto()
     LTE = auto()
     GTE = auto()
     NE = auto()
-    MEM = auto()
-    LOAD = auto()
-    STORE = auto()
-    LOAD64 = auto()
-    STORE64 = auto()
-    SYSCALL1 = auto()
-    SYSCALL3 = auto()
     DUP = auto()
     DROP = auto()
     BITAND = auto()
@@ -124,7 +86,16 @@ class Intrinsic(Enum):
     SHIFT_LEFT = auto()
     SWAP = auto()
     OVER = auto()
-
+    MEM = auto()
+    LOAD = auto()
+    STORE = auto()
+    LOAD64 = auto()
+    STORE64 = auto()
+    SYSCALL1 = auto()
+    SYSCALL3 = auto()
+    ARGC = auto()
+    ARGV = auto()
+    CAST_PTR = auto()
 
 class OpType(Enum):
     PUSH_INT = auto()
@@ -135,15 +106,6 @@ class OpType(Enum):
     ELSE = auto()
     WHILE = auto()
     DO = auto()
-
-
-@dataclass
-class Op:
-    type: OpType
-    loc: Loc
-    name: str
-    operand: int | str | Intrinsic | None = None
-    addr: int | None = None
 
 
 class Keyword(Enum):
@@ -164,19 +126,30 @@ class TokenType(Enum):
     CHAR = auto()
 
 
+class DataType(Enum):
+    INT = auto()
+    PTR = auto()
+    BOOL = auto()
+
+
 @dataclass
 class Token:
     type: TokenType
     value: int | str | Keyword
     loc: Loc
     name: str
+    tokens: list['Token'] | None = None
+    expanded_from: Optional['Token'] = None
+    expanded_count: int = 0
 
 
 @dataclass
-class Macro:
-    tokens: List[Token]
-    loc: Loc
-    expand_count: int = 0
+class Op:
+    type: OpType
+    token: Token
+    name: str
+    operand: int | str | Intrinsic | None = None
+    addr: int | None = None
 
 
 KEYWORD_NAMES = {
@@ -197,17 +170,10 @@ INTRINSIC_NAMES = {
     '-': Intrinsic.SUB,
     '*': Intrinsic.MUL,
     '/': Intrinsic.DIV,
-    '==': Intrinsic.OP_EQUAL,
+    '==': Intrinsic.EQUAL,
     '>': Intrinsic.GT,
     '<': Intrinsic.LT,
     'dup': Intrinsic.DUP,
-    'mem': Intrinsic.MEM,
-    '.': Intrinsic.STORE,
-    ',': Intrinsic.LOAD,
-    '.64': Intrinsic.STORE64,
-    ',64': Intrinsic.LOAD64,
-    'syscall1': Intrinsic.SYSCALL1,
-    'syscall3': Intrinsic.SYSCALL3,
     'drop': Intrinsic.DROP,
     '&': Intrinsic.BITAND,
     '|': Intrinsic.BITOR,
@@ -218,26 +184,449 @@ INTRINSIC_NAMES = {
     '>=': Intrinsic.GTE,
     '<=': Intrinsic.LTE,
     '!=': Intrinsic.NE,
+    'mem': Intrinsic.MEM,
+    '.': Intrinsic.STORE,
+    ',': Intrinsic.LOAD,
+    '.64': Intrinsic.STORE64,
+    ',64': Intrinsic.LOAD64,
+    'syscall1': Intrinsic.SYSCALL1,
+    'syscall3': Intrinsic.SYSCALL3,
+    'argc': Intrinsic.ARGC,
+    'argv': Intrinsic.ARGV,
+    'int->ptr': Intrinsic.CAST_PTR
 }
 
 assert len(INTRINSIC_NAMES) == len(Intrinsic), 'Exhaustive handling of intrinsics'
 
-NULL_POINTER_PADDING = 1 # padding to make 0 an invalid address
-PTR_CAPACITY = 640 + NULL_POINTER_PADDING
-STR_CAPACITY = 640_000 + PTR_CAPACITY
+NULL_POINTER_PADDING = 1  # padding to make 0 an invalid address
+ARG_PTR_CAPACITY = 640 + NULL_POINTER_PADDING
+STR_CAPACITY = 640_000 + ARG_PTR_CAPACITY
 MEM_CAPACITY = 640_000 + STR_CAPACITY
 
 
-def simulate_program(program: List[Op], argv: List[str]) -> None:
+def make_log_message(message: str, loc: Loc) -> str:
+    return f'{loc.filename}:[{loc.line + 1}:{loc.col}]: {message}'
+
+
+def notify_user(message: str, loc: Loc) -> None:
+    print(make_log_message('[NOTE] ' + message, loc))
+
+
+def traceback_message(frame: int = 1) -> None:
+    current_frame = inspect.currentframe()
+    caller_frame = inspect.getouterframes(current_frame)
+    caller_info = caller_frame[frame]
+    caller_function = caller_info.function
+    trace_message = f'Error message originated inside: {caller_function}'
+    print(make_log_message('[ERROR] ' + trace_message, Loc(filename='./photon.py',
+                                                           line=caller_info.lineno - 1,
+                                                           col=0)), file=sys.stderr)
+
+
+def raise_error(message: str, place: Loc | Token, frame: int = 2) -> NoReturn:
+    traceback_message(frame=frame)
+    if isinstance(place, Token):
+        i = 0
+        expanded_count = place.expanded_count
+        expand_place = place
+        while i < MACRO_TRACEBACK_LIMIT and i < expanded_count:
+            assert expand_place.expanded_from is not None, 'Bug in macro expansion count'
+            notify_user(f'Operation expanded from macro: {expand_place.expanded_from.value}',
+                        loc=expand_place.expanded_from.loc)
+            expand_place = expand_place.expanded_from
+            i += 1
+        place = place.loc
+    print(make_log_message('[ERROR] ' + message, place), file=sys.stderr)
+    exit(1)
+
+
+def write_indent(file: TextIO, level: int = 0) -> Callable[[str], None]:
+    def temp(buffer: str) -> None:
+        file.write(' ' * (0 if level == 0 else 4 ** level) + buffer + '\n')
+
+    return temp
+
+
+def ensure_argument_count(stack_length: int, op: Op, required: int) -> None | NoReturn:
+    if stack_length < required:
+        traceback_message(2)
+        raise_error(f'Not enough arguments for: {op.name}, found: {stack_length} but required: {required}',
+                    op.token.loc)
+    return None
+
+
+def notify_argument_origin(loc: Loc, order: int = 1) -> None:
+    notify_user(f'Argument {order} was created at this location', loc)
+
+
+DataTypeStack = List[Tuple[DataType, Loc]]
+
+
+def type_check_program(program: List[Op], debug: bool = False) -> None:
+    stack: DataTypeStack = []
+    block_stack: List[Tuple[DataTypeStack, Op]] = []  # convert stack to tuple keeping only DataType, hash and store
+    for op in program:
+        assert len(OpType) == 8, 'Exhaustive handling of operations in type check'
+        if op.type == OpType.PUSH_INT:
+            assert type(op.operand) == int, 'Value for `PUSH_INT` must be `int`'
+            stack.append((DataType.INT, op.token.loc))
+        elif op.type == OpType.PUSH_STR:
+            assert type(op.operand) == str, 'Value for `PUSH_STR` must be `str`'
+            stack.append((DataType.INT, op.token.loc))
+            stack.append((DataType.PTR, op.token.loc))
+        elif op.type == OpType.IF:
+            ensure_argument_count(len(stack), op, 1)
+            a_type, a_loc = stack.pop()
+            if a_type != DataType.BOOL:
+                if debug:
+                    notify_argument_origin(a_loc, order=1)
+                raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+            block_stack.append((stack.copy(), op))
+        elif op.type == OpType.ELSE:
+            before_if_stack, if_op = block_stack.pop()
+            assert if_op.type == OpType.IF, '[BUG] else without if'
+            block_stack.append((stack.copy(), op))
+            stack = before_if_stack
+        elif op.type == OpType.END:
+            stack_before_block, block = block_stack.pop()
+            expected_stack = list(map(lambda x: x[0], stack_before_block))
+            current_stack = list(map(lambda x: x[0], stack))
+            if block.type == OpType.IF:
+                if current_stack != expected_stack:
+                    notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
+                    notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
+                    raise_error('Stack types cannot be altered after an else-less if block', op.token)
+            elif block.type == OpType.ELSE:
+                if current_stack != expected_stack:
+                    notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
+                    notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
+                    raise_error('Both branches of an if-else block must produce the same stack types', op.token)
+            elif block.type == OpType.WHILE:
+                if current_stack != expected_stack:
+                    notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
+                    notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
+                    raise_error('Stack types cannot be altered after a while block', op.token)
+            else:
+                assert False, 'Unreachable'
+        elif op.type == OpType.WHILE:
+            block_stack.append((stack.copy(), op))
+        elif op.type == OpType.DO:
+            ensure_argument_count(len(stack), op, 1)
+            a_type, a_loc = stack.pop()
+            if a_type != DataType.BOOL:
+                if debug:
+                    notify_argument_origin(a_loc, order=1)
+                raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+            before_while_stack, while_op = block_stack[-1]
+            assert while_op.type == OpType.WHILE, '[BUG] do without while'
+            expected_stack = list(map(lambda x: x[0], before_while_stack))
+            current_stack = list(map(lambda x: x[0], stack))
+            if current_stack != expected_stack:
+                notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
+                notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
+                raise_error('Stack types cannot be altered after a while-do condition', op.token)
+        elif op.type == OpType.INTRINSIC:
+            assert len(Intrinsic) == 29, 'Exhaustive handling of intrinsics in type check'
+            if op.operand == Intrinsic.ADD:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type == DataType.INT and b_type == DataType.INT:
+                    stack.append((DataType.INT, op.token.loc))
+                elif a_type == DataType.PTR and b_type == DataType.INT:
+                    stack.append((DataType.PTR, op.token.loc))
+                elif a_type == DataType.INT and b_type == DataType.PTR:
+                    stack.append((DataType.PTR, op.token.loc))
+                else:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.SUB:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type == DataType.INT and b_type == DataType.INT:
+                    stack.append((DataType.INT, op.token.loc))
+                elif a_type == DataType.INT and b_type == DataType.PTR:
+                    stack.append((DataType.PTR, op.token.loc))
+                elif a_type == DataType.PTR and b_type == DataType.PTR:
+                    stack.append((DataType.INT, op.token.loc))
+                else:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.MUL:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type == DataType.INT and b_type == DataType.INT:
+                    stack.append((DataType.INT, op.token.loc))
+                else:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.DIV:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type == DataType.INT and b_type == DataType.INT:
+                    stack.append((DataType.INT, op.token.loc))
+                else:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.PRINT:
+                ensure_argument_count(len(stack), op, 1)
+                stack.pop()
+            elif op.operand == Intrinsic.EQUAL:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type == DataType.INT and b_type == DataType.INT:
+                    stack.append((DataType.BOOL, op.token.loc))
+                elif a_type == DataType.PTR and b_type == DataType.PTR:
+                    stack.append((DataType.BOOL, op.token.loc))
+                elif a_type == DataType.BOOL and b_type == DataType.BOOL:
+                    stack.append((DataType.BOOL, op.token.loc))
+                else:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.LT:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type == DataType.INT and b_type == DataType.INT:
+                    stack.append((DataType.BOOL, op.token.loc))
+                elif a_type == DataType.PTR and b_type == DataType.PTR:
+                    stack.append((DataType.BOOL, op.token.loc))
+                else:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.GT:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type == DataType.INT and b_type == DataType.INT:
+                    stack.append((DataType.BOOL, op.token.loc))
+                elif a_type == DataType.PTR and b_type == DataType.PTR:
+                    stack.append((DataType.BOOL, op.token.loc))
+                else:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.GTE:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type == DataType.INT and b_type == DataType.INT:
+                    stack.append((DataType.BOOL, op.token.loc))
+                elif a_type == DataType.PTR and b_type == DataType.PTR:
+                    stack.append((DataType.BOOL, op.token.loc))
+                else:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.LTE:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type == DataType.INT and b_type == DataType.INT:
+                    stack.append((DataType.BOOL, op.token.loc))
+                elif a_type == DataType.PTR and b_type == DataType.PTR:
+                    stack.append((DataType.BOOL, op.token.loc))
+                else:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.NE:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type == DataType.INT and b_type == DataType.INT:
+                    stack.append((DataType.BOOL, op.token.loc))
+                elif a_type == DataType.PTR and b_type == DataType.PTR:
+                    stack.append((DataType.BOOL, op.token.loc))
+                elif a_type == DataType.BOOL and b_type == DataType.BOOL:
+                    stack.append((DataType.BOOL, op.token.loc))
+                else:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.DUP:
+                ensure_argument_count(len(stack), op, 1)
+                a = stack.pop()
+                stack.append(a)
+                stack.append(a)
+            elif op.operand == Intrinsic.DROP:
+                ensure_argument_count(len(stack), op, 1)
+                stack.pop()
+            elif op.operand == Intrinsic.MEM:
+                stack.append((DataType.PTR, op.token.loc))
+            elif op.operand == Intrinsic.ARGC:
+                stack.append((DataType.INT, op.token.loc))
+            elif op.operand == Intrinsic.ARGV:
+                stack.append((DataType.PTR, op.token.loc))
+            elif op.operand == Intrinsic.LOAD:
+                ensure_argument_count(len(stack), op, 1)
+                a_type, a_loc = stack.pop()
+                if a_type != DataType.PTR:
+                    if debug:
+                        notify_argument_origin(a_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+                stack.append((DataType.INT, op.token.loc))
+            elif op.operand == Intrinsic.STORE:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type != DataType.INT or b_type != DataType.PTR:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.LOAD64:
+                ensure_argument_count(len(stack), op, 1)
+                a_type, a_loc = stack.pop()
+                if a_type != DataType.PTR:
+                    if debug:
+                        notify_argument_origin(a_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+                stack.append((DataType.INT, op.token.loc))
+            elif op.operand == Intrinsic.STORE64:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type != DataType.INT or b_type != DataType.PTR:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.BITOR:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type == DataType.INT and b_type == DataType.INT:
+                    stack.append((DataType.INT, op.token.loc))
+                elif a_type == DataType.BOOL and b_type == DataType.BOOL:
+                    stack.append((DataType.BOOL, op.token.loc))
+                else:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.BITAND:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type == DataType.INT and b_type == DataType.INT:
+                    stack.append((DataType.INT, op.token.loc))
+                elif a_type == DataType.BOOL and b_type == DataType.BOOL:
+                    stack.append((DataType.BOOL, op.token.loc))
+                else:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.SHIFT_RIGHT:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type == DataType.INT and b_type == DataType.INT:
+                    stack.append((DataType.INT, op.token.loc))
+                else:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.SHIFT_LEFT:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type == DataType.INT and b_type == DataType.INT:
+                    stack.append((DataType.INT, op.token.loc))
+                else:
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.SWAP:
+                ensure_argument_count(len(stack), op, 2)
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(a)
+                stack.append(b)
+            elif op.operand == Intrinsic.OVER:
+                ensure_argument_count(len(stack), op, 2)
+                a = stack.pop()
+                b = stack.pop()
+                stack.append(b)
+                stack.append(a)
+                stack.append(b)
+            elif op.operand == Intrinsic.CAST_PTR:
+                ensure_argument_count(len(stack), op, 1)
+                a_type, a_loc = stack.pop()
+                if a_type != DataType.INT:
+                    if debug:
+                        notify_argument_origin(a_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+                stack.append((DataType.PTR, op.token.loc))
+            elif op.operand == Intrinsic.SYSCALL1:
+                ensure_argument_count(len(stack), op, 2)
+                syscall_type, syscall_loc = stack.pop()
+                arg1_type, arg1_loc = stack.pop()
+                if syscall_type != DataType.INT or arg1_type != DataType.INT:
+                    if debug:
+                        notify_argument_origin(arg1_loc, order=1)
+                        notify_argument_origin(syscall_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(arg1_type.name, syscall_type.name)}',
+                                op.token)
+            elif op.operand == Intrinsic.SYSCALL3:
+                ensure_argument_count(len(stack), op, 4)
+                syscall_type, syscall_loc = stack.pop()
+                arg3_type, arg3_loc = stack.pop()
+                arg2_type, arg2_loc = stack.pop()
+                arg1_type, arg1_loc = stack.pop()
+                if syscall_type != DataType.INT or arg1_type != DataType.INT:
+                    if debug:
+                        notify_argument_origin(arg1_loc, order=1)
+                        notify_argument_origin(arg2_loc, order=2)
+                        notify_argument_origin(arg3_loc, order=3)
+                        notify_argument_origin(syscall_loc, order=4)
+                    raise_error(
+                        f'Invalid argument types for `{op.name}`: '
+                        f'{(arg1_type.name, arg2_type.name, arg3_type.name, syscall_type.name)}',
+                        op.token)
+            else:
+                raise_error(f'Unhandled intrinsic: {op.name}',
+                            op.token.loc)
+        else:
+            raise_error(f'Unhandled op: {op.name}',
+                        op.token.loc)
+    if len(stack) != 0:
+        current_stack = list(map(lambda x: x[0], stack))
+        raise_error(f'Unhandled data on the stack: {current_stack}', stack[-1][1])
+
+
+def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) -> None:
     stack: List = []
     assert len(OpType) == 8, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(MEM_CAPACITY)
     allocated_strs = {}
     ptr_size = NULL_POINTER_PADDING
-    str_size = PTR_CAPACITY
-    stack.append(ptr_size)
-    for arg in argv:
+    str_size = ARG_PTR_CAPACITY
+    for arg in input_arguments:
         arg_value = arg.encode('utf-8')
         n = len(arg_value)
         mem[str_size:str_size + n] = arg_value
@@ -246,171 +635,179 @@ def simulate_program(program: List[Op], argv: List[str]) -> None:
         ptr_size += 8
         str_size += n + 1
         assert str_size <= STR_CAPACITY, "String buffer overflow"
-        assert ptr_size <= PTR_CAPACITY, "Pointer buffer overflow"
-    stack.append(len(argv))
+        assert ptr_size <= ARG_PTR_CAPACITY, "Argument pointer buffer overflow"
+    argc = len(input_arguments)
+    argv_start = NULL_POINTER_PADDING
     while i < len(program):
-        operation = program[i]
-        if operation.type == OpType.PUSH_INT:
-            assert type(operation.operand) == int, 'Value for `PUSH_INT` must be `int`'
-            stack.append(operation.operand)
-        elif operation.type == OpType.PUSH_STR:
-            assert type(operation.operand) == str, 'Value for `PUSH_STR` must be `str`'
-            bs = bytes(operation.operand, 'utf-8')
+        op = program[i]
+        if op.type == OpType.PUSH_INT:
+            assert type(op.operand) == int, 'Value for `PUSH_INT` must be `int`'
+            stack.append(op.operand)
+        elif op.type == OpType.PUSH_STR:
+            assert type(op.operand) == str, 'Value for `PUSH_STR` must be `str`'
+            bs = bytes(op.operand, 'utf-8')
             n = len(bs)
             stack.append(n)
-            if operation.operand not in allocated_strs:
-                allocated_strs[operation.operand] = str_size
+            if op.operand not in allocated_strs:
+                allocated_strs[op.operand] = str_size
                 mem[str_size:str_size + n] = bs
                 str_size += n
                 if str_size > STR_CAPACITY:
-                    raise_error('String buffer overflow', operation.loc)
-            stack.append(allocated_strs[operation.operand])
-        elif operation.type == OpType.IF:
+                    raise_error('String buffer overflow', op.token.loc)
+            stack.append(allocated_strs[op.operand])
+        elif op.type == OpType.IF:
             a = stack.pop()
             if a == 0:
-                assert type(operation.operand) == int, 'Jump address must be `int`'
-                i = operation.operand
-        elif operation.type == OpType.ELSE:
-            assert type(operation.operand) == int, 'Jump address must be `int`'
-            i = operation.operand
-        elif operation.type == OpType.END:
-            if operation.operand is not None:
-                assert type(operation.operand) == int, 'Jump address must be `int`'
-                i = operation.operand
-        elif operation.type == OpType.WHILE:
+                assert type(op.operand) == int, 'Jump address must be `int`'
+                i = op.operand
+        elif op.type == OpType.ELSE:
+            assert type(op.operand) == int, 'Jump address must be `int`'
+            i = op.operand
+        elif op.type == OpType.END:
+            if op.operand is not None:
+                assert type(op.operand) == int, 'Jump address must be `int`'
+                i = op.operand
+        elif op.type == OpType.WHILE:
             i += 1
             continue
-        elif operation.type == OpType.DO:
+        elif op.type == OpType.DO:
             a = stack.pop()
             assert type(a) == int, 'Arguments for `do` must be `int`'
             if a == 0:
-                assert type(operation.operand) == int, 'Jump address must be `int`'
-                i = operation.operand
-        elif operation.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 26, 'Exhaustive handling of intrinsics in simulation'
-            if operation.operand == Intrinsic.ADD:
+                assert type(op.operand) == int, 'Jump address must be `int`'
+                i = op.operand
+        elif op.type == OpType.INTRINSIC:
+            assert len(Intrinsic) == 29, 'Exhaustive handling of intrinsics in simulation'
+            if op.operand == Intrinsic.ADD:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `+` must be `int`'
                 stack.append(a + b)
-            elif operation.operand == Intrinsic.SUB:
+            elif op.operand == Intrinsic.SUB:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `-` must be `int`'
                 stack.append(b - a)
-            elif operation.operand == Intrinsic.MUL:
+            elif op.operand == Intrinsic.MUL:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `*` must be `int`'
                 stack.append(a * b)
-            elif operation.operand == Intrinsic.DIV:
+            elif op.operand == Intrinsic.DIV:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `/` must be `int`'
                 stack.append(b // a)
-            elif operation.operand == Intrinsic.PRINT:
+            elif op.operand == Intrinsic.PRINT:
                 a = stack.pop()
                 assert type(a) == int, 'Arguments for `print` must be `int`'
                 print(a)
-            elif operation.operand == Intrinsic.OP_EQUAL:
+            elif op.operand == Intrinsic.EQUAL:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `==` must be `int`'
                 stack.append(int(a == b))
-            elif operation.operand == Intrinsic.LT:
+            elif op.operand == Intrinsic.LT:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `<` must be `int`'
                 stack.append(int(b < a))
-            elif operation.operand == Intrinsic.GT:
+            elif op.operand == Intrinsic.GT:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `>` must be `int`'
                 stack.append(int(b > a))
-            elif operation.operand == Intrinsic.GTE:
+            elif op.operand == Intrinsic.GTE:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `>=` must be `int`'
                 stack.append(int(b >= a))
-            elif operation.operand == Intrinsic.LTE:
+            elif op.operand == Intrinsic.LTE:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `<=` must be `int`'
                 stack.append(int(b <= a))
-            elif operation.operand == Intrinsic.NE:
+            elif op.operand == Intrinsic.NE:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `!=` must be `int`'
                 stack.append(int(a != b))
-            elif operation.operand == Intrinsic.DUP:
+            elif op.operand == Intrinsic.DUP:
                 a = stack.pop()
                 assert type(a) == int, 'Arguments for `dup` must be `int`'
                 stack.append(a)
                 stack.append(a)
-            elif operation.operand == Intrinsic.DROP:
+            elif op.operand == Intrinsic.DROP:
                 stack.pop()
-            elif operation.operand == Intrinsic.MEM:
+            elif op.operand == Intrinsic.MEM:
                 stack.append(STR_CAPACITY)
-            elif operation.operand == Intrinsic.LOAD:
+            elif op.operand == Intrinsic.ARGC:
+                stack.append(argc)
+            elif op.operand == Intrinsic.ARGV:
+                stack.append(argv_start)
+            elif op.operand == Intrinsic.LOAD:
                 address = stack.pop()
                 assert type(address) == int, 'Arguments for `,` must be `int`'
                 stack.append(mem[address])
-            elif operation.operand == Intrinsic.STORE:
+            elif op.operand == Intrinsic.STORE:
                 value = stack.pop()
                 address = stack.pop()
                 assert type(value) == type(address) == int, 'Arguments for `.` must be `int`'
                 mem[address] = value & 0xFF
-            elif operation.operand == Intrinsic.LOAD64:
+            elif op.operand == Intrinsic.LOAD64:
                 addr = stack.pop()
                 _bytes = bytearray(8)
                 for offset in range(0, 8):
                     _bytes[offset] = mem[addr + offset]
                 stack.append(int.from_bytes(_bytes, byteorder="little"))
-            elif operation.operand == Intrinsic.STORE64:
+            elif op.operand == Intrinsic.STORE64:
                 store_value64 = stack.pop().to_bytes(length=8, byteorder="little")
                 store_addr64 = stack.pop()
                 for byte in store_value64:
                     mem[store_addr64] = byte
                     store_addr64 += 1
-            elif operation.operand == Intrinsic.BITOR:
+            elif op.operand == Intrinsic.BITOR:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `|` must be `int`'
                 stack.append(a | b)
-            elif operation.operand == Intrinsic.BITAND:
+            elif op.operand == Intrinsic.BITAND:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `&` must be `int`'
                 stack.append(a & b)
-            elif operation.operand == Intrinsic.SHIFT_RIGHT:
+            elif op.operand == Intrinsic.SHIFT_RIGHT:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `>>` must be `int`'
                 stack.append(b >> a)
-            elif operation.operand == Intrinsic.SHIFT_LEFT:
+            elif op.operand == Intrinsic.SHIFT_LEFT:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `<<` must be `int`'
                 stack.append(b << a)
-            elif operation.operand == Intrinsic.SWAP:
+            elif op.operand == Intrinsic.SWAP:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `swap` must be `int`'
                 stack.append(a)
                 stack.append(b)
-            elif operation.operand == Intrinsic.OVER:
+            elif op.operand == Intrinsic.OVER:
                 a = stack.pop()
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `over` must be `int`'
                 stack.append(b)
                 stack.append(a)
                 stack.append(b)
-            elif operation.operand == Intrinsic.SYSCALL1:
+            elif op.operand == Intrinsic.CAST_PTR:
+                i += 1
+                continue
+            elif op.operand == Intrinsic.SYSCALL1:
                 syscall_number = stack.pop()
                 arg1 = stack.pop()
                 if syscall_number == 1:
                     exit(arg1)
-            elif operation.operand == Intrinsic.SYSCALL3:
+            elif op.operand == Intrinsic.SYSCALL3:
                 syscall_number = stack.pop()
                 arg1 = stack.pop()
                 arg2 = stack.pop()
@@ -422,15 +819,15 @@ def simulate_program(program: List[Op], argv: List[str]) -> None:
                     elif arg1 == 2:
                         print(mem[arg2:arg2 + arg3].decode(), end='', file=sys.stderr)
                     else:
-                        raise_error(f'Unknown file descriptor: {arg1}', operation.loc)
+                        raise_error(f'Unknown file descriptor: {arg1}', op.token.loc)
                 else:
-                    raise_error(f'Unknown syscall number: {syscall_number}', operation.loc)
+                    raise_error(f'Unknown syscall number: {syscall_number}', op.token.loc)
             else:
-                raise_error(f'Unhandled intrinsic: {operation.name}',
-                            operation.loc)
+                raise_error(f'Unhandled intrinsic: {op.name}',
+                            op.token.loc)
         else:
-            raise_error(f'Unhandled operation: {operation.name}',
-                        operation.loc)
+            raise_error(f'Unhandled operation: {op.name}',
+                        op.token.loc)
         i += 1
 
 
@@ -444,181 +841,199 @@ def compile_program(program: List[Op]) -> None:
     write_base('.align 3')
     asm_setup(write_base, write_level1)
     write_base('_start:')
-    write_level1('push x1')
-    write_level1('push x0')
+    write_level1('adrp x2, argc@PAGE')
+    write_level1('add x2, x2, argc@PAGEOFF')
+    write_level1('str x0, [x2]')
+    write_level1('adrp x2, argv@PAGE')
+    write_level1('add x2, x2, argv@PAGEOFF')
+    write_level1('str x1, [x2]')
     strs: List[str] = []
     allocated_strs: Dict[str, int] = {}
     for i in range(len(program)):
-        operation = program[i]
-        if operation.type == OpType.PUSH_INT:
-            assert type(operation.operand) == int, 'Operation value must be an `int` for PUSH_INT'
-            write_level1(f'ldr x0, ={operation.operand}')
+        op = program[i]
+        if op.type == OpType.PUSH_INT:
+            assert type(op.operand) == int, 'Operation value must be an `int` for PUSH_INT'
+            write_level1(f'ldr x0, ={op.operand}')
             write_level1('push x0')
-        elif operation.type == OpType.PUSH_STR:
-            assert type(operation.operand) == str, 'Operation value must be a `str` for PUSH_STR'
-            write_level1(f'ldr x0, ={len(operation.operand)}')
+        elif op.type == OpType.PUSH_STR:
+            assert type(op.operand) == str, 'Operation value must be a `str` for PUSH_STR'
+            write_level1(f'ldr x0, ={len(op.operand)}')
             write_level1('push x0')
-            address = allocated_strs.get(operation.operand, len(strs))
+            address = allocated_strs.get(op.operand, len(strs))
             write_level1(f'adrp x1, str_{address}@PAGE')
             write_level1(f'add x1, x1, str_{address}@PAGEOFF')
             write_level1('push x1')
-            if operation.operand not in allocated_strs:
-                allocated_strs[operation.operand] = len(strs)
-                strs.append(operation.operand)
-        elif operation.type in (OpType.IF, OpType.DO):
+            if op.operand not in allocated_strs:
+                allocated_strs[op.operand] = len(strs)
+                strs.append(op.operand)
+        elif op.type in (OpType.IF, OpType.DO):
             write_level1('pop x0')
             write_level1('tst x0, x0')
-            write_level1(f'b.eq end_{operation.operand}')
-        elif operation.type == OpType.ELSE:
-            write_level1(f'b end_{operation.operand}')
+            write_level1(f'b.eq end_{op.operand}')
+        elif op.type == OpType.ELSE:
+            write_level1(f'b end_{op.operand}')
             write_base(f'end_{i}:')
-        elif operation.type == OpType.END:
-            if operation.operand is not None:
-                write_level1(f'b while_{operation.operand}')
+        elif op.type == OpType.END:
+            if op.operand is not None:
+                write_level1(f'b while_{op.operand}')
             write_base(f'end_{i}:')
-        elif operation.type == OpType.WHILE:
+        elif op.type == OpType.WHILE:
             write_base(f'while_{i}:')
-        elif operation.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 26, 'Exhaustive handling of intrinsics in simulation'
-            if operation.operand == Intrinsic.ADD:
+        elif op.type == OpType.INTRINSIC:
+            assert len(Intrinsic) == 29, 'Exhaustive handling of intrinsics in simulation'
+            if op.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('add x0, x0, x1')
                 write_level1('push x0')
-            elif operation.operand == Intrinsic.SUB:
+            elif op.operand == Intrinsic.SUB:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('sub x0, x1, x0')
                 write_level1('push x0')
-            elif operation.operand == Intrinsic.MUL:
+            elif op.operand == Intrinsic.MUL:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('mul x0, x0, x1')
                 write_level1('push x0')
-            elif operation.operand == Intrinsic.DIV:
+            elif op.operand == Intrinsic.DIV:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('udiv x0, x1, x0')
                 write_level1('push x0')
-            elif operation.operand == Intrinsic.PRINT:
+            elif op.operand == Intrinsic.PRINT:
                 write_level1('pop x0')
                 write_level1('bl dump')
-            elif operation.operand == Intrinsic.OP_EQUAL:
+            elif op.operand == Intrinsic.EQUAL:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('cmp x0, x1')
                 write_level1('cset x0, eq')
                 write_level1('push x0')
-            elif operation.operand == Intrinsic.LT:
+            elif op.operand == Intrinsic.LT:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('cmp x1, x0')
                 write_level1('cset x0, lt')
                 write_level1('push x0')
-            elif operation.operand == Intrinsic.GT:
+            elif op.operand == Intrinsic.GT:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('cmp x1, x0')
                 write_level1('cset x0, gt')
                 write_level1('push x0')
-            elif operation.operand == Intrinsic.LTE:
+            elif op.operand == Intrinsic.LTE:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('cmp x1, x0')
                 write_level1('cset x0, le')
                 write_level1('push x0')
-            elif operation.operand == Intrinsic.GTE:
+            elif op.operand == Intrinsic.GTE:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('cmp x1, x0')
                 write_level1('cset x0, ge')
                 write_level1('push x0')
-            elif operation.operand == Intrinsic.NE:
+            elif op.operand == Intrinsic.NE:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('cmp x0, x1')
                 write_level1('cset x0, ne')
                 write_level1('push x0')
-            elif operation.operand == Intrinsic.DUP:
+            elif op.operand == Intrinsic.DUP:
                 write_level1('pop x0')
                 write_level1('push x0')
                 write_level1('push x0')
-            elif operation.operand == Intrinsic.DROP:
+            elif op.operand == Intrinsic.DROP:
                 write_level1('pop x0')
-            elif operation.operand == Intrinsic.MEM:
+            elif op.operand == Intrinsic.MEM:
                 write_level1('adrp x0, mem@PAGE')
                 write_level1('add x0, x0, mem@PAGEOFF')
                 write_level1('push x0')
-            elif operation.operand == Intrinsic.STORE:
+            elif op.operand == Intrinsic.ARGC:
+                write_level1('adrp x0, argc@PAGE')
+                write_level1('add x0, x0, argc@PAGEOFF')
+                write_level1('ldr x0, [x0]')
+                write_level1('push x0')
+            elif op.operand == Intrinsic.ARGV:
+                write_level1('adrp x0, argv@PAGE')
+                write_level1('add x0, x0, argv@PAGEOFF')
+                write_level1('ldr x0, [x0]')
+                write_level1('push x0')
+            elif op.operand == Intrinsic.STORE:
                 write_level1('popw w0')
                 write_level1('pop x1')
                 write_level1('strb w0, [x1]')
-            elif operation.operand == Intrinsic.LOAD:
+            elif op.operand == Intrinsic.LOAD:
                 write_level1('pop x0')
                 write_level1('ldrb w1, [x0]')
                 write_level1('pushw w1')
-            elif operation.operand == Intrinsic.STORE64:
+            elif op.operand == Intrinsic.STORE64:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('str x0, [x1]')
-            elif operation.operand == Intrinsic.LOAD64:
+            elif op.operand == Intrinsic.LOAD64:
                 write_level1('pop x0')
                 write_level1('ldr x1, [x0]')
                 write_level1('push x1')
-            elif operation.operand == Intrinsic.BITOR:
+            elif op.operand == Intrinsic.BITOR:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('orr x0, x0, x1')
                 write_level1('push x0')
-            elif operation.operand == Intrinsic.BITAND:
+            elif op.operand == Intrinsic.BITAND:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('and x0, x0, x1')
                 write_level1('push x0')
-            elif operation.operand == Intrinsic.SHIFT_RIGHT:
+            elif op.operand == Intrinsic.SHIFT_RIGHT:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('lsr x0, x1, x0')
                 write_level1('push x0')
-            elif operation.operand == Intrinsic.SHIFT_LEFT:
+            elif op.operand == Intrinsic.SHIFT_LEFT:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('lsl x0, x1, x0')
                 write_level1('push x0')
-            elif operation.operand == Intrinsic.SWAP:
+            elif op.operand == Intrinsic.SWAP:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('push x0')
                 write_level1('push x1')
-            elif operation.operand == Intrinsic.OVER:
+            elif op.operand == Intrinsic.OVER:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('push x1')
                 write_level1('push x0')
                 write_level1('push x1')
-            elif operation.operand == Intrinsic.SYSCALL1:
+            elif op.operand == Intrinsic.CAST_PTR:
+                continue
+            elif op.operand == Intrinsic.SYSCALL1:
                 write_level1('pop x16')
                 write_level1('pop x0')
                 write_level1('svc #0')
-            elif operation.operand == Intrinsic.SYSCALL3:
+            elif op.operand == Intrinsic.SYSCALL3:
                 write_level1('pop x16')
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('pop x2')
                 write_level1('svc #0')
             else:
-                raise_error(f'Unhandled intrinsic: {operation.name}',
-                            operation.loc)
+                raise_error(f'Unhandled intrinsic: {op.name}',
+                            op.token.loc)
         else:
-            raise_error(f'Unhandled operation: {operation.name}',
-                        operation.loc)
+            raise_error(f'Unhandled operation: {op.name}',
+                        op.token.loc)
     write_level1('mov x16, #1')
     write_level1('mov x0, #0')
     write_level1('svc #0')
     write_base('.section __DATA, __data')
+    write_level1('argc: .quad 0')
+    write_level1('argv: .quad 0')
     for i in range(len(strs)):
         word = repr(strs[i]).strip("'")
-        write_level1(f'str_{i}: .ascii "{word}"')
+        write_level1(f'str_{i}: .asciz "{word}"')
     write_base('.section __DATA, __bss')
     write_base('mem:')
     write_level1(f'.skip {MEM_CAPACITY}')
@@ -628,7 +1043,7 @@ def compile_program(program: List[Op]) -> None:
 def usage_help() -> None:
     print('Usage: photon.py <SUBCOMMAND> <FLAGS> <FILENAME>')
     print('Subcommands:')
-    print('     sim     Simulate the program')
+    print('     sim     Simulate the program in a macos little endian environment')
     print('     com     Compile the program')
     print('         --run   Used with `com` to run immediately')
 
@@ -639,19 +1054,24 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> 
         raise_error(f'Token value `{token.value}` must be a Keyword, but found: {type(token.value)}', token.loc)
     if token.value == Keyword.IF:
         stack.append(i)
-        return Op(type=OpType.IF, loc=token.loc, name=token.name)
+        return Op(type=OpType.IF, token=token, name=token.name)
     elif token.value == Keyword.ELSE:
-        if len(stack) == 0 or (if_index := stack.pop(), program[if_index].type)[-1] != OpType.IF:
+        if len(stack) == 0:
+            raise_error(f'`else` can only be used with an `if`', token.loc)
+        if_index = stack.pop()
+        if program[if_index].type != OpType.IF:
+            if if_index:
+                notify_user(f'Instead of `else` found: {program[if_index].type}', program[if_index].token.loc)
             raise_error(f'`else` can only be used with an `if`', token.loc)
         program[if_index].operand = i
         stack.append(i)
-        return Op(type=OpType.ELSE, loc=token.loc, name=token.name)
+        return Op(type=OpType.ELSE, token=token, name=token.name)
     elif token.value == Keyword.WHILE:
         stack.append(i)
-        return Op(type=OpType.WHILE, loc=token.loc, name=token.name)
+        return Op(type=OpType.WHILE, token=token, name=token.name)
     elif token.value == Keyword.DO:
         stack.append(i)
-        return Op(type=OpType.DO, loc=token.loc, name=token.name)
+        return Op(type=OpType.DO, token=token, name=token.name)
     elif token.value == Keyword.END:
         if len(stack) == 0:
             raise_error('`end` can only be used with an `if`, `else`, `while` or `macro`',
@@ -659,13 +1079,18 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> 
         block_index = stack.pop()
         if program[block_index].type in (OpType.IF, OpType.ELSE):
             program[block_index].operand = i
-            return Op(type=OpType.END, loc=token.loc, name=token.name)
+            return Op(type=OpType.END, token=token, name=token.name)
         elif program[block_index].type == OpType.DO:
             program[block_index].operand = i
-            if len(stack) == 0 or (while_index := stack.pop(), program[while_index].type)[-1] != OpType.WHILE:
-                raise_error('`while` must be present before `do`', program[block_index].loc)
+            if len(stack) == 0:
+                raise_error('`while` must be present before `do`', program[block_index].token.loc)
+            while_index = stack.pop()
+            if program[while_index].type != OpType.WHILE:
+                if while_index:
+                    notify_user(f'Instead of `while` found: {program[while_index].type}', program[while_index].token.loc)
+                raise_error('`while` must be present before `do`', program[block_index].token.loc)
             value = while_index
-            return Op(type=OpType.END, loc=token.loc, name=token.name, operand=value)
+            return Op(type=OpType.END, token=token, name=token.name, operand=value)
         else:
             raise_error('`end` can only be used with an `if`, `else`, `while` or `macro`',
                         token.loc)
@@ -673,7 +1098,7 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> 
         raise_error(f'Unknown keyword token: {token.value}', token.loc)
 
 
-def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[str, Macro]) -> NoReturn | None:
+def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[str, Token]) -> NoReturn | None:
     assert len(Keyword) == 7, 'Exhaustive handling of keywords in compile_keyword_to_program'
     if token.value == Keyword.MACRO:
         if len(rprogram) == 0:
@@ -691,7 +1116,8 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
         if len(rprogram) == 0:
             raise_error(f'Expected `end` at the end of empty macro definition but found: `{macro_name.value}`',
                         macro_name.loc)
-        macros[macro_name.value] = Macro([], token.loc)
+        macros[macro_name.value] = Token(TokenType.KEYWORD, Keyword.MACRO,
+                                         loc=token.loc, name=macro_name.value, tokens=[])
         block_count = 0
         while len(rprogram) > 0:
             next_token = rprogram.pop()
@@ -700,9 +1126,11 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
                     break
                 block_count -= 1
             elif next_token.type == TokenType.KEYWORD and next_token.value in (
-            Keyword.MACRO, Keyword.IF, Keyword.WHILE):
+                    Keyword.MACRO, Keyword.IF, Keyword.WHILE):
                 block_count += 1
-            macros[macro_name.value].tokens.append(next_token)
+            macro_tokens = macros[macro_name.value].tokens
+            assert macro_tokens is not None, 'Macro tokens not saved'
+            macro_tokens.append(next_token)
         if next_token.type != TokenType.KEYWORD or next_token.value != Keyword.END:
             raise_error(f'Expected `end` at the end of macro definition but found: `{next_token.value}`',
                         next_token.loc)
@@ -721,7 +1149,7 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
         found = False
         for include_filepath in (include_filepath, std_filepath):
             if os.path.isfile(include_filepath):
-                lexed_include = lex_file(os.path.abspath(include_filepath))
+                lexed_include = lex_file(include_filepath)
                 rprogram.extend(reversed(lexed_include))
                 found = True
         if not found:
@@ -736,17 +1164,21 @@ def compile_tokens_to_program(token_program: List[Token]) -> List[Op]:
     stack: List[int] = []
     rprogram = list(reversed(token_program))
     program: List[Op] = []
-    macros: Dict[str, Macro] = {}
+    macros: Dict[str, Token] = {}
     i = 0
     while len(rprogram) > 0:
         token = rprogram.pop()
         if token.value in macros:
             assert type(token.value) == str, 'Compiler Error: non string macro name was saved'
             current_macro = macros[token.value]
-            current_macro.expand_count += 1
-            if current_macro.expand_count > MACRO_EXPANSION_LIMIT:
+            current_macro.expanded_count += 1
+            if current_macro.expanded_count > MACRO_EXPANSION_LIMIT:
                 raise_error(f'Expansion limit reached for macro: {token.value}', current_macro.loc)
-            rprogram.extend(reversed(current_macro.tokens))
+            assert current_macro.tokens is not None, 'Macro tokens not saved'
+            for idx in range(len(current_macro.tokens) - 1, -1, -1):
+                current_macro.tokens[idx].expanded_from = token
+                current_macro.tokens[idx].expanded_count = token.expanded_count + 1
+                rprogram.append(current_macro.tokens[idx])
             continue
         if token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.INCLUDE):
             expand_keyword_to_tokens(token, rprogram, macros)
@@ -763,22 +1195,22 @@ def parse_token_as_op(stack: List[int], token: Token, i: int, program: List[Op])
     if token.type == TokenType.INT:
         if type(token.value) != int:
             raise_error('Token value must be an integer', token.loc)
-        return Op(type=OpType.PUSH_INT, operand=token.value, loc=token.loc, name=token.name)
+        return Op(type=OpType.PUSH_INT, operand=token.value, token=token, name=token.name)
     elif token.type == TokenType.CHAR:
         if type(token.value) != int:
             raise_error('Token value must be an integer', token.loc)
-        return Op(type=OpType.PUSH_INT, operand=token.value, loc=token.loc, name=token.name)
+        return Op(type=OpType.PUSH_INT, operand=token.value, token=token, name=token.name)
     elif token.type == TokenType.STR:
         if type(token.value) != str:
             raise_error('Token value must be an string', token.loc)
-        return Op(type=OpType.PUSH_STR, operand=token.value, loc=token.loc, name=token.name)
+        return Op(type=OpType.PUSH_STR, operand=token.value, token=token, name=token.name)
     elif token.type == TokenType.KEYWORD:
         return parse_keyword(stack, token, i, program)
     elif token.type == TokenType.WORD:
         assert type(token.value) == str, "`word` must be a string"
         if token.value not in INTRINSIC_NAMES:
             raise_error(f'Unknown intrinsic name: `{token.value}`', token.loc)
-        return Op(type=OpType.INTRINSIC, operand=INTRINSIC_NAMES[token.value], loc=token.loc, name=token.value)
+        return Op(type=OpType.INTRINSIC, operand=INTRINSIC_NAMES[token.value], token=token, name=token.value)
     else:
         raise_error(f'Unhandled token: {token}', token.loc)
 
@@ -853,11 +1285,12 @@ if __name__ == '__main__':
         usage_help()
         exit(1)
     filename_arg = argv[0]
-    file_path_arg = os.path.abspath(filename_arg)
+    file_path_arg = filename_arg
     program_stack = lex_file(file_path_arg)
     program_referenced = compile_tokens_to_program(program_stack)
+    type_check_program(program_referenced, '-d' in argv or '--debug' in argv)
     if subcommand == 'sim':
-        simulate_program(program_referenced, argv)
+        simulate_little_endian_macos(program_referenced, argv)
     else:
         compile_program(program_referenced)
         exit_code = subprocess.call('as -o output.o output.s', shell=True)
