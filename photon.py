@@ -4,7 +4,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple, Optional, Set
+from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple, Optional
 
 MACRO_EXPANSION_LIMIT = 100_000
 MACRO_TRACEBACK_LIMIT = 10
@@ -230,7 +230,8 @@ def raise_error(message: str, place: Loc | Token, frame: int = 2) -> NoReturn:
         expand_place = place
         while i < MACRO_TRACEBACK_LIMIT and i < expanded_count:
             assert expand_place.expanded_from is not None, 'Bug in macro expansion count'
-            notify_user(f'Operation expanded from macro: {expand_place.expanded_from.name}', loc=expand_place.expanded_from.loc)
+            notify_user(f'Operation expanded from macro: {expand_place.expanded_from.name}',
+                        loc=expand_place.expanded_from.loc)
             expand_place = expand_place.expanded_from
             i += 1
         place = place.loc
@@ -241,13 +242,15 @@ def raise_error(message: str, place: Loc | Token, frame: int = 2) -> NoReturn:
 def write_indent(file: TextIO, level: int = 0) -> Callable[[str], None]:
     def temp(buffer: str) -> None:
         file.write(' ' * (0 if level == 0 else 4 ** level) + buffer + '\n')
+
     return temp
 
 
 def ensure_argument_count(stack_length: int, op: Op, required: int) -> None | NoReturn:
     if stack_length < required:
         traceback_message(2)
-        raise_error(f'Not enough arguments for: {op.name}, found: {stack_length} but required: {required}', op.token.loc)
+        raise_error(f'Not enough arguments for: {op.name}, found: {stack_length} but required: {required}',
+                    op.token.loc)
     return None
 
 
@@ -255,9 +258,12 @@ def notify_argument_origin(loc: Loc, order: int = 1) -> None:
     notify_user(f'Argument {order} was created at this location', loc)
 
 
+DataTypeStack = List[Tuple[DataType, Loc]]
+
+
 def type_check_program(program: List[Op], debug: bool = False) -> None:
-    stack: List[Tuple[DataType, Loc]] = []
-    block_stack: List[int, Op] = [] # convert stack to tuple keeping only DataType, hash and store
+    stack: DataTypeStack = []
+    block_stack: List[Tuple[DataTypeStack, Op]] = []  # convert stack to tuple keeping only DataType, hash and store
     for op in program:
         assert len(OpType) == 8, 'Exhaustive handling of operations in type check'
         if op.type == OpType.PUSH_INT:
@@ -274,23 +280,50 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 if debug:
                     notify_argument_origin(a_loc, order=1)
                 raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
-            stack_hash = hash(tuple(map(lambda x: x[0], stack)))
-            block_stack.append((stack_hash, op))
+            block_stack.append((stack.copy(), op))
         elif op.type == OpType.ELSE:
-            stack_hash = hash(tuple(map(lambda x: x[0], stack)))
-            block_stack.append((stack_hash, op))
+            before_if_stack, if_op = block_stack.pop()
+            assert if_op.type == OpType.IF, '[BUG] else without if'
+            block_stack.append((stack.copy(), op))
+            stack = before_if_stack
         elif op.type == OpType.END:
-            expected_stack_hash, block = block_stack.pop()
+            stack_before_block, block = block_stack.pop()
+            expected_stack = list(map(lambda x: x[0], stack_before_block))
+            current_stack = list(map(lambda x: x[0], stack))
             if block.type == OpType.IF:
-                stack_hash = hash(tuple(map(lambda x: x[0], stack)))
-                if stack_hash != expected_stack_hash:
-                    raise_error('Stack types cannot be altered after an else-less if block', block.token)
+                if current_stack != expected_stack:
+                    notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
+                    notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
+                    raise_error('Stack types cannot be altered after an else-less if block', op.token)
+            elif block.type == OpType.ELSE:
+                if current_stack != expected_stack:
+                    notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
+                    notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
+                    raise_error('Both branches of an if-else block must produce the same stack types', op.token)
+            elif block.type == OpType.WHILE:
+                if current_stack != expected_stack:
+                    notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
+                    notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
+                    raise_error('Stack types cannot be altered after a while block', op.token)
             else:
-                raise NotImplementedError
+                assert False, 'Unreachable'
         elif op.type == OpType.WHILE:
-            raise NotImplementedError
+            block_stack.append((stack.copy(), op))
         elif op.type == OpType.DO:
-            raise NotImplementedError
+            ensure_argument_count(len(stack), op, 1)
+            a_type, a_loc = stack.pop()
+            if a_type != DataType.BOOL:
+                if debug:
+                    notify_argument_origin(a_loc, order=1)
+                raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+            before_while_stack, while_op = block_stack[-1]
+            assert while_op.type == OpType.WHILE, '[BUG] do without while'
+            expected_stack = list(map(lambda x: x[0], before_while_stack))
+            current_stack = list(map(lambda x: x[0], stack))
+            if current_stack != expected_stack:
+                notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
+                notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
+                raise_error('Stack types cannot be altered after a while-do condition', op.token)
         elif op.type == OpType.INTRINSIC:
             assert len(Intrinsic) == 28, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
@@ -542,8 +575,8 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
             raise_error(f'Unhandled op: {op.name}',
                         op.token.loc)
     if len(stack) != 0:
-        end = stack.pop()
-        raise_error(f'Unhandled data on the stack: {end[0]}', end[1])
+        current_stack = list(map(lambda x: x[0], stack))
+        raise_error(f'Unhandled data on the stack: {current_stack}', stack[-1][1])
 
 
 def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) -> None:
@@ -979,7 +1012,12 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> 
         stack.append(i)
         return Op(type=OpType.IF, token=token, name=token.name)
     elif token.value == Keyword.ELSE:
-        if len(stack) == 0 or (if_index := stack.pop(), program[if_index].type)[-1] != OpType.IF:
+        if len(stack) == 0:
+            raise_error(f'`else` can only be used with an `if`', token.loc)
+        if_index = stack.pop()
+        if program[if_index].type != OpType.IF:
+            if if_index:
+                notify_user(f'Instead of `else` found: {program[if_index].type}', program[if_index].token.loc)
             raise_error(f'`else` can only be used with an `if`', token.loc)
         program[if_index].operand = i
         stack.append(i)
@@ -1000,7 +1038,12 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> 
             return Op(type=OpType.END, token=token, name=token.name)
         elif program[block_index].type == OpType.DO:
             program[block_index].operand = i
-            if len(stack) == 0 or (while_index := stack.pop(), program[while_index].type)[-1] != OpType.WHILE:
+            if len(stack) == 0:
+                raise_error('`while` must be present before `do`', program[block_index].token.loc)
+            while_index = stack.pop()
+            if program[while_index].type != OpType.WHILE:
+                if while_index:
+                    notify_user(f'Instead of `while` found: {program[while_index].type}', program[while_index].token.loc)
                 raise_error('`while` must be present before `do`', program[block_index].token.loc)
             value = while_index
             return Op(type=OpType.END, token=token, name=token.name, operand=value)
@@ -1088,10 +1131,10 @@ def compile_tokens_to_program(token_program: List[Token]) -> List[Op]:
             if current_macro.expanded_count > MACRO_EXPANSION_LIMIT:
                 raise_error(f'Expansion limit reached for macro: {token.value}', current_macro.loc)
             assert current_macro.tokens is not None, 'Macro tokens not saved'
-            for i in range(len(current_macro.tokens) - 1, -1, -1):
-                current_macro.tokens[i].expanded_from = token
-                current_macro.tokens[i].expanded_count = token.expanded_count + 1
-                rprogram.append(current_macro.tokens[i])
+            for idx in range(len(current_macro.tokens) - 1, -1, -1):
+                current_macro.tokens[idx].expanded_from = token
+                current_macro.tokens[idx].expanded_count = token.expanded_count + 1
+                rprogram.append(current_macro.tokens[idx])
             continue
         if token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.INCLUDE):
             expand_keyword_to_tokens(token, rprogram, macros)
