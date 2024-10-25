@@ -267,30 +267,14 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
             stack.append((DataType.PTR, op.token.loc))
         elif op.type == OpType.IF:
             raise NotImplementedError
-            a = stack.pop()
-            if a == 0:
-                assert type(op.operand) == int, 'Jump address must be `int`'
-                i = op.operand
         elif op.type == OpType.ELSE:
             raise NotImplementedError
-            assert type(op.operand) == int, 'Jump address must be `int`'
-            i = op.operand
         elif op.type == OpType.END:
             raise NotImplementedError
-            if op.operand is not None:
-                assert type(op.operand) == int, 'Jump address must be `int`'
-                i = op.operand
         elif op.type == OpType.WHILE:
             raise NotImplementedError
-            i += 1
-            continue
         elif op.type == OpType.DO:
             raise NotImplementedError
-            a = stack.pop()
-            assert type(a) == int, 'Arguments for `do` must be `int`'
-            if a == 0:
-                assert type(op.operand) == int, 'Jump address must be `int`'
-                i = op.operand
         elif op.type == OpType.INTRINSIC:
             assert len(Intrinsic) == 28, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
@@ -307,7 +291,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
-                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type, a_type)}', op.token.loc)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.SUB:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -322,7 +306,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
-                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type, a_type)}', op.token.loc)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.MUL:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -333,7 +317,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
-                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.DIV:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -344,7 +328,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
-                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.PRINT:
                 ensure_argument_count(len(stack), op, 1)
                 stack.pop()
@@ -362,7 +346,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
-                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.LT:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -375,7 +359,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
-                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.GT:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -388,7 +372,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
-                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.GTE:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -401,7 +385,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
-                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.LTE:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -414,7 +398,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
-                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.NE:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -429,7 +413,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
-                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.DUP:
                 ensure_argument_count(len(stack), op, 1)
                 a = stack.pop()
@@ -462,7 +446,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
-                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.BITAND:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -473,7 +457,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
-                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.SHIFT_RIGHT:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -484,7 +468,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
-                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.SHIFT_LEFT:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -495,7 +479,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
-                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token.loc)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.SWAP:
                 ensure_argument_count(len(stack), op, 2)
                 a = stack.pop()
@@ -518,7 +502,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                         notify_argument_origin(arg1_loc, order=1)
                         notify_argument_origin(syscall_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(arg1_type.name, syscall_type.name)}',
-                                op.token.loc)
+                                op.token)
             elif op.operand == Intrinsic.SYSCALL3:
                 ensure_argument_count(len(stack), op, 4)
                 syscall_type, syscall_loc = stack.pop()
