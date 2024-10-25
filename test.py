@@ -79,6 +79,7 @@ def check_examples(debug: bool = False) -> dict[str, str]:
     for filename in filenames:
         if (expected := read_expected(filename)) is None:
             print(f'Tests for {filename} do not exist')
+            summary[filename] = 'UNDEFINED'
             continue
         simulated_out = execute('sim', filename)
         compiled_out = execute('com', filename, flags='--run')
@@ -108,13 +109,17 @@ def check_examples(debug: bool = False) -> dict[str, str]:
 
 def print_summary(summary: dict[str, str]) -> None:
     count_passed = 0
+    undefined_count = 0
     failed_outputs = ''
     for filename in summary:
         if not summary[filename]:
             count_passed += 1
+        elif summary[filename] == 'UNDEFINED':
+            undefined_count += 1
         else:
             failed_outputs += f'{filename}:\n{summary[filename]}'
-    print(f'Total tests: {len(summary)}, Passed: {count_passed}, Failed: {len(summary) - count_passed}')
+    print(f'Total tests: {len(summary)}, Passed: {count_passed},'
+          f' Failed: {len(summary) - count_passed - undefined_count}, Undefined: {undefined_count}')
     if failed_outputs:
         print(f'Failed tests:\n{failed_outputs}')
 
