@@ -135,7 +135,7 @@ def print_summary(summary: dict[str, str]) -> None:
         elif summary[filename] == 'UNDEFINED':
             undefined_count += 1
         else:
-            failed_outputs += f'{filename}:\n{summary[filename]}'
+            failed_outputs += f'{filename}:\n{summary[filename]}\n'
     print(f'Total tests: {len(summary)}, Passed: {count_passed},'
           f' Failed: {len(summary) - count_passed - undefined_count}, Undefined: {undefined_count}')
     if failed_outputs:
