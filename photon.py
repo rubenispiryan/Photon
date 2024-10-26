@@ -93,6 +93,7 @@ class Intrinsic(Enum):
     ARGC = auto()
     ARGV = auto()
     CAST_PTR = auto()
+    HERE = auto()
 
 class OpType(Enum):
     PUSH_INT = auto()
@@ -190,7 +191,8 @@ INTRINSIC_NAMES = {
     'syscall3': Intrinsic.SYSCALL3,
     'argc': Intrinsic.ARGC,
     'argv': Intrinsic.ARGV,
-    'int->ptr': Intrinsic.CAST_PTR
+    'int->ptr': Intrinsic.CAST_PTR,
+    'here': Intrinsic.HERE,
 }
 
 assert len(INTRINSIC_NAMES) == len(Intrinsic), 'Exhaustive handling of intrinsics'
@@ -330,7 +332,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
             block_stack.append((stack.copy(), op))
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 29, 'Exhaustive handling of intrinsics in type check'
+            assert len(Intrinsic) == 30, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -585,6 +587,9 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                         notify_argument_origin(a_loc, order=1)
                     raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
                 stack.append((DataType.PTR, op.token))
+            elif op.operand == Intrinsic.HERE:
+                stack.append((DataType.INT, op.token))
+                stack.append((DataType.PTR, op.token))
             elif op.operand == Intrinsic.SYSCALL1:
                 ensure_argument_count(len(stack), op, 2)
                 syscall_type, syscall_loc = stack.pop()
@@ -683,7 +688,7 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 assert type(op.operand) == int, 'Jump address must be `int`'
                 i = op.operand
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 29, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 30, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 a = stack.pop()
                 b = stack.pop()
@@ -808,6 +813,18 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
             elif op.operand == Intrinsic.CAST_PTR:
                 i += 1
                 continue
+            elif op.operand == Intrinsic.HERE:
+                here_text = f'{op.token.loc.filename}:[{op.token.loc.line + 1}:{op.token.loc.col}]: '
+                bs = bytes(here_text, 'utf-8')
+                n = len(bs)
+                stack.append(n)
+                if here_text not in allocated_strs:
+                    allocated_strs[here_text] = str_size
+                    mem[str_size:str_size + n] = bs
+                    str_size += n
+                    if str_size > STR_CAPACITY:
+                        raise_error('String buffer overflow', op.token.loc)
+                stack.append(allocated_strs[here_text])
             elif op.operand == Intrinsic.SYSCALL1:
                 syscall_number = stack.pop()
                 arg1 = stack.pop()
@@ -907,7 +924,7 @@ def compile_program(program: List[Op]) -> None:
         elif op.type == OpType.WHILE:
             write_base(f'while_{i}:')
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 29, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 30, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -1036,6 +1053,17 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('push x1')
             elif op.operand == Intrinsic.CAST_PTR:
                 continue
+            elif op.operand == Intrinsic.HERE:
+                here_text = f'{op.token.loc.filename}:[{op.token.loc.line + 1}:{op.token.loc.col}]: '
+                write_level1(f'ldr x0, ={len(here_text)}')
+                write_level1('push x0')
+                address = allocated_strs.get(here_text, len(strs))
+                write_level1(f'adrp x1, str_{address}@PAGE')
+                write_level1(f'add x1, x1, str_{address}@PAGEOFF')
+                write_level1('push x1')
+                if here_text not in allocated_strs:
+                    allocated_strs[here_text] = len(strs)
+                    strs.append(here_text)
             elif op.operand == Intrinsic.SYSCALL1:
                 write_level1('pop x16')
                 write_level1('pop x0')
