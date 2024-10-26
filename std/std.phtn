@@ -1,5 +1,10 @@
 include "macos.phtn"
 
+macro NULL 0 end
+
+macro true 0 0 == end
+macro false 0 0 != end
+
 // IO Buffers
 macro stdin 0 end
 macro stdout 1 end
