@@ -14,13 +14,16 @@ def process_exception_message(message: str) -> str:
     return output
 
 
-def execute(subcommand: str, filename: str, flags: str = '', argv: str = '') -> str:
-    try:
-        return subprocess.check_output(f'pypy3.10 photon.py {subcommand} {filename} {flags} {argv}', shell=True,
-                                       stderr=subprocess.STDOUT).decode('utf-8')
-    except subprocess.CalledProcessError as e:
-        output = 'STDOUT:\n' + process_exception_message(e.output.decode('utf-8'))
-        return output + 'Exit code: ' + str(e.returncode)
+def execute(subcommand: str, filename: str, flags: str = '', argv: str = '', stdin: str ='') -> str:
+    command = f'pypy3.10 photon.py {subcommand} {filename} {flags} {argv}'
+    result = subprocess.run(command, input=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            shell=True)
+    if result.returncode != 0:
+        full_output = result.stderr.decode('utf-8') + result.stdout.decode('utf-8')
+        output = 'STDOUT:\n' + process_exception_message(full_output)
+        return output + 'Exit code: ' + str(result.returncode)
+    return result.stdout.decode('utf-8')
+
 
 
 def get_files(folder: str) -> List[str]:
