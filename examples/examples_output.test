@@ -567,3 +567,10 @@ STDOUT:
 5702887
 
 end_./examples/fibonacci.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/language_features/here.phtn argv  endargv
+STDIN:
+
+STDOUT:
+./examples/language_features/here.phtn:[3:0]: Something needs to be done here
+Exit code: 32
+end_./examples/language_features/here.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
