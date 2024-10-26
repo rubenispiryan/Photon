@@ -1,4 +1,4 @@
-./examples/rule110.phtn
+./examples/rule110.phtn argv  endargv
                                                                                                   * 
                                                                                                  ** 
                                                                                                 *** 
@@ -99,31 +99,31 @@
  **      ******   ******** ** * *** **   *  *******  * *****   *  ** ***  **        * ***  ** ***** 
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/exceptions/else_without_if.phtn
+./examples/exceptions/else_without_if.phtn argv  endargv
 STDOUT:
 Error message originated inside: parse_keyword
 `else` can only be used with an `if`
 Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/exceptions/do_without_while.phtn
+./examples/exceptions/do_without_while.phtn argv  endargv
 STDOUT:
 Error message originated inside: parse_keyword
 `while` must be present before `do`
 Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/exceptions/macro_without_end.phtn
+./examples/exceptions/macro_without_end.phtn argv  endargv
 STDOUT:
 Error message originated inside: expand_keyword_to_tokens
 Expected `end` at the end of macro definition but found: `print`
 Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/exceptions/only_end.phtn
+./examples/exceptions/only_end.phtn argv  endargv
 STDOUT:
 Error message originated inside: parse_keyword
 `end` can only be used with an `if`, `else`, `while` or `macro`
 Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/exceptions/if_else_overflow.phtn
+./examples/exceptions/if_else_overflow.phtn argv  endargv
 STDOUT:
 Error message originated inside: type_check_program
 Both branches of an if-else block must produce the same stack types
@@ -131,13 +131,13 @@ Expected Stack Types: []
 Actual Stack Types: [<DataType.INT: 1>]
 Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/exceptions/infinite_macro.phtn
+./examples/exceptions/infinite_macro.phtn argv  endargv
 STDOUT:
 Error message originated inside: compile_tokens_to_program
 Expansion limit reached for macro: a
 Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/exceptions/if_overflow.phtn
+./examples/exceptions/if_overflow.phtn argv  endargv
 STDOUT:
 Error message originated inside: type_check_program
 Stack types cannot be altered after an else-less if block
@@ -145,24 +145,24 @@ Expected Stack Types: []
 Actual Stack Types: [<DataType.INT: 1>]
 Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/exceptions/exit.phtn
+./examples/exceptions/exit.phtn argv  endargv
 STDOUT:
 Exit code: 255
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/exceptions/intrinsic_redefinition.phtn
+./examples/exceptions/intrinsic_redefinition.phtn argv  endargv
 STDOUT:
 Error message originated inside: expand_keyword_to_tokens
 Redefinition of intrinsic word: `print`
 Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/exceptions/macro_redefinition.phtn
+./examples/exceptions/macro_redefinition.phtn argv  endargv
 STDOUT:
 Error message originated inside: expand_keyword_to_tokens
 Redefinition of existing macro: `print1`
 Macro `print1` was defined at this location
 Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/exceptions/while_overflow.phtn
+./examples/exceptions/while_overflow.phtn argv  endargv
 STDOUT:
 Error message originated inside: type_check_program
 Stack types cannot be altered after a while-do condition
@@ -170,30 +170,30 @@ Expected Stack Types: [<DataType.INT: 1>]
 Actual Stack Types: [<DataType.INT: 1>, <DataType.INT: 1>]
 Exit code: 1
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/euler/problem_4.phtn
+./examples/euler/problem_4.phtn argv  endargv
 906609
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/euler/problem_5.phtn
+./examples/euler/problem_5.phtn argv  endargv
 232792560
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/euler/problem_2.phtn
+./examples/euler/problem_2.phtn argv  endargv
 4613732
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/euler/problem_3.phtn
+./examples/euler/problem_3.phtn argv  endargv
 71
 839
 1471
 6857
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/euler/problem_1.phtn
+./examples/euler/problem_1.phtn argv  endargv
 233168
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/language_features/macros.phtn
+./examples/language_features/macros.phtn argv  endargv
 hello world
 hello 2025
 hello 2024
@@ -212,7 +212,7 @@ hello
 hello
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/language_features/bit_manipulations.phtn
+./examples/language_features/bit_manipulations.phtn argv  endargv
 1
 0
 3
@@ -221,11 +221,73 @@ hello
 1
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/language_features/argv.phtn
+./examples/cat.phtn argv ./examples/cat.phtn endargv
+// This is an implementation of UNIX cat command in Photon
+
+include "std.phtn"
+
+macro BUFFER_CAP 1024 end
+
+// memory layout
+macro fd mem end
+macro buffer_count mem 8 + end
+macro argn buffer_count 8 + end
+macro buffer argn 8 + end
+
+// remove count from string literal
+macro only_str swap drop end
+
+// assumes that a file descriptor is stored at fd to be read from
+macro write_fd
+    while BUFFER_CAP buffer fd ,64 read dup buffer_count swap .64 0 > do
+         buffer_count ,64 buffer stdout write drop
+    end
+end
+
+// opens a file descriptor from a filename given as the n-th argument
+// saves it at fd
+macro open_fd_from_argv[n]
+    0 O_RDONLY argn ,64 argv[n] open dup -1 == if
+        "An error occurred when trying to open the file" writeln
+    end
+    fd swap .64
+end
+
+macro close_fd
+    fd ,64 close 0 != if
+        "An error occurred when trying to close the file" writeln
+    end
+end
+
+// if no argument is provided enters interactive mode
+// otherwise outputs all the files
+argc 2 < if
+    fd 0 .64
+    write_fd
+else
+    1 while dup argc < do
+        dup argn swap .64
+        open_fd_from_argv[n]
+        write_fd
+        close_fd
+        1 +
+    end drop
+end
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+om_argv[n]
+        write_fd
+        close_fd
+        1 +
+    end drop
+end
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/language_features/argv.phtn argv  endargv
+1
+1
 1
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/language_features/strings.phtn
+./examples/language_features/strings.phtn argv  endargv
 Hello World
 Photon Strings
 Uno
@@ -237,7 +299,7 @@ Hello World
 Hello World
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/language_features/basic_operators.phtn
+./examples/language_features/basic_operators.phtn argv  endargv
 96
 1723
 9476
@@ -261,7 +323,7 @@ Hello World
 1234567890987654321
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/language_features/stack_operations.phtn
+./examples/language_features/stack_operations.phtn argv  endargv
 1
 2
 4
@@ -273,12 +335,174 @@ Hello World
 5
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/language_features/memory.phtn
+./examples/language_features/memory.phtn argv  endargv
 abcbcd9223372036854775809
 18446744073709551615
 
 -#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
-./examples/language_features/loops.phtn
+./examples/language_features/loops.phtn argv  endargv
+1
+2
+3
+4
+5
+100
+99
+98
+97
+96
+95
+94
+93
+92
+91
+90
+89
+88
+87
+86
+85
+84
+83
+82
+81
+80
+79
+78
+77
+76
+75
+74
+73
+72
+71
+70
+69
+68
+67
+66
+65
+64
+63
+62
+61
+60
+59
+58
+57
+56
+55
+54
+53
+52
+51
+50
+49
+48
+47
+46
+45
+44
+43
+42
+41
+40
+39
+38
+37
+36
+35
+34
+33
+32
+31
+30
+29
+28
+27
+26
+25
+24
+23
+22
+21
+20
+19
+18
+17
+16
+15
+14
+13
+12
+11
+10
+9
+8
+7
+6
+5
+4
+3
+2
+1
+
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+-#--#--#--#--#--#--#--#--#--#-
+./examples/language_features/strings.phtn argv  endargv
+Hello World
+Photon Strings
+Uno
+Dos
+Tres
+Hello World
+Hello World
+Hello World
+Hello World
+
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/language_features/basic_operators.phtn argv  endargv
+96
+1723
+9476
+2
+1
+1
+0
+1
+1
+1
+0
+1
+1
+1
+0
+1
+0
+1
+5
+2025
+1234567890987654321
+
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/language_features/stack_operations.phtn argv  endargv
+1
+2
+4
+4
+4
+2
+1
+4
+5
+
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/language_features/memory.phtn argv  endargv
+abcbcd9223372036854775809
+18446744073709551615
+
+-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/language_features/loops.phtn argv  endargv
 1
 2
 3

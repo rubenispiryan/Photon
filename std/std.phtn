@@ -9,7 +9,7 @@ macro write SYS_WRITE syscall3 end
 // TODO: unhardcode writeln file descriptor
 macro writeln stdout write drop "\n" stdout write drop end
 macro read SYS_READ syscall3 end
-macro exit SYS_EXIT syscall1 end
+macro exit SYS_EXIT syscall1 drop end
 
 // file macros
 macro open SYS_OPEN syscall3 end

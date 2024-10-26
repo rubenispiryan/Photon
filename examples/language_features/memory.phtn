@@ -6,7 +6,7 @@ mem 1 + 98 .
 mem 2 + 99 .
 
 // Printing 'abc'
-3 mem stdout write
+3 mem stdout write drop
 
 // Incrementing each letter to 'bcd' in memory
 mem 0 + dup , 1 + .
@@ -14,7 +14,7 @@ mem 1 + dup , 1 + .
 mem 2 + dup , 1 + .
 
 // Printing 'bcd'
-3 mem stdout write
+3 mem stdout write drop
 
 // print 1000...0001 (64 bit word)
 mem 1 63 <<
