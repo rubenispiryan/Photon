@@ -1,15 +1,22 @@
 include "macos.phtn"
 
-macro STDIN 0 end
-macro STDOUT 1 end
-macro STDERR 2 end
+// IO Buffers
+macro stdin 0 end
+macro stdout 1 end
+macro stderr 2 end
 
-macro write STDOUT SYS_WRITE syscall3 end
-macro writeln write "\n" write end
+macro write SYS_WRITE syscall3 end
+// TODO: unhardcode writeln file descriptor
+macro writeln stdout write drop "\n" stdout write drop end
+macro read SYS_READ syscall3 end
 macro exit SYS_EXIT syscall1 end
 
+// file macros
+macro open SYS_OPEN syscall3 end
+macro close SYS_CLOSE syscall1 end
+
 macro inc64
-  dup ,64 1 + .64
+dup ,64 1 + .64
 end
 
 macro strlen

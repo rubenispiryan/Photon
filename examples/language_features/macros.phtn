@@ -21,8 +21,7 @@ end
 macro wrapper
     macro writeargln
     dup2
-    write
-    "\n" write
+    writeln
     end
 end
 
