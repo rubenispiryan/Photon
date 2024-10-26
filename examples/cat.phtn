@@ -1,5 +1,7 @@
 // This is an implementation of UNIX cat command in Photon
 
+include "std.phtn"
+
 macro BUFFER_CAP 1024 end
 
 // memory layout
@@ -31,6 +33,7 @@ end
 // otherwise outputs all the files
 argc 2 < if
     fd 0 .64
+    write_fd
 else
     1 while dup argc < do
         dup argn swap .64
