@@ -5,7 +5,7 @@ include "std.phtn"
 0 3 while dup 1000 < do
     dup 3 % 0 ==
     over 5 % 0 ==
-    | if
+    or if
         swap over + swap
     end
     1 +

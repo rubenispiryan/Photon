@@ -143,10 +143,10 @@ def print_summary(summary: dict[str, str]) -> None:
             undefined_count += 1
         else:
             failed_outputs += f'{filename}:\n{summary[filename]}\n'
-    print(f'Total tests: {len(summary)}, Passed: {count_passed},'
-          f' Failed: {len(summary) - count_passed - undefined_count}, Undefined: {undefined_count}')
     if failed_outputs:
         print(f'Failed tests:\n{failed_outputs}')
+    print(f'Total tests: {len(summary)}, Passed: {count_passed},'
+          f' Failed: {len(summary) - count_passed - undefined_count}, Undefined: {undefined_count}')
 
 
 def record_argv(arg_filenames: list[str]) -> None:

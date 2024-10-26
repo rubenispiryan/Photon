@@ -1,10 +1,10 @@
 // Bitwise and
-3 5 & print
-4 2 & print
+3 5 and print
+4 2 and print
 
 // Bitwise or
-2 1 | print
-9 0 | print
+2 1 or print
+9 0 or print
 
 // Unsigned shifts
 2 3 << print

@@ -77,8 +77,8 @@ class Intrinsic(Enum):
     NE = auto()
     DUP = auto()
     DROP = auto()
-    BITAND = auto()
-    BITOR = auto()
+    AND = auto()
+    OR = auto()
     SHIFT_RIGHT = auto()
     SHIFT_LEFT = auto()
     SWAP = auto()
@@ -172,8 +172,8 @@ INTRINSIC_NAMES = {
     '<': Intrinsic.LT,
     'dup': Intrinsic.DUP,
     'drop': Intrinsic.DROP,
-    '&': Intrinsic.BITAND,
-    '|': Intrinsic.BITOR,
+    'and': Intrinsic.AND,
+    'or': Intrinsic.OR,
     '>>': Intrinsic.SHIFT_RIGHT,
     '<<': Intrinsic.SHIFT_LEFT,
     'swap': Intrinsic.SWAP,
@@ -329,14 +329,6 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     notify_argument_origin(a_loc, order=1)
                 raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
             block_stack.append((stack.copy(), op))
-            # before_while_stack, while_op = block_stack[-1]
-            # assert while_op.type == OpType.WHILE, '[BUG] do without while'
-            # expected_stack = list(map(lambda x: x[0], before_while_stack))
-            # current_stack = list(map(lambda x: x[0], stack))
-            # if current_stack != expected_stack:
-            #     notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
-            #     notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
-            #     raise_error('Stack types cannot be altered after a while-do condition', op.token)
         elif op.type == OpType.INTRINSIC:
             assert len(Intrinsic) == 29, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
@@ -524,7 +516,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
-            elif op.operand == Intrinsic.BITOR:
+            elif op.operand == Intrinsic.OR:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
                 b_type, b_loc = stack.pop()
@@ -537,7 +529,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
-            elif op.operand == Intrinsic.BITAND:
+            elif op.operand == Intrinsic.AND:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
                 b_type, b_loc = stack.pop()
@@ -780,15 +772,15 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 for byte in store_value64:
                     mem[store_addr64] = byte
                     store_addr64 += 1
-            elif op.operand == Intrinsic.BITOR:
+            elif op.operand == Intrinsic.OR:
                 a = stack.pop()
                 b = stack.pop()
-                assert type(a) == type(b) == int, 'Arguments for `|` must be `int`'
+                assert type(a) == type(b) == int, 'Arguments for `or` must be `int`'
                 stack.append(a | b)
-            elif op.operand == Intrinsic.BITAND:
+            elif op.operand == Intrinsic.AND:
                 a = stack.pop()
                 b = stack.pop()
-                assert type(a) == type(b) == int, 'Arguments for `&` must be `int`'
+                assert type(a) == type(b) == int, 'Arguments for `and` must be `int`'
                 stack.append(a & b)
             elif op.operand == Intrinsic.SHIFT_RIGHT:
                 a = stack.pop()
@@ -1011,12 +1003,12 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('pop x0')
                 write_level1('ldr x1, [x0]')
                 write_level1('push x1')
-            elif op.operand == Intrinsic.BITOR:
+            elif op.operand == Intrinsic.OR:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('orr x0, x0, x1')
                 write_level1('push x0')
-            elif op.operand == Intrinsic.BITAND:
+            elif op.operand == Intrinsic.AND:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('and x0, x0, x1')
