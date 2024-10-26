@@ -24,14 +24,6 @@ def asm_setup(write_base: Callable[[str], None], write_level1: Callable[[str], N
     write_base('.macro pop reg1:req')
     write_level1(r'ldr \reg1, [sp], #16')
     write_base('.endmacro')
-    write_base('.macro pushw reg1')
-    write_level1('sub sp, sp, #16')
-    write_level1(r'stp \reg1, wzr, [sp]')
-    write_base('.endmacro')
-    write_base('.macro popw reg1')
-    write_level1(r'ldp \reg1, wzr, [sp]')
-    write_level1('add sp, sp, #16')
-    write_base('.endmacro')
     write_base('dump:')
     write_level1('sub     sp, sp,  #48')
     write_level1('stp     x29, x30, [sp,  #32]')
@@ -844,7 +836,10 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                     pathname = get_cstr_from_mem(mem, arg1).decode()
                     fdi = len(FDS)
                     if flags[arg2] == 'rb':
-                        FDS.append(open(pathname, 'rb'))
+                        try:
+                            FDS.append(open(pathname, 'rb'))
+                        except FileNotFoundError:
+                            fdi = -1
                     else:
                         raise_error('Unsupported flag for file access', op.token)
                     stack.append(fdi)
@@ -989,13 +984,13 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('ldr x0, [x0]')
                 write_level1('push x0')
             elif op.operand == Intrinsic.STORE:
-                write_level1('popw w0')
+                write_level1('pop w0')
                 write_level1('pop x1')
                 write_level1('strb w0, [x1]')
             elif op.operand == Intrinsic.LOAD:
                 write_level1('pop x0')
                 write_level1('ldrb w1, [x0]')
-                write_level1('pushw w1')
+                write_level1('push w1')
             elif op.operand == Intrinsic.STORE64:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -1041,12 +1036,19 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('pop x16')
                 write_level1('pop x0')
                 write_level1('svc #0')
+                write_level1(f'b.cc return_ok_{i}')
+                write_level1('mov x0, #-1')
+                write_base(f'return_ok_{i}:')
+                write_level1('push x0')
             elif op.operand == Intrinsic.SYSCALL3:
                 write_level1('pop x16')
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('pop x2')
                 write_level1('svc #0')
+                write_level1(f'b.cc return_ok_{i}')
+                write_level1('mov x0, #-1')
+                write_base(f'return_ok_{i}:')
                 write_level1('push x0')
             else:
                 raise_error(f'Unhandled intrinsic: {op.name}',
@@ -1305,7 +1307,7 @@ def lex_file(file_path: str) -> List[Token]:
 
 
 if __name__ == '__main__':
-    _, *argv = sys.argv
+    _, *argv= sys.argv
     if len(argv) < 2:
         usage_help()
         exit(1)
@@ -1331,4 +1333,6 @@ if __name__ == '__main__':
         if exit_code != 0:
             exit(exit_code)
         if '--run' in argv:
-            exit(subprocess.call('./output', shell=True))
+            args_start = argv.index('--run') + 1
+            args = ''.join(argv[args_start:])
+            exit(subprocess.call(f'./output {args}', shell=True))
