@@ -41,7 +41,7 @@ end
 // if no argument is provided enters interactive mode
 // otherwise outputs all the files
 argc 2 < if
-    fd 0 .64
+    fd stdin .64
     write_fd
 else
     1 while dup argc < do
