@@ -490,7 +490,7 @@ macro only_str swap drop end
 // assumes that a file descriptor is stored at fd to be read from
 macro write_fd
     while BUFFER_CAP buffer fd ,64 read dup 0 > do
-        buffer stdout write drop
+        buffer puts
     end drop
 end
 

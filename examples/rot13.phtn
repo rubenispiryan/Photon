@@ -30,5 +30,5 @@ while BUFFER_CAP buffer stdin read dup 0 > do
         end
         1 +
     end drop
-    buffer stdout write drop
+    buffer puts
 end drop
