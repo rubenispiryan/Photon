@@ -6,9 +6,6 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple, Optional, BinaryIO
 
-MACRO_EXPANSION_LIMIT = 100_000
-MACRO_TRACEBACK_LIMIT = 10
-
 
 @dataclass
 class Loc:
@@ -198,6 +195,8 @@ INTRINSIC_NAMES = {
 
 assert len(INTRINSIC_NAMES) == len(Intrinsic), 'Exhaustive handling of intrinsics'
 
+MACRO_EXPANSION_LIMIT = 100_000
+MACRO_TRACEBACK_LIMIT = 10
 NULL_POINTER_PADDING = 1  # padding to make 0 an invalid address
 ARG_PTR_CAPACITY = 640 + NULL_POINTER_PADDING
 STR_CAPACITY = 640_000 + ARG_PTR_CAPACITY
