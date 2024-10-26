@@ -1,8 +1,9 @@
 include "std.phtn"
 
+1 print
 // to check if memory was allocated correctly for strings
 "important test of string functionality" strlen == print
-
+1 print
 
 1 while dup argc < do
     dup argv[n] dup strlen swap writeln

@@ -1,3 +1,17 @@
+// Syscalls
 macro SYS_EXIT 1 end
 macro SYS_READ 3 end
 macro SYS_WRITE 4 end
+macro SYS_OPEN 5 end
+macro SYS_CLOSE 6 end
+
+// File Access Modes
+macro O_RDONLY 0 end
+macro O_WRONLY 1 end
+macro O_RDWR 2 end
+
+// Flags for open()
+macro O_CREAT 64 end
+macro O_EXCL 128 end
+macro O_TRUNC 512 end
+macro O_APPEND 1024 end

@@ -1,0 +1,51 @@
+// This is an implementation of UNIX cat command in Photon
+
+include "std.phtn"
+
+macro BUFFER_CAP 1024 end
+
+// memory layout
+macro fd mem end
+macro buffer_count mem 8 + end
+macro argn buffer_count 8 + end
+macro buffer argn 8 + end
+
+// remove count from string literal
+macro only_str swap drop end
+
+// assumes that a file descriptor is stored at fd to be read from
+macro write_fd
+    while BUFFER_CAP buffer fd ,64 read dup buffer_count swap .64 0 > do
+         buffer_count ,64 buffer stdout write drop
+    end
+end
+
+// opens a file descriptor from a filename given as the n-th argument
+// saves it at fd
+macro open_fd_from_argv[n]
+    0 O_RDONLY argn ,64 argv[n] open dup -1 == if
+        "An error occurred when trying to open the file" writeln
+    end
+    fd swap .64
+end
+
+macro close_fd
+    fd ,64 close 0 != if
+        "An error occurred when trying to close the file" writeln
+    end
+end
+
+// if no argument is provided enters interactive mode
+// otherwise outputs all the files
+argc 2 < if
+    fd 0 .64
+    write_fd
+else
+    1 while dup argc < do
+        dup argn swap .64
+        open_fd_from_argv[n]
+        write_fd
+        close_fd
+        1 +
+    end drop
+end

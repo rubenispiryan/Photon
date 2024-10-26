@@ -7,7 +7,6 @@ from typing import List
 TEST_FILE_NAME = 'examples/examples_output.test'
 SEPARATOR = '-#-' * 20
 
-
 def process_exception_message(message: str) -> str:
     output = ''
     for line in message.splitlines():
@@ -15,9 +14,9 @@ def process_exception_message(message: str) -> str:
     return output
 
 
-def execute(subcommand: str, filename: str, flags: str = '') -> str:
+def execute(subcommand: str, filename: str, flags: str = '', argv: str = '') -> str:
     try:
-        return subprocess.check_output(f'pypy3.10 photon.py {subcommand} {filename} {flags}', shell=True,
+        return subprocess.check_output(f'pypy3.10 photon.py {subcommand} {filename} {flags} {argv}', shell=True,
                                        stderr=subprocess.STDOUT).decode('utf-8')
     except subprocess.CalledProcessError as e:
         output = 'STDOUT:\n' + process_exception_message(e.output.decode('utf-8'))
@@ -35,14 +34,15 @@ def get_files(folder: str) -> List[str]:
     return output
 
 
-def read_expected(filename: str) -> str | None:
+def read_expected(filename: str) -> dict[str, str] | None:
     with open(TEST_FILE_NAME, 'r') as f:
-        pattern = rf'{filename}\n(.*?)\n{SEPARATOR}\n'
-
+        pattern = rf'{filename} argv (.*?) endargv\n(.*?)\n{SEPARATOR}\n'
         match = re.search(pattern, f.read(), re.DOTALL)
 
         if match:
-            return match.group(1)
+            argv_match = match.group(1)
+            expected_text = match.group(2)
+            return {'expected_text': expected_text, 'argv': argv_match}
         else:
             return None
 
@@ -56,33 +56,51 @@ def add_expected_output(filename: str, expected: str) -> None:
     with open(filename, 'a') as f:
         f.write(expected)
 
+def replace_expected_output(filename: str, expected: str) -> None:
+    with open(TEST_FILE_NAME, 'r+') as f:
+        pattern = rf'{filename} argv (.*?) endargv\n(.*?)\n{SEPARATOR}\n'
+        text = f.read()
+        replaced_tests = re.sub(pattern, expected, text, flags=re.DOTALL)
+        f.seek(0)
+        f.write(replaced_tests)
+
+def create_example(filename: str, argv: str = '') -> None:
+    expected_data = read_expected(filename)
+    if expected_data and argv == '':
+        argv = expected_data['argv']
+    simulated_out = execute('sim', filename, argv=argv)
+    compiled_out = execute('com', filename, flags='--run', argv=argv)
+    assert compiled_out == simulated_out, (
+        f'Output from compilation:\n'
+        f'  {compiled_out}\n'
+        f'Output from simulation:\n'
+        f'  {simulated_out}\n'
+        f'Compilation and Simulation of {filename} do not match during snapshot')
+    snapshot_output = f'{filename} argv {argv} endargv\n{compiled_out}\n{SEPARATOR}\n'
+    if expected_data:
+        replace_expected_output(filename, snapshot_output)
+    else:
+        add_expected_output(TEST_FILE_NAME, snapshot_output)
+    print(f'Snapshot of {filename} added successfully')
 
 def create_examples() -> None:
     filenames = filter(lambda x: x.endswith('.phtn'), get_files('./examples'))
     for filename in filenames:
-        simulated_out = execute('sim', filename)
-        compiled_out = execute('com', filename, flags='--run')
-        assert compiled_out == simulated_out, (
-            f'Output from compilation:\n'
-            f'  {compiled_out!r}\n'
-            f'Output from simulation:\n'
-            f'  {simulated_out!r}\n'
-            f'Compilation and Simulation of {filename} do not match during snapshot')
-        snapshot_output = f'{filename}\n{compiled_out}\n{SEPARATOR}\n'
-        add_expected_output(TEST_FILE_NAME, snapshot_output)
-        print(f'Snapshot of {filename} added successfully')
+        create_example(filename)
 
 
 def check_examples(debug: bool = False) -> dict[str, str]:
     filenames = filter(lambda x: x.endswith('.phtn'), get_files('./examples'))
     summary = {}
     for filename in filenames:
-        if (expected := read_expected(filename)) is None:
-            print(f'Tests for {filename} do not exist')
+        if (test_data := read_expected(filename)) is None:
+            print(f'Test for {filename} do not exist')
             summary[filename] = 'UNDEFINED'
             continue
-        simulated_out = execute('sim', filename)
-        compiled_out = execute('com', filename, flags='--run')
+        expected = test_data['expected_text']
+        input_args = test_data['argv']
+        simulated_out = execute('sim', filename, argv=input_args)
+        compiled_out = execute('com', filename, flags='--run', argv=input_args)
         if compiled_out != expected:
             if debug:
                 print(
@@ -124,10 +142,23 @@ def print_summary(summary: dict[str, str]) -> None:
         print(f'Failed tests:\n{failed_outputs}')
 
 
+def record_argv(arg_filenames: list[str]) -> None:
+    filenames = set(filter(lambda x: x.endswith('.phtn'), get_files('./examples')))
+    for arg_filename in arg_filenames:
+        if arg_filename in filenames:
+            argv = input('Enter argv: ')
+            create_example(arg_filename, argv)
+
 
 if __name__ == '__main__':
+    deb = '-d' in sys.argv or '--debug' in sys.argv
     if len(sys.argv) == 1:
-        print_summary(check_examples())
+        print_summary(check_examples(deb))
     elif len(sys.argv) == 2 and sys.argv[1] == '--snapshot':
-        create_expected_file(TEST_FILE_NAME)
+        if not os.path.exists(TEST_FILE_NAME):
+            create_expected_file(TEST_FILE_NAME)
         create_examples()
+    elif len(sys.argv) > 2 and sys.argv[1] == '--record-argv':
+        record_argv(sys.argv[2:])
+    else:
+        print(f'Usage: {sys.argv[0]} [--snapshot] [-d | --debug] [--record-argv <filename>]')
