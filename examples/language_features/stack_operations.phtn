@@ -8,3 +8,6 @@ include "std.phtn"
 1 2 3 drop print drop
 
 5 4 dup2 + 1 print drop print print
+
+1 2 3 print print print
+1 2 3 rot print print print

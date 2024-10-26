@@ -83,6 +83,7 @@ class Intrinsic(Enum):
     SHIFT_LEFT = auto()
     SWAP = auto()
     OVER = auto()
+    ROT = auto()
     MEM = auto()
     LOAD = auto()
     STORE = auto()
@@ -179,6 +180,7 @@ INTRINSIC_NAMES = {
     '<<': Intrinsic.SHIFT_LEFT,
     'swap': Intrinsic.SWAP,
     'over': Intrinsic.OVER,
+    'rot': Intrinsic.ROT,
     '>=': Intrinsic.GTE,
     '<=': Intrinsic.LTE,
     '!=': Intrinsic.NE,
@@ -332,7 +334,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
             block_stack.append((stack.copy(), op))
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 30, 'Exhaustive handling of intrinsics in type check'
+            assert len(Intrinsic) == 31, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -579,6 +581,14 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 stack.append(b)
                 stack.append(a)
                 stack.append(b)
+            elif op.operand == Intrinsic.ROT:
+                ensure_argument_count(len(stack), op, 3)
+                a = stack.pop()
+                b = stack.pop()
+                c = stack.pop()
+                stack.append(b)
+                stack.append(a)
+                stack.append(c)
             elif op.operand == Intrinsic.CAST_PTR:
                 ensure_argument_count(len(stack), op, 1)
                 a_type, a_loc = stack.pop()
@@ -688,7 +698,7 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 assert type(op.operand) == int, 'Jump address must be `int`'
                 i = op.operand
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 30, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 31, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 a = stack.pop()
                 b = stack.pop()
@@ -810,6 +820,14 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 stack.append(b)
                 stack.append(a)
                 stack.append(b)
+            elif op.operand == Intrinsic.ROT:
+                a = stack.pop()
+                b = stack.pop()
+                c = stack.pop()
+                assert type(a) == type(b) == type(c) == int, 'Arguments for `over` must be `int`'
+                stack.append(b)
+                stack.append(a)
+                stack.append(c)
             elif op.operand == Intrinsic.CAST_PTR:
                 i += 1
                 continue
@@ -924,7 +942,7 @@ def compile_program(program: List[Op]) -> None:
         elif op.type == OpType.WHILE:
             write_base(f'while_{i}:')
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 30, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 31, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -1051,6 +1069,13 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('push x1')
                 write_level1('push x0')
                 write_level1('push x1')
+            elif op.operand == Intrinsic.ROT:
+                write_level1('pop x0')
+                write_level1('pop x1')
+                write_level1('pop x2')
+                write_level1('push x1')
+                write_level1('push x0')
+                write_level1('push x2')
             elif op.operand == Intrinsic.CAST_PTR:
                 continue
             elif op.operand == Intrinsic.HERE:
