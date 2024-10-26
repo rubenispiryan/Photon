@@ -15,9 +15,9 @@ macro only_str swap drop end
 
 // assumes that a file descriptor is stored at fd to be read from
 macro write_fd
-    while BUFFER_CAP buffer fd ,64 read dup buffer_count swap .64 0 > do
-         buffer_count ,64 buffer stdout write drop
-    end
+    while BUFFER_CAP buffer fd ,64 read dup 0 > do
+        buffer stdout write drop
+    end drop
 end
 
 // opens a file descriptor from a filename given as the n-th argument
@@ -25,13 +25,16 @@ end
 macro open_fd_from_argv[n]
     0 O_RDONLY argn ,64 argv[n] open dup -1 == if
         "An error occurred when trying to open the file" writeln
+        drop 1 exit
+    else
+        fd swap .64
     end
-    fd swap .64
 end
 
 macro close_fd
     fd ,64 close 0 != if
         "An error occurred when trying to close the file" writeln
+        1 exit
     end
 end
 

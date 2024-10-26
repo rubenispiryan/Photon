@@ -309,11 +309,15 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
                     notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
                     raise_error('Both branches of an if-else block must produce the same stack types', op.token)
-            elif block.type == OpType.WHILE:
+            elif block.type == OpType.DO:
+                stack_before_while, while_op = block_stack.pop()
+                assert while_op.type == OpType.WHILE, '[BUG] No `while` before `do`'
+                expected_stack = list(map(lambda x: x[0], stack_before_while))
                 if current_stack != expected_stack:
                     notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
                     notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
-                    raise_error('Stack types cannot be altered after a while block', op.token)
+                    raise_error('Stack types cannot be altered inside a while-do body', op.token)
+                stack = stack_before_block
             else:
                 assert False, 'Unreachable'
         elif op.type == OpType.WHILE:
@@ -325,14 +329,15 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 if debug:
                     notify_argument_origin(a_loc, order=1)
                 raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
-            before_while_stack, while_op = block_stack[-1]
-            assert while_op.type == OpType.WHILE, '[BUG] do without while'
-            expected_stack = list(map(lambda x: x[0], before_while_stack))
-            current_stack = list(map(lambda x: x[0], stack))
-            if current_stack != expected_stack:
-                notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
-                notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
-                raise_error('Stack types cannot be altered after a while-do condition', op.token)
+            block_stack.append((stack.copy(), op))
+            # before_while_stack, while_op = block_stack[-1]
+            # assert while_op.type == OpType.WHILE, '[BUG] do without while'
+            # expected_stack = list(map(lambda x: x[0], before_while_stack))
+            # current_stack = list(map(lambda x: x[0], stack))
+            # if current_stack != expected_stack:
+            #     notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
+            #     notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
+            #     raise_error('Stack types cannot be altered after a while-do condition', op.token)
         elif op.type == OpType.INTRINSIC:
             assert len(Intrinsic) == 29, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
