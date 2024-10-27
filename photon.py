@@ -1124,7 +1124,7 @@ def usage_help() -> None:
     print('Usage: photon.py <SUBCOMMAND> <FLAGS> <FILENAME>')
     print('Subcommands:')
     print('     sim     Simulate the program in a macos little endian environment')
-    print('     com     Compile the program')
+    print('     com     Compile the program to arm 64-bit assembly')
     print('         --run   Used with `com` to run immediately')
 
 

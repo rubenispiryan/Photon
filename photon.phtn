@@ -179,9 +179,34 @@ macro compile_program
     compile_footer
 end
 
-OP_PUSH_INT 4 push_op
-OP_PUSH_INT 5 push_op
-OP_ADD      0 push_op
-OP_PRINT    0 push_op
+macro program
+    OP_PUSH_INT 4 push_op
+    OP_PUSH_INT 5 push_op
+    OP_ADD      0 push_op
+    OP_PRINT    0 push_op
+end
 
-simulate_program
+macro print_usage
+    "Usage: photon.py <SUBCOMMAND>\n" puts
+    "Subcommands:\n" puts
+    "     sim     Simulate the program in a macos little endian environment\n" puts
+    "     com     Compile the program to arm 64-bit assembly\n" puts
+end
+
+macro main
+    argc 2 < if
+        print_usage
+    else
+        program
+        1 argv[n]
+        dup "sim\0" swap drop streq if
+            simulate_program
+        else dup "com\0" swap drop streq if
+            compile_program
+        else "Invalid Subcommand\n" eputs print_usage 1 exit
+        end end
+        drop
+    end
+end
+
+main
