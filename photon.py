@@ -29,7 +29,7 @@ def asm_setup(write_base: Callable[[str], None], write_level1: Callable[[str], N
     write_level1(r'ldp \reg1, wzr, [sp]')
     write_level1('add sp, sp, #16')
     write_base('.endmacro')
-    write_base('dump:')
+    write_base('print:')
     write_level1('sub     sp, sp,  #48')
     write_level1('stp     x29, x30, [sp,  #32]')
     write_level1('add     x29, sp,  #32')
@@ -965,7 +965,7 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('push x0')
             elif op.operand == Intrinsic.PRINT:
                 write_level1('pop x0')
-                write_level1('bl dump')
+                write_level1('bl print')
             elif op.operand == Intrinsic.EQUAL:
                 write_level1('pop x0')
                 write_level1('pop x1')
