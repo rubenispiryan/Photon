@@ -1,63 +1,5 @@
 include "std.phtn"
 
-// Constants
-macro PUTD_BUFFER_CAP 32 end
-
-// Operation Enum
-macro OP_PUSH_INT 0 end
-macro OP_ADD      1 end
-macro OP_PRINT    2 end
-
-// Memory layout
-macro putd_buffer mem end
-macro op_count putd_buffer PUTD_BUFFER_CAP + end
-macro op_stack op_count 8 + end
-
-macro sizeof(Op) 16 end
-
-// struct Op {
-//   type: uint64 (8 bytes)
-//   operand: uint64 (8 bytes)
-// }
-
-// expects: type:int operand:int
-macro push_op
-    op_count ,64 sizeof(Op) * op_stack +
-    dup 8 + rot .64
-    swap .64
-    op_count inc64
-end
-
-macro print_ops
-    // ptr
-    0 while dup op_count ,64 < do
-        dup sizeof(Op) * op_stack +
-        dup ,64 "Type: " puts print
-        8 + ,64 "Operand: " puts print
-        1 +
-    end drop
-end
-
-macro putd
-  dup 0 = if
-    "0" puts
-  else
-    putd_buffer PUTD_BUFFER_CAP +
-    while over 0 > do
-      1 - dup rot
-      10 divmod
-      rot swap '0' + . swap
-    end
-    dup
-    putd_buffer PUTD_BUFFER_CAP + swap - swap puts
-  end
-  drop
-end
-
-macro simulate_program
-    here puts "Not Implemented\n" eputs 1 exit
-end
-
 macro compile_header
     ".section __TEXT, __text\n" puts
     ".global _start\n" puts
@@ -116,24 +58,120 @@ macro compile_footer
     "   argv: .quad 0\n" puts
     ".section __DATA, __bss\n" puts
     "mem:\n" puts
-    "   .skip {MEM_CAPACITY}\n" puts
+    "   .skip " puts MEM_CAPACITY putd "\n" puts
+end
+
+// Constants
+macro PUTD_BUFFER_CAP 32 end
+macro SIM_STACK_CAP 1024 end
+macro MEM_CAPACITY 640000 end
+
+// Operation Enum
+macro OP_PUSH_INT 0 end
+macro OP_ADD      1 end
+macro OP_PRINT    2 end
+
+// Memory layout
+macro putd_buffer mem end
+macro sim_stack_count putd_buffer PUTD_BUFFER_CAP + end
+macro sim_stack sim_stack_count 8 + end
+macro op_stack_count sim_stack SIM_STACK_CAP + end
+macro op_stack op_stack_count 8 + end
+
+macro sizeof(Op) 16 end
+
+// struct Op {
+//   type: uint64 (8 bytes)
+//   operand: uint64 (8 bytes)
+// }
+
+// expects: type:int operand:int
+macro push_op
+    op_stack_count ,64 sizeof(Op) * op_stack +
+    dup 8 + rot .64
+    swap .64
+    op_stack_count inc64
+end
+
+macro print_ops
+    0 while dup op_stack_count ,64 < do
+        dup sizeof(Op) * op_stack +
+        dup ,64 "Type: " puts putd
+        8 + ,64 ", Operand: " puts print
+        1 +
+    end drop
+end
+
+macro putd
+  dup 0 == if
+    "0" puts
+  else
+    putd_buffer PUTD_BUFFER_CAP +
+    while over 0 > do
+      1 - dup rot
+      10 dup2 / rot rot %
+      rot swap '0' + . swap
+    end
+    dup
+    putd_buffer PUTD_BUFFER_CAP + swap - swap puts
+  end
+  drop
+end
+
+// value
+macro sim_stack_push
+    sim_stack_count ,64 SIM_STACK_CAP >= if
+        here eputs "[ERROR] data stack overflow in simulation mode" eputs 1 exit
+    end
+    sim_stack_count ,64 8 * sim_stack + swap .64
+    sim_stack_count inc64
+end
+
+macro sim_stack_pop
+    sim_stack_count ,64 0 <= if
+        here eputs "[ERROR] data stack underflow in simulation mode" eputs 1 exit
+    end
+    sim_stack_count dec64
+    sim_stack_count ,64 8 * sim_stack + ,64
+end
+
+macro simulate_program
+    0 while dup op_stack_count ,64 < do
+        dup sizeof(Op) * op_stack +
+        dup ,64 OP_PUSH_INT == if
+            dup 8 + ,64 sim_stack_push
+        else dup ,64 OP_ADD == if
+            sim_stack_pop
+            sim_stack_pop
+            +
+            sim_stack_push
+        else dup ,64 OP_PRINT == if
+            sim_stack_pop
+            print
+        else "Unhandled Instruction\n" eputs 1 exit
+        end end end drop
+        1 +
+    end drop
 end
 
 macro compile_program
     compile_header
-    0 while dup op_count ,64 < do
-        dup sizeof(Op) * op_stack + ,64
-        dup OP_PUSH_INT == if
-            "   ldr x0, ={op.operand}\n" puts
+    0 while dup op_stack_count ,64 < do
+        dup sizeof(Op) * op_stack +
+        dup ,64 OP_PUSH_INT == if
+            "   ;; -- push int " puts dup 8 + ,64 putd " --\n" puts
+            "   ldr x0, =" puts dup 8 + ,64 putd "\n" puts
             "   push x0\n" puts
-        else dup OP_ADD == if
+        else dup ,64 OP_ADD == if
+            "   ;; -- add --\n" puts
             "   pop x0\n" puts
             "   pop x1\n" puts
             "   add x0, x0, x1\n" puts
             "   push x0\n" puts
-        else dup OP_PRINT == if
+        else dup ,64 OP_PRINT == if
+            "   ;; -- print --\n" puts
             "   pop x0\n" puts
-            "   bl dump\n" puts
+            "   bl print\n" puts
         else "Unhandled Instruction\n" eputs 1 exit
         end end end drop
         1 +
@@ -141,10 +179,9 @@ macro compile_program
     compile_footer
 end
 
-
 OP_PUSH_INT 4 push_op
 OP_PUSH_INT 5 push_op
 OP_ADD      0 push_op
 OP_PRINT    0 push_op
 
-compile_program
+simulate_program
