@@ -1,0 +1,150 @@
+include "std.phtn"
+
+// Constants
+macro PUTD_BUFFER_CAP 32 end
+
+// Operation Enum
+macro OP_PUSH_INT 0 end
+macro OP_ADD      1 end
+macro OP_PRINT    2 end
+
+// Memory layout
+macro putd_buffer mem end
+macro op_count putd_buffer PUTD_BUFFER_CAP + end
+macro op_stack op_count 8 + end
+
+macro sizeof(Op) 16 end
+
+// struct Op {
+//   type: uint64 (8 bytes)
+//   operand: uint64 (8 bytes)
+// }
+
+// expects: type:int operand:int
+macro push_op
+    op_count ,64 sizeof(Op) * op_stack +
+    dup 8 + rot .64
+    swap .64
+    op_count inc64
+end
+
+macro print_ops
+    // ptr
+    0 while dup op_count ,64 < do
+        dup sizeof(Op) * op_stack +
+        dup ,64 "Type: " puts print
+        8 + ,64 "Operand: " puts print
+        1 +
+    end drop
+end
+
+macro putd
+  dup 0 = if
+    "0" puts
+  else
+    putd_buffer PUTD_BUFFER_CAP +
+    while over 0 > do
+      1 - dup rot
+      10 divmod
+      rot swap '0' + . swap
+    end
+    dup
+    putd_buffer PUTD_BUFFER_CAP + swap - swap puts
+  end
+  drop
+end
+
+macro simulate_program
+    here puts "Not Implemented\n" eputs 1 exit
+end
+
+macro compile_header
+    ".section __TEXT, __text\n" puts
+    ".global _start\n" puts
+    ".align 3\n" puts
+    ".macro push reg1:req\n" puts
+    "   str \reg1, [sp, #-16]!\n" puts
+    ".endmacro\n" puts
+    ".macro pop reg1:req\n" puts
+    "   ldr \reg1, [sp], #16\n" puts
+    ".endmacro\n" puts
+    ".macro pushw reg1\n" puts
+    "   sub sp, sp, #16\n" puts
+    "   stp \reg1, wzr, [sp]\n" puts
+    ".endmacro\n" puts
+    ".macro popw reg1\n" puts
+    "   ldp \reg1, wzr, [sp]\n" puts
+    "   add sp, sp, #16\n" puts
+    ".endmacro\n" puts
+    "print:\n" puts
+    "   sub     sp, sp,  #48\n" puts
+    "   stp     x29, x30, [sp,  #32]\n" puts
+    "   add     x29, sp,  #32\n" puts
+    "   mov     x10,  #-3689348814741910324\n" puts
+    "   mov     x8, xzr\n" puts
+    "   mov     w9,  #10\n" puts
+    "   movk    x10,  #52429\n" puts
+    "   mov     x11, sp\n" puts
+    "   strb    w9, [sp,  #31]\n" puts
+    ".LBB0_1:\n" puts
+    "   umulh   x12, x0, x10\n" puts
+    "   add     x14, x11, x8\n" puts
+    "   sub     x8, x8,  #1\n" puts
+    "   cmp     x0,  #9\n" puts
+    "   lsr     x12, x12,  #3\n" puts
+    "   msub    w13, w12, w9, w0\n" puts
+    "   mov     x0, x12\n" puts
+    "   orr     w13, w13,  #0x30\n" puts
+    "   strb    w13, [x14,  #30]\n" puts
+    "   b.hi    .LBB0_1\n" puts
+    "   mov     x9, sp\n" puts
+    "   mov     w10,  #1\n" puts
+    "   add     x9, x9, x8\n" puts
+    "   sub     x2, x10, x8\n" puts
+    "   add     x1, x9,  #31\n" puts
+    "   mov     x0,  #1\n" puts
+    "   mov     x16,  #4\n" puts
+    "   svc  #0\n" puts
+    "   ldp     x29, x30, [sp,  #32]\n" puts
+    "   add     sp, sp,  #48\n" puts
+    "   ret\n" puts
+end
+
+macro compile_footer
+    ".section __DATA, __data\n" puts
+    "   argc: .quad 0\n" puts
+    "   argv: .quad 0\n" puts
+    ".section __DATA, __bss\n" puts
+    "mem:\n" puts
+    "   .skip {MEM_CAPACITY}\n" puts
+end
+
+macro compile_program
+    compile_header
+    0 while dup op_count ,64 < do
+        dup sizeof(Op) * op_stack + ,64
+        dup OP_PUSH_INT == if
+            "   ldr x0, ={op.operand}\n" puts
+            "   push x0\n" puts
+        else dup OP_ADD == if
+            "   pop x0\n" puts
+            "   pop x1\n" puts
+            "   add x0, x0, x1\n" puts
+            "   push x0\n" puts
+        else dup OP_PRINT == if
+            "   pop x0\n" puts
+            "   bl dump\n" puts
+        else "Unhandled Instruction\n" eputs 1 exit
+        end end end drop
+        1 +
+    end drop
+    compile_footer
+end
+
+
+OP_PUSH_INT 4 push_op
+OP_PUSH_INT 5 push_op
+OP_ADD      0 push_op
+OP_PRINT    0 push_op
+
+compile_program
