@@ -11,9 +11,8 @@ macro stdout 1 end
 macro stderr 2 end
 
 macro write SYS_WRITE syscall3 end
-// TODO: unhardcode writeln file descriptor
-macro writeln stdout write drop "\n" stdout write drop end
 macro puts stdout write drop end
+macro putsln puts "\n" puts end
 macro eputs stderr write drop end
 macro read SYS_READ syscall3 end
 macro exit SYS_EXIT syscall1 drop end
@@ -23,7 +22,11 @@ macro open SYS_OPEN syscall3 end
 macro close SYS_CLOSE syscall1 end
 
 macro inc64
-dup ,64 1 + .64
+    dup ,64 1 + .64
+end
+
+macro dec64
+    dup ,64 1 - .64
 end
 
 macro strlen
