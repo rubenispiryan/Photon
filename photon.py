@@ -891,10 +891,10 @@ def compile_program(program: List[Op]) -> None:
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
     write_base('.section __TEXT, __text')
-    write_base('.global _start')
+    write_base('.global _main')
     write_base('.align 3')
     asm_setup(write_base, write_level1)
-    write_base('_start:')
+    write_base('_main:')
     write_level1('adrp x2, argc@PAGE')
     write_level1('add x2, x2, argc@PAGEOFF')
     write_level1('str x0, [x2]')
@@ -1377,8 +1377,7 @@ if __name__ == '__main__':
         if exit_code != 0:
             exit(exit_code)
         exit_code = subprocess.call(
-            'ld -o output output.o -lSystem -syslibroot `xcrun -sdk macosx'
-            ' --show-sdk-path` -e _start -arch arm64', shell=True)
+            'ld -o output output.o', shell=True)
         if exit_code != 0:
             exit(exit_code)
         if '--run' in argv:

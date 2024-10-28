@@ -8,11 +8,7 @@ run: output com
 	./output
 
 output: output.o
-	ld -o output output.o \
-        -lSystem \
-        -syslibroot `xcrun -sdk macosx --show-sdk-path` \
-        -e _start \
-        -arch arm64
+	ld -o output output.o
 
 output.o: output.s
 	as -g -o output.o output.s
