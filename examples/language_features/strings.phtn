@@ -1,14 +1,14 @@
 include "std.phtn"
 
-"Hello World" writeln
+"Hello World" putsln
 
-"Photon Strings" writeln
+"Photon Strings" putsln
 
-"Uno" writeln
-"Dos" writeln
-"Tres" writeln
+"Uno" putsln
+"Dos" putsln
+"Tres" putsln
 
-"Hello World" writeln
-"Hello World" writeln
-"Hello World" writeln
-"Hello World" writeln
+"Hello World" putsln
+"Hello World" putsln
+"Hello World" putsln
+"Hello World" putsln

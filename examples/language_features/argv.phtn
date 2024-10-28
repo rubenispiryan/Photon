@@ -6,6 +6,6 @@ include "std.phtn"
 1 print
 
 1 while dup argc < do
-    dup argv[n] dup strlen swap writeln
+    dup argv[n] dup strlen swap putsln
     1 +
 end drop

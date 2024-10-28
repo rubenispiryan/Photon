@@ -1,11 +1,11 @@
 include "std.phtn"
 
-"hello world" writeln
+"hello world" putsln
 
 macro ifc if
-    "hello 2024" writeln
+    "hello 2024" putsln
     else
-    "hello 2025" writeln
+    "hello 2025" putsln
     end
 end
 
@@ -21,7 +21,7 @@ end
 macro wrapper
     macro writeargln
     dup2
-    writeln
+    putsln
     end
 end
 
