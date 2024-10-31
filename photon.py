@@ -1128,35 +1128,35 @@ def usage_help() -> None:
     print('         --run   Used with `com` to run immediately')
 
 
-def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> NoReturn | Op:
+def parse_keyword(stack: List[Tuple[Token, int]], token: Token, i: int, program: List[Op]) -> NoReturn | Op:
     assert len(Keyword) == 7, 'Exhaustive handling of keywords in parse_keyword'
     if type(token.value) != Keyword:
         raise_error(f'Token value `{token.value}` must be a Keyword, but found: {type(token.value)}', token.loc)
     if token.value == Keyword.IF:
-        stack.append(i)
+        stack.append((token, i))
         return Op(type=OpType.IF, token=token, name=token.name)
     elif token.value == Keyword.ELSE:
         if len(stack) == 0:
             raise_error(f'`else` can only be used with an `if`', token.loc)
-        if_index = stack.pop()
+        if_index = stack.pop()[1]
         if program[if_index].type != OpType.IF:
             if if_index:
                 notify_user(f'Instead of `else` found: {program[if_index].type}', program[if_index].token.loc)
             raise_error(f'`else` can only be used with an `if`', token.loc)
         program[if_index].operand = i
-        stack.append(i)
+        stack.append((token, i))
         return Op(type=OpType.ELSE, token=token, name=token.name)
     elif token.value == Keyword.WHILE:
-        stack.append(i)
+        stack.append((token, i))
         return Op(type=OpType.WHILE, token=token, name=token.name)
     elif token.value == Keyword.DO:
-        stack.append(i)
+        stack.append((token, i))
         return Op(type=OpType.DO, token=token, name=token.name)
     elif token.value == Keyword.END:
         if len(stack) == 0:
             raise_error('`end` can only be used with an `if`, `else`, `while` or `macro`',
                         token.loc)
-        block_index = stack.pop()
+        block_index = stack.pop()[1]
         if program[block_index].type in (OpType.IF, OpType.ELSE):
             program[block_index].operand = i
             return Op(type=OpType.END, token=token, name=token.name)
@@ -1164,7 +1164,7 @@ def parse_keyword(stack: List[int], token: Token, i: int, program: List[Op]) -> 
             program[block_index].operand = i
             if len(stack) == 0:
                 raise_error('`while` must be present before `do`', program[block_index].token.loc)
-            while_index = stack.pop()
+            while_index = stack.pop()[1]
             if program[while_index].type != OpType.WHILE:
                 if while_index:
                     notify_user(f'Instead of `while` found: {program[while_index].type}', program[while_index].token.loc)
@@ -1239,9 +1239,9 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
     return None
 
 
-def compile_tokens_to_program(token_program: List[Token]) -> List[Op]:
-    assert len(TokenType) == 5, "Exhaustive handling of tokens in compile_tokens_to_program."
-    stack: List[int] = []
+def parse_tokens_to_program(token_program: List[Token]) -> List[Op]:
+    assert len(TokenType) == 5, "Exhaustive handling of tokens in parse_tokens_to_program."
+    stack: List[Tuple[Token, int]] = []
     rprogram = list(reversed(token_program))
     program: List[Op] = []
     macros: Dict[str, Token] = {}
@@ -1265,10 +1265,12 @@ def compile_tokens_to_program(token_program: List[Token]) -> List[Op]:
         else:
             program.append(parse_token_as_op(stack, token, i, program))
             i += 1
+    if len(stack) != 0:
+        raise_error('Found an unclosed block', stack[-1][0].loc)
     return program
 
 
-def parse_token_as_op(stack: List[int], token: Token, i: int, program: List[Op]) -> Op | NoReturn:
+def parse_token_as_op(stack: List[Tuple[Token, int]], token: Token, i: int, program: List[Op]) -> Op | NoReturn:
     assert len(OpType) == 8, 'Exhaustive handling of built-in words'
     assert len(TokenType) == 5, 'Exhaustive handling of tokens in parser'
 
@@ -1364,10 +1366,9 @@ if __name__ == '__main__':
     if subcommand not in ('sim', 'com'):
         usage_help()
         exit(1)
-    filename_arg = argv[0]
-    file_path_arg = filename_arg
+    file_path_arg = argv[0]
     program_stack = lex_file(file_path_arg)
-    program_referenced = compile_tokens_to_program(program_stack)
+    program_referenced = parse_tokens_to_program(program_stack)
     type_check_program(program_referenced, '-d' in argv or '--debug' in argv)
     if subcommand == 'sim':
         simulate_little_endian_macos(program_referenced, argv)
