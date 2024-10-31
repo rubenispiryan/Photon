@@ -4,7 +4,7 @@ INPUT ?= output
 
 .PHONY: run
 
-run: output com
+run: com output
 	./output
 
 output: output.o
