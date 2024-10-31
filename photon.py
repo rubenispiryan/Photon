@@ -278,16 +278,17 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
             stack.append((DataType.INT, op.token))
             stack.append((DataType.PTR, op.token))
         elif op.type == OpType.IF:
-            ensure_argument_count(len(stack), op, 1)
-            a_type, a_loc = stack.pop()
-            if a_type != DataType.BOOL:
-                if debug:
-                    notify_argument_origin(a_loc, order=1)
-                raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
             block_stack.append((stack.copy(), op))
+            # ensure_argument_count(len(stack), op, 1)
+            # a_type, a_loc = stack.pop()
+            # if a_type != DataType.BOOL:
+            #     if debug:
+            #         notify_argument_origin(a_loc, order=1)
+            #     raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+            # block_stack.append((stack.copy(), op))
         elif op.type == OpType.ELSE:
             before_if_stack, if_op = block_stack.pop()
-            assert if_op.type == OpType.IF, '[BUG] else without if'
+            assert if_op.type == OpType.DO, '[BUG] else without do'
             block_stack.append((stack.copy(), op))
             stack = before_if_stack
         elif op.type == OpType.END:
@@ -306,7 +307,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     raise_error('Both branches of an if-else block must produce the same stack types', op.token)
             elif block.type == OpType.DO:
                 stack_before_while, while_op = block_stack.pop()
-                assert while_op.type == OpType.WHILE, '[BUG] No `while` before `do`'
+                assert while_op.type == OpType.WHILE or while_op.type == OpType.IF, '[BUG] No `while` before `do`'
                 expected_stack = list(map(lambda x: x[0], stack_before_while))
                 if current_stack != expected_stack:
                     notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
@@ -669,10 +670,12 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                     raise_error('String buffer overflow', op.token.loc)
             stack.append(allocated_strs[op.operand])
         elif op.type == OpType.IF:
-            a = stack.pop()
-            if a == 0:
-                assert type(op.operand) == int, 'Jump address must be `int`'
-                i = op.operand
+            i += 1
+            continue
+            # a = stack.pop()
+            # if a == 0:
+            #     assert type(op.operand) == int, 'Jump address must be `int`'
+            #     i = op.operand
         elif op.type == OpType.ELSE:
             assert type(op.operand) == int, 'Jump address must be `int`'
             i = op.operand
@@ -920,9 +923,10 @@ def compile_program(program: List[Op]) -> None:
             if op.operand not in allocated_strs:
                 allocated_strs[op.operand] = len(strs)
                 strs.append(op.operand)
-        elif op.type in (OpType.IF, OpType.DO):
+        elif op.type == OpType.DO:
             write_level1('pop x0')
             write_level1('tst x0, x0')
+            assert op.operand is not None, 'No address to jump'
             write_level1(f'b.eq end_{op.operand}')
         elif op.type == OpType.ELSE:
             write_level1(f'b end_{op.operand}')
@@ -933,6 +937,8 @@ def compile_program(program: List[Op]) -> None:
             write_base(f'end_{i}:')
         elif op.type == OpType.WHILE:
             write_base(f'while_{i}:')
+        elif op.type == OpType.IF:
+            write_level1(';; -- if --')
         elif op.type == OpType.INTRINSIC:
             assert len(Intrinsic) == 31, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
@@ -1138,13 +1144,13 @@ def parse_keyword(stack: List[Tuple[Token, int]], token: Token, i: int, program:
         return Op(type=OpType.IF, token=token, name=token.name)
     elif token.value == Keyword.ELSE:
         if len(stack) == 0:
-            raise_error(f'`else` can only be used with an `if`', token.loc)
-        if_index = stack.pop()[1]
-        if program[if_index].type != OpType.IF:
-            if if_index:
-                notify_user(f'Instead of `else` found: {program[if_index].type}', program[if_index].token.loc)
-            raise_error(f'`else` can only be used with an `if`', token.loc)
-        program[if_index].operand = i
+            raise_error(f'`else` can only be used with an `if-do`', token.loc)
+        do_index = stack.pop()[1]
+        if program[do_index].type != OpType.DO:
+            if do_index:
+                notify_user(f'Instead of `do` found: {program[do_index].type}', program[do_index].token.loc)
+            raise_error(f'`else` can only be used with an `if-do`', token.loc)
+        program[do_index].operand = i
         stack.append((token, i))
         return Op(type=OpType.ELSE, token=token, name=token.name)
     elif token.value == Keyword.WHILE:
@@ -1155,25 +1161,34 @@ def parse_keyword(stack: List[Tuple[Token, int]], token: Token, i: int, program:
         return Op(type=OpType.DO, token=token, name=token.name)
     elif token.value == Keyword.END:
         if len(stack) == 0:
-            raise_error('`end` can only be used with an `if`, `else`, `while` or `macro`',
+            raise_error('`end` can only be used with a `if-do`, `if-do-else`, `while-do` or `macro`',
                         token.loc)
         block_index = stack.pop()[1]
-        if program[block_index].type in (OpType.IF, OpType.ELSE):
+        if program[block_index].type == OpType.ELSE:
             program[block_index].operand = i
+            if len(stack) == 0:
+                raise_error('`if-do` must be present before `else`', program[block_index].token.loc)
+            if_index = stack.pop()[1]
+            if program[if_index].type != OpType.IF:
+                notify_user(f'Instead of `if` found: {program[if_index].type}',
+                            program[if_index].token.loc)
+                raise_error('`if` must be present before `do`', program[if_index].token.loc)
             return Op(type=OpType.END, token=token, name=token.name)
         elif program[block_index].type == OpType.DO:
             program[block_index].operand = i
             if len(stack) == 0:
                 raise_error('`while` must be present before `do`', program[block_index].token.loc)
-            while_index = stack.pop()[1]
-            if program[while_index].type != OpType.WHILE:
-                if while_index:
-                    notify_user(f'Instead of `while` found: {program[while_index].type}', program[while_index].token.loc)
-                raise_error('`while` must be present before `do`', program[block_index].token.loc)
-            value = while_index
-            return Op(type=OpType.END, token=token, name=token.name, operand=value)
+            before_do_index = stack.pop()[1]
+            if program[before_do_index].type == OpType.WHILE:
+                return Op(type=OpType.END, token=token, name=token.name, operand=before_do_index)
+            elif program[before_do_index].type == OpType.IF:
+                return Op(type=OpType.END, token=token, name=token.name)
+            else:
+                notify_user(f'Instead of `while`, or `if` found: {program[before_do_index].type}',
+                            program[before_do_index].token.loc)
+                raise_error('`while` or `if` must be present before `do`', program[block_index].token.loc)
         else:
-            raise_error('`end` can only be used with an `if`, `else`, `while` or `macro`',
+            raise_error('`end` can only be used with a `if-do`, `if-do-else`, `while-do` or `macro`',
                         token.loc)
     else:
         raise_error(f'Unknown keyword token: {token.value}', token.loc)
@@ -1262,6 +1277,7 @@ def parse_tokens_to_program(token_program: List[Token]) -> List[Op]:
                 rprogram.append(current_macro.tokens[idx])
             continue
         if token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.INCLUDE):
+
             expand_keyword_to_tokens(token, rprogram, macros)
         else:
             program.append(parse_token_as_op(stack, token, i, program))
@@ -1374,25 +1390,32 @@ def generate_program_control_flow(program: List[Op], filename: str) -> None:
             write_level1(f'Node_{i} [label={op.operand}]')
             write_level1(f'Node_{i} -> Node_{i + 1}')
         elif op.type == OpType.PUSH_STR:
+            write_level1(f'Node_{i} [label={repr(repr(op.operand))}]')
             write_level1(f'Node_{i} -> Node_{i + 1}')
         elif op.type == OpType.INTRINSIC:
+            assert type(op.operand) == Intrinsic, 'Operand must be an intrinsic'
             write_level1(f'Node_{i} [label={op.operand.name}]')
             write_level1(f'Node_{i} -> Node_{i + 1}')
         elif op.type == OpType.IF:
-            write_level1(f'Node_{i} [label={op.token.value.name}] shape=diamond')
-            write_level1(f'Node_{i} -> Node_{i + 1} [label=True]')
-            write_level1(f'Node_{i} -> Node_{op.operand + 1} [label=False style=dashed]')
+            assert type(op.token.value) == Keyword, 'Operand must be a keyword'
+            write_level1(f'Node_{i} [label={op.token.value.name} shape=octagon]')
+            write_level1(f'Node_{i} -> Node_{i + 1}')
         elif op.type == OpType.ELSE:
+            assert type(op.token.value) == Keyword, 'Operand must be a keyword'
             write_level1(f'Node_{i} [label={op.token.value.name}]')
             write_level1(f'Node_{i} -> Node_{op.operand}')
         elif op.type == OpType.WHILE:
+            assert type(op.token.value) == Keyword, 'Operand must be a keyword'
             write_level1(f'Node_{i} [label={op.token.value.name} shape=octagon]')
             write_level1(f'Node_{i} -> Node_{i + 1}')
         elif op.type == OpType.DO:
+            assert type(op.token.value) == Keyword, 'Operand must be a keyword'
+            assert type(op.operand) == int, 'Operand must be an integer'
             write_level1(f'Node_{i} [label={op.token.value.name} shape=diamond]')
             write_level1(f'Node_{i} -> Node_{i + 1} [label=True]')
             write_level1(f'Node_{i} -> Node_{op.operand + 1} [label=False style=dashed]')
         elif op.type == OpType.END:
+            assert type(op.token.value) == Keyword, 'Operand must be a keyword'
             write_level1(f'Node_{i} [label={op.token.value.name}]')
             if op.operand is None:
                 write_level1(f'Node_{i} -> Node_{i + 1}')
