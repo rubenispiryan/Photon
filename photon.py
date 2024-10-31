@@ -1124,6 +1124,7 @@ def usage_help() -> None:
     print('Usage: photon.py <SUBCOMMAND> <FLAGS> <FILENAME>')
     print('Subcommands:')
     print('     sim     Simulate the program in a macos little endian environment')
+    print('     flow    Generate a control flow graph for the given program')
     print('     com     Compile the program to arm 64-bit assembly')
     print('         --run   Used with `com` to run immediately')
 
@@ -1357,13 +1358,60 @@ def lex_file(file_path: str) -> List[Token]:
     return program
 
 
+def generate_program_control_flow(program: List[Op], filename: str) -> None:
+    dotfile = open(filename.replace('.phtn', '.dot'), 'w')
+    write_base = write_indent(dotfile, 0)
+    write_level1 = write_indent(dotfile, 1)
+    write_base('digraph ControlFlow {')
+    write_level1('size="8,8!"')
+    write_level1('center=true')
+    write_level1('ratio=fill')
+    assert len(OpType) == 8, 'Exhaustive handling of op types in control flow'
+    i = 0
+    for i in range(len(program)):
+        op = program[i]
+        if op.type == OpType.PUSH_INT:
+            write_level1(f'Node_{i} [label={op.operand}]')
+            write_level1(f'Node_{i} -> Node_{i + 1}')
+        elif op.type == OpType.PUSH_STR:
+            write_level1(f'Node_{i} -> Node_{i + 1}')
+        elif op.type == OpType.INTRINSIC:
+            write_level1(f'Node_{i} [label={op.operand.name}]')
+            write_level1(f'Node_{i} -> Node_{i + 1}')
+        elif op.type == OpType.IF:
+            write_level1(f'Node_{i} [label={op.token.value.name}] shape=diamond')
+            write_level1(f'Node_{i} -> Node_{i + 1} [label=True]')
+            write_level1(f'Node_{i} -> Node_{op.operand + 1} [label=False style=dashed]')
+        elif op.type == OpType.ELSE:
+            write_level1(f'Node_{i} [label={op.token.value.name}]')
+            write_level1(f'Node_{i} -> Node_{op.operand}')
+        elif op.type == OpType.WHILE:
+            write_level1(f'Node_{i} [label={op.token.value.name} shape=octagon]')
+            write_level1(f'Node_{i} -> Node_{i + 1}')
+        elif op.type == OpType.DO:
+            write_level1(f'Node_{i} [label={op.token.value.name} shape=diamond]')
+            write_level1(f'Node_{i} -> Node_{i + 1} [label=True]')
+            write_level1(f'Node_{i} -> Node_{op.operand + 1} [label=False style=dashed]')
+        elif op.type == OpType.END:
+            write_level1(f'Node_{i} [label={op.token.value.name}]')
+            if op.operand is None:
+                write_level1(f'Node_{i} -> Node_{i + 1}')
+            else:
+                write_level1(f'Node_{i} -> Node_{op.operand}')
+        else:
+            assert False, f'Unhandled op type: {op.type}'
+    write_level1(f'Node_{i + 1} [label=Halt shape=box]')
+    write_base('}')
+    dotfile.close()
+
+
 if __name__ == '__main__':
     _, *argv= sys.argv
     if len(argv) < 2:
         usage_help()
         exit(1)
     subcommand, *argv = argv
-    if subcommand not in ('sim', 'com'):
+    if subcommand not in ('sim', 'com', 'flow'):
         usage_help()
         exit(1)
     file_path_arg = argv[0]
@@ -1372,6 +1420,8 @@ if __name__ == '__main__':
     type_check_program(program_referenced, '-d' in argv or '--debug' in argv)
     if subcommand == 'sim':
         simulate_little_endian_macos(program_referenced, argv)
+    elif subcommand == 'flow':
+        generate_program_control_flow(program_referenced, file_path_arg)
     else:
         compile_program(program_referenced)
         exit_code = subprocess.call('as -o output.o output.s', shell=True)
