@@ -3,7 +3,7 @@
 include "std.phtn"
 
 1 1 while dup 4000000 < do
-    dup 2 % 0 == if
+    if dup 2 % 0 == do
         dup mem ,64 +
         mem swap .64
     end

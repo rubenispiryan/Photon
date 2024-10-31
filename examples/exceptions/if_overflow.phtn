@@ -1,1 +1,1 @@
-34 65 + 99 == if 69 end print
+if 34 65 + 99 == do 69 end print

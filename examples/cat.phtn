@@ -23,7 +23,8 @@ end
 // opens a file descriptor from a filename given as the n-th argument
 // saves it at fd
 macro open_fd_from_argv[n]
-    0 O_RDONLY argn ,64 argv[n] open dup -1 == if
+    0 O_RDONLY argn ,64 argv[n] open
+    if dup -1 == do
         "An error occurred when trying to open the file" putsln
         drop 1 exit
     else
@@ -32,7 +33,7 @@ macro open_fd_from_argv[n]
 end
 
 macro close_fd
-    fd ,64 close 0 != if
+    if fd ,64 close 0 != do
         "An error occurred when trying to close the file" putsln
         1 exit
     end
@@ -40,7 +41,7 @@ end
 
 // if no argument is provided enters interactive mode
 // otherwise outputs all the files
-argc 2 < if
+if argc 2 < do
     fd stdin .64
     write_fd
 else

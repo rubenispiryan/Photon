@@ -9,11 +9,11 @@ macro buffer mem end
 
 // str_ptr shift_amount
 macro shift_letter_by_n
-    over , dup 'a' >= swap 'z' <= and if
+    if over , dup 'a' >= swap 'z' <= and do
         dup2 over , + 'a' - 26 % 'a' + .
     end
 
-    over , dup 'A' >= swap 'Z' <= and if
+    if over , dup 'A' >= swap 'Z' <= and do
         dup2 over , + 'A' - 26 % 'A' + .
     end
 
@@ -23,7 +23,8 @@ end
 
 while BUFFER_CAP buffer stdin read dup 0 > do
     0 while dup2 > do
-        dup buffer + dup , '\n' != if
+        dup buffer +
+        if dup , '\n' != do
             13 shift_letter_by_n
         else
             drop

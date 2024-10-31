@@ -28,13 +28,13 @@ include "std.phtn"
 
 // if-else Condition Blocks
 
-5 5 - 0 == if
+if 5 5 - 0 == do
 5 print
 else
 10 print
 end
 
-4 6 + 19 - 9 + 25 == if
+if 4 6 + 19 - 9 + 25 == do
 2024 print
 else
 2025 print

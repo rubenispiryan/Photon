@@ -3,7 +3,7 @@
 include "std.phtn"
 
 600851475143 2 while over 1 > do
-    dup2 % 0 == if
+    if dup2 % 0 == do
         dup print
         swap over / swap
     else

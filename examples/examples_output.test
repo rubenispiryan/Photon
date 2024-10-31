@@ -107,7 +107,7 @@ STDIN:
 
 STDOUT:
 Error message originated inside: parse_keyword
-`else` can only be used with an `if`
+`else` can only be used with an `if-do`
 Exit code: 1
 end_./examples/exceptions/else_without_if.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/do_without_while.phtn argv  endargv
@@ -131,7 +131,7 @@ STDIN:
 
 STDOUT:
 Error message originated inside: parse_keyword
-`end` can only be used with an `if`, `else`, `while` or `macro`
+`end` can only be used with a `if-do`, `if-do-else`, `while-do` or `macro`
 Exit code: 1
 end_./examples/exceptions/only_end.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/if_else_overflow.phtn argv  endargv
@@ -148,7 +148,7 @@ end_./examples/exceptions/if_else_overflow.phtn-#--#--#--#--#--#--#--#--#--#--#-
 STDIN:
 
 STDOUT:
-Error message originated inside: compile_tokens_to_program
+Error message originated inside: parse_tokens_to_program
 Expansion limit reached for macro: a
 Exit code: 1
 end_./examples/exceptions/infinite_macro.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
@@ -503,7 +503,8 @@ end
 // opens a file descriptor from a filename given as the n-th argument
 // saves it at fd
 macro open_fd_from_argv[n]
-    0 O_RDONLY argn ,64 argv[n] open dup -1 == if
+    0 O_RDONLY argn ,64 argv[n] open
+    if dup -1 == do
         "An error occurred when trying to open the file" putsln
         drop 1 exit
     else
@@ -512,7 +513,7 @@ macro open_fd_from_argv[n]
 end
 
 macro close_fd
-    fd ,64 close 0 != if
+    if fd ,64 close 0 != do
         "An error occurred when trying to close the file" putsln
         1 exit
     end
@@ -520,7 +521,7 @@ end
 
 // if no argument is provided enters interactive mode
 // otherwise outputs all the files
-argc 2 < if
+if argc 2 < do
     fd stdin .64
     write_fd
 else
@@ -580,3 +581,28 @@ STDOUT:
 ./examples/language_features/here.phtn:[3:0]: Something needs to be done here
 Exit code: 32
 end_./examples/language_features/here.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+-
+./examples/exceptions/if_else_without_end.phtn argv  endargv
+STDIN:
+
+STDOUT:
+Error message originated inside: parse_tokens_to_program
+Found an unclosed block
+Exit code: 1
+end_./examples/exceptions/if_else_without_end.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/exceptions/if_without_end.phtn argv  endargv
+STDIN:
+
+STDOUT:
+Error message originated inside: parse_tokens_to_program
+Found an unclosed block
+Exit code: 1
+end_./examples/exceptions/if_without_end.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/exceptions/while_without_end.phtn argv  endargv
+STDIN:
+
+STDOUT:
+Error message originated inside: parse_tokens_to_program
+Found an unclosed block
+Exit code: 1
+end_./examples/exceptions/while_without_end.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
