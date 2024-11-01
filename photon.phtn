@@ -140,16 +140,16 @@ macro simulate_program
         dup sizeof(Op) * op_stack +
         if dup ,64 OP_PUSH_INT == do
             dup 8 + ,64 sim_stack_push
-        else if dup ,64 OP_ADD == do
+        elif dup ,64 OP_ADD == do
             sim_stack_pop
             sim_stack_pop
             +
             sim_stack_push
-        else if dup ,64 OP_PRINT == do
+        elif dup ,64 OP_PRINT == do
             sim_stack_pop
             print
         else "Unhandled Instruction\n" eputs 1 exit
-        end end end drop
+        end drop
         1 +
     end drop
 end
@@ -162,18 +162,18 @@ macro compile_program
             "   ;; -- push int " puts dup 8 + ,64 putd " --\n" puts
             "   ldr x0, =" puts dup 8 + ,64 putd "\n" puts
             "   push x0\n" puts
-        else if dup ,64 OP_ADD == do
+        elif dup ,64 OP_ADD == do
             "   ;; -- add --\n" puts
             "   pop x0\n" puts
             "   pop x1\n" puts
             "   add x0, x0, x1\n" puts
             "   push x0\n" puts
-        else if dup ,64 OP_PRINT == do
+        elif dup ,64 OP_PRINT == do
             "   ;; -- print --\n" puts
             "   pop x0\n" puts
             "   bl print\n" puts
         else "Unhandled Instruction\n" eputs 1 exit
-        end end end drop
+        end drop
         1 +
     end drop
     compile_footer
@@ -201,10 +201,10 @@ macro main
         1 argv[n]
         if dup "sim\0" swap drop streq do
             simulate_program
-        else if dup "com\0" swap drop streq do
+        elif dup "com\0" swap drop streq do
             compile_program
         else "Invalid Subcommand\n" eputs print_usage 1 exit
-        end end
+        end
         drop
     end
 end
