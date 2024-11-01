@@ -107,7 +107,7 @@ STDIN:
 
 STDOUT:
 Error message originated inside: parse_keyword
-`else` can only be used with an `if-do`
+`else` can only be used with an `if-do` or `elif-do`
 Exit code: 1
 end_./examples/exceptions/else_without_if.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/do_without_while.phtn argv  endargv
@@ -606,3 +606,12 @@ Error message originated inside: parse_tokens_to_program
 Found an unclosed block
 Exit code: 1
 end_./examples/exceptions/while_without_end.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/language_features/elif.phtn argv  endargv
+STDIN:
+
+STDOUT:
+else?
+yes
+not
+
+end_./examples/language_features/elif.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-

@@ -95,6 +95,7 @@ class OpType(Enum):
     IF = auto()
     END = auto()
     ELSE = auto()
+    ELIF = auto()
     WHILE = auto()
     DO = auto()
 
@@ -103,6 +104,7 @@ class Keyword(Enum):
     IF = auto()
     END = auto()
     ELSE = auto()
+    ELIF = auto()
     WHILE = auto()
     DO = auto()
     MACRO = auto()
@@ -146,6 +148,7 @@ class Op:
 KEYWORD_NAMES = {
     'if': Keyword.IF,
     'end': Keyword.END,
+    'elif': Keyword.ELIF,
     'else': Keyword.ELSE,
     'while': Keyword.WHILE,
     'do': Keyword.DO,
@@ -269,7 +272,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
     stack: DataTypeStack = []
     block_stack: List[Tuple[DataTypeStack, Op]] = []  # convert stack to tuple keeping only DataType, hash and store
     for op in program:
-        assert len(OpType) == 8, 'Exhaustive handling of operations in type check'
+        assert len(OpType) == 9, 'Exhaustive handling of operations in type check'
         if op.type == OpType.PUSH_INT:
             assert type(op.operand) == int, 'Value for `PUSH_INT` must be `int`'
             stack.append((DataType.INT, op.token))
@@ -279,6 +282,13 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
             stack.append((DataType.PTR, op.token))
         elif op.type == OpType.IF:
             block_stack.append((stack.copy(), op))
+        elif op.type == OpType.ELIF:
+            before_do_stack, do_op = block_stack.pop()
+            assert do_op.type == OpType.DO, '[BUG] elif without do'
+            # TODO: currently only supporting 1 elif in a single if-do-else body
+            block_stack.pop()
+            block_stack.append((stack.copy(), op))
+            stack = before_do_stack
         elif op.type == OpType.ELSE:
             before_do_stack, do_op = block_stack.pop()
             assert do_op.type == OpType.DO, '[BUG] else without do'
@@ -294,7 +304,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
                     raise_error('Both branches of an if-else block must produce the same stack types', op.token)
                 _, if_block = block_stack.pop()
-                assert if_block.type == OpType.IF, '[BUG] No `if` before `do-else`'
+                assert if_block.type == OpType.IF or if_block.type == OpType.ELIF, '[BUG] No `if` or `elif` before `do-else`'
             elif block.type == OpType.DO:
                 stack_before, before_do_op = block_stack.pop()
                 assert before_do_op.type == OpType.WHILE or before_do_op.type == OpType.IF, '[BUG] No `while` or `if` before `do`'
@@ -637,7 +647,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
 
 def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) -> None:
     stack: List = []
-    assert len(OpType) == 8, 'Exhaustive handling of operators in simulation'
+    assert len(OpType) == 9, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(MEM_CAPACITY)
     allocated_strs = {}
@@ -675,6 +685,9 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
         elif op.type == OpType.IF:
             i += 1
             continue
+        elif op.type == OpType.ELIF:
+            assert type(op.operand) == int, 'Jump address must be `int`'
+            i = op.operand
         elif op.type == OpType.ELSE:
             assert type(op.operand) == int, 'Jump address must be `int`'
             i = op.operand
@@ -888,7 +901,7 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
 
 
 def compile_program(program: List[Op]) -> None:
-    assert len(OpType) == 8, 'Exhaustive handling of operators in compilation'
+    assert len(OpType) == 9, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -928,6 +941,9 @@ def compile_program(program: List[Op]) -> None:
             assert op.operand is not None, 'No address to jump'
             write_level1(f'b.eq end_{op.operand}')
         elif op.type == OpType.ELSE:
+            write_level1(f'b end_{op.operand}')
+            write_base(f'end_{i}:')
+        elif op.type == OpType.ELIF:
             write_level1(f'b end_{op.operand}')
             write_base(f'end_{i}:')
         elif op.type == OpType.END:
@@ -1135,20 +1151,36 @@ def usage_help() -> None:
 
 
 def parse_keyword(stack: List[Tuple[Token, int]], token: Token, i: int, program: List[Op]) -> NoReturn | Op:
-    assert len(Keyword) == 7, 'Exhaustive handling of keywords in parse_keyword'
+    assert len(Keyword) == 8, 'Exhaustive handling of keywords in parse_keyword'
     if type(token.value) != Keyword:
         raise_error(f'Token value `{token.value}` must be a Keyword, but found: {type(token.value)}', token.loc)
     if token.value == Keyword.IF:
         stack.append((token, i))
         return Op(type=OpType.IF, token=token, name=token.value.name)
-    elif token.value == Keyword.ELSE:
-        if len(stack) == 0:
-            raise_error(f'`else` can only be used with an `if-do`', token.loc)
-        do_index = stack.pop()[1]
+    elif token.value == Keyword.ELIF:
+        if len(stack) < 2:
+            raise_error(f'`elif` can only be used with an `if-do` or `elif-do`', token.loc)
+        _, do_index = stack.pop()
         if program[do_index].type != OpType.DO:
             if do_index:
                 notify_user(f'Instead of `do` found: {program[do_index].type}', program[do_index].token.loc)
-            raise_error(f'`else` can only be used with an `if-do`', token.loc)
+            raise_error(f'`elif` can only be used with an `if-do` or `elif-do`', token.loc)
+        _, if_index = stack.pop()
+        if program[if_index].type != OpType.IF and program[if_index].type != OpType.ELIF:
+            notify_user(f'Instead of `if` or `elif` found: {program[if_index].type}',
+                        program[if_index].token.loc)
+            raise_error('`if` or `elif` must be present before `do`', program[if_index].token.loc)
+        program[do_index].operand = i
+        stack.append((token, i))
+        return Op(type=OpType.ELIF, token=token, name=token.value.name)
+    elif token.value == Keyword.ELSE:
+        if len(stack) < 2:
+            raise_error(f'`else` can only be used with an `if-do` or `elif-do`', token.loc)
+        _, do_index = stack.pop()
+        if program[do_index].type != OpType.DO and program[do_index].type != OpType.ELIF:
+            if do_index:
+                notify_user(f'Instead of `do` found: {program[do_index].type}', program[do_index].token.loc)
+            raise_error(f'`else` can only be used with an `if-do` or `elif-do`', token.loc)
         program[do_index].operand = i
         stack.append((token, i))
         return Op(type=OpType.ELSE, token=token, name=token.value.name)
@@ -1162,16 +1194,18 @@ def parse_keyword(stack: List[Tuple[Token, int]], token: Token, i: int, program:
         if len(stack) == 0:
             raise_error('`end` can only be used with a `if-do`, `if-do-else`, `while-do` or `macro`',
                         token.loc)
-        block_index = stack.pop()[1]
+        block, block_index = stack.pop()
         if program[block_index].type == OpType.ELSE:
             program[block_index].operand = i
             if len(stack) == 0:
                 raise_error('`if-do` must be present before `else`', program[block_index].token.loc)
-            if_index = stack.pop()[1]
-            if program[if_index].type != OpType.IF:
-                notify_user(f'Instead of `if` found: {program[if_index].type}',
+            _, if_index = stack.pop()
+            if program[if_index].type != OpType.IF and program[if_index].type != OpType.ELIF:
+                notify_user(f'Instead of `if` or `elif` found: {program[if_index].type}',
                             program[if_index].token.loc)
-                raise_error('`if` must be present before `do`', program[if_index].token.loc)
+                raise_error('`if` or `elif` must be present before `do`', program[if_index].token.loc)
+            if program[if_index].type == OpType.ELIF:
+                program[if_index].operand = i
             return Op(type=OpType.END, token=token, name=token.value.name)
         elif program[block_index].type == OpType.DO:
             program[block_index].operand = i
@@ -1194,7 +1228,7 @@ def parse_keyword(stack: List[Tuple[Token, int]], token: Token, i: int, program:
 
 
 def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[str, Token]) -> NoReturn | None:
-    assert len(Keyword) == 7, 'Exhaustive handling of keywords in compile_keyword_to_program'
+    assert len(Keyword) == 8, 'Exhaustive handling of keywords in compile_keyword_to_program'
     if token.value == Keyword.MACRO:
         if len(rprogram) == 0:
             raise_error('Expected name of the macro but found nothing', token.loc)
@@ -1287,7 +1321,7 @@ def parse_tokens_to_program(token_program: List[Token]) -> List[Op]:
 
 
 def parse_token_as_op(stack: List[Tuple[Token, int]], token: Token, i: int, program: List[Op]) -> Op | NoReturn:
-    assert len(OpType) == 8, 'Exhaustive handling of built-in words'
+    assert len(OpType) == 9, 'Exhaustive handling of built-in words'
     assert len(TokenType) == 5, 'Exhaustive handling of tokens in parser'
 
     if token.type == TokenType.INT:
