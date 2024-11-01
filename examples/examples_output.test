@@ -610,8 +610,10 @@ end_./examples/exceptions/while_without_end.phtn-#--#--#--#--#--#--#--#--#--#--#
 STDIN:
 
 STDOUT:
-else?
+more
 yes
 not
+true
+else?
 
 end_./examples/language_features/elif.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-

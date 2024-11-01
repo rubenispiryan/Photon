@@ -285,8 +285,15 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
         elif op.type == OpType.ELIF:
             before_do_stack, do_op = block_stack.pop()
             assert do_op.type == OpType.DO, '[BUG] elif without do'
-            # TODO: currently only supporting 1 elif in a single if-do-else body
-            block_stack.pop()
+            if_elif_stack, if_elif_block = block_stack.pop()
+            assert if_elif_block.type == OpType.ELIF or if_elif_block.type == OpType.IF, '[BUG] invalid operation before do-elif'
+            if if_elif_block.type == OpType.ELIF:
+                expected_stack_before_block = list(map(lambda x: x[0], if_elif_stack))
+                current_stack = list(map(lambda x: x[0], stack))
+                if current_stack != expected_stack_before_block:
+                    notify_user(f'Expected Stack Types: {expected_stack_before_block}', op.token.loc)
+                    notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
+                    raise_error('All branches of an if-elif block must produce the same stack types', op.token)
             block_stack.append((stack.copy(), op))
             stack = before_do_stack
         elif op.type == OpType.ELSE:
@@ -944,6 +951,7 @@ def compile_program(program: List[Op]) -> None:
             write_level1(f'b end_{op.operand}')
             write_base(f'end_{i}:')
         elif op.type == OpType.ELIF:
+            write_base(f'end_{i - 1}:')
             write_level1(f'b end_{op.operand}')
             write_base(f'end_{i}:')
         elif op.type == OpType.END:
@@ -1170,6 +1178,8 @@ def parse_keyword(stack: List[Tuple[Token, int]], token: Token, i: int, program:
             notify_user(f'Instead of `if` or `elif` found: {program[if_index].type}',
                         program[if_index].token.loc)
             raise_error('`if` or `elif` must be present before `do`', program[if_index].token.loc)
+        if program[if_index].type == OpType.ELIF:
+            program[if_index].operand = i - 1
         program[do_index].operand = i
         stack.append((token, i))
         return Op(type=OpType.ELIF, token=token, name=token.value.name)
@@ -1415,7 +1425,7 @@ def generate_program_control_flow(program: List[Op], filename: str) -> None:
     write_level1('size="8,8!"')
     write_level1('center=true')
     write_level1('ratio=fill')
-    assert len(OpType) == 8, 'Exhaustive handling of op types in control flow'
+    assert len(OpType) == 9, 'Exhaustive handling of op types in control flow'
     i = 0
     for i in range(len(program)):
         op = program[i]
@@ -1430,25 +1440,31 @@ def generate_program_control_flow(program: List[Op], filename: str) -> None:
             write_level1(f'Node_{i} [label={op.operand.name}]')
             write_level1(f'Node_{i} -> Node_{i + 1}')
         elif op.type == OpType.IF:
-            assert type(op.token.value) == Keyword, 'Operand must be a keyword'
+            assert type(op.token.value) == Keyword, 'Token value must be a keyword'
             write_level1(f'Node_{i} [label={op.token.value.name} shape=octagon]')
             write_level1(f'Node_{i} -> Node_{i + 1}')
-        elif op.type == OpType.ELSE:
-            assert type(op.token.value) == Keyword, 'Operand must be a keyword'
+        elif op.type == OpType.ELIF:
+            assert type(op.token.value) == Keyword, 'Token value must be a keyword'
+            assert type(op.operand) == int, 'Operand must be an integer'
             write_level1(f'Node_{i} [label={op.token.value.name}]')
-            write_level1(f'Node_{i} -> Node_{op.operand}')
+            write_level1(f'Node_{i} -> Node_{op.operand + 1}')
+        elif op.type == OpType.ELSE:
+            assert type(op.token.value) == Keyword, 'Token value must be a keyword'
+            assert type(op.operand) == int, 'Operand must be an integer'
+            write_level1(f'Node_{i} [label={op.token.value.name}]')
+            write_level1(f'Node_{i} -> Node_{op.operand + 1}')
         elif op.type == OpType.WHILE:
-            assert type(op.token.value) == Keyword, 'Operand must be a keyword'
+            assert type(op.token.value) == Keyword, 'Token value must be a keyword'
             write_level1(f'Node_{i} [label={op.token.value.name} shape=octagon]')
             write_level1(f'Node_{i} -> Node_{i + 1}')
         elif op.type == OpType.DO:
-            assert type(op.token.value) == Keyword, 'Operand must be a keyword'
+            assert type(op.token.value) == Keyword, 'Token value must be a keyword'
             assert type(op.operand) == int, 'Operand must be an integer'
             write_level1(f'Node_{i} [label={op.token.value.name} shape=diamond]')
             write_level1(f'Node_{i} -> Node_{i + 1} [label=True]')
             write_level1(f'Node_{i} -> Node_{op.operand + 1} [label=False style=dashed]')
         elif op.type == OpType.END:
-            assert type(op.token.value) == Keyword, 'Operand must be a keyword'
+            assert type(op.token.value) == Keyword, 'Token value must be a keyword'
             write_level1(f'Node_{i} [label={op.token.value.name}]')
             if op.operand is None:
                 write_level1(f'Node_{i} -> Node_{i + 1}')
