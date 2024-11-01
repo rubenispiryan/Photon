@@ -103,7 +103,7 @@ macro print_ops
 end
 
 macro putd
-  dup 0 == if
+  if dup 0 == do
     "0" puts
   else
     putd_buffer PUTD_BUFFER_CAP +
@@ -120,7 +120,7 @@ end
 
 // value
 macro sim_stack_push
-    sim_stack_count ,64 SIM_STACK_CAP >= if
+    if sim_stack_count ,64 SIM_STACK_CAP >= do
         here eputs "[ERROR] data stack overflow in simulation mode" eputs 1 exit
     end
     sim_stack_count ,64 8 * sim_stack + swap .64
@@ -128,7 +128,7 @@ macro sim_stack_push
 end
 
 macro sim_stack_pop
-    sim_stack_count ,64 0 <= if
+    if sim_stack_count ,64 0 <= do
         here eputs "[ERROR] data stack underflow in simulation mode" eputs 1 exit
     end
     sim_stack_count dec64
@@ -138,18 +138,18 @@ end
 macro simulate_program
     0 while dup op_stack_count ,64 < do
         dup sizeof(Op) * op_stack +
-        dup ,64 OP_PUSH_INT == if
+        if dup ,64 OP_PUSH_INT == do
             dup 8 + ,64 sim_stack_push
-        else dup ,64 OP_ADD == if
+        elif dup ,64 OP_ADD == do
             sim_stack_pop
             sim_stack_pop
             +
             sim_stack_push
-        else dup ,64 OP_PRINT == if
+        elif dup ,64 OP_PRINT == do
             sim_stack_pop
             print
         else "Unhandled Instruction\n" eputs 1 exit
-        end end end drop
+        end drop
         1 +
     end drop
 end
@@ -158,22 +158,22 @@ macro compile_program
     compile_header
     0 while dup op_stack_count ,64 < do
         dup sizeof(Op) * op_stack +
-        dup ,64 OP_PUSH_INT == if
+        if dup ,64 OP_PUSH_INT == do
             "   ;; -- push int " puts dup 8 + ,64 putd " --\n" puts
             "   ldr x0, =" puts dup 8 + ,64 putd "\n" puts
             "   push x0\n" puts
-        else dup ,64 OP_ADD == if
+        elif dup ,64 OP_ADD == do
             "   ;; -- add --\n" puts
             "   pop x0\n" puts
             "   pop x1\n" puts
             "   add x0, x0, x1\n" puts
             "   push x0\n" puts
-        else dup ,64 OP_PRINT == if
+        elif dup ,64 OP_PRINT == do
             "   ;; -- print --\n" puts
             "   pop x0\n" puts
             "   bl print\n" puts
         else "Unhandled Instruction\n" eputs 1 exit
-        end end end drop
+        end drop
         1 +
     end drop
     compile_footer
@@ -194,17 +194,17 @@ macro print_usage
 end
 
 macro main
-    argc 2 < if
+    if argc 2 < do
         print_usage
     else
         program
         1 argv[n]
-        dup "sim\0" swap drop streq if
+        if dup "sim\0" swap drop streq do
             simulate_program
-        else dup "com\0" swap drop streq if
+        elif dup "com\0" swap drop streq do
             compile_program
         else "Invalid Subcommand\n" eputs print_usage 1 exit
-        end end
+        end
         drop
     end
 end

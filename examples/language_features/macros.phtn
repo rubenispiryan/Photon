@@ -2,11 +2,11 @@ include "std.phtn"
 
 "hello world" putsln
 
-macro ifc if
+macro ifc if dup do
     "hello 2024" putsln
     else
     "hello 2025" putsln
-    end
+    end drop
 end
 
 macro while<10 while dup 10 < do

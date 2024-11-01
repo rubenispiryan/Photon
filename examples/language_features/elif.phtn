@@ -1,0 +1,66 @@
+include "std.phtn"
+
+0
+if dup 2 == do
+    "not\n" puts
+elif dup 1 == do
+    "yes\n" puts
+elif dup 0 == do
+    "more\n" puts
+elif dup 3 == do
+    "true\n" puts
+else
+    "else?\n" puts
+end drop
+
+1
+if dup 2 == do
+    "not\n" puts
+elif dup 1 == do
+    "yes\n" puts
+elif dup 0 == do
+    "more\n" puts
+elif dup 3 == do
+    "true\n" puts
+else
+    "else?\n" puts
+end drop
+
+2
+if dup 2 == do
+    "not\n" puts
+elif dup 1 == do
+    "yes\n" puts
+elif dup 0 == do
+    "more\n" puts
+elif dup 3 == do
+    "true\n" puts
+else
+    "else?\n" puts
+end drop
+
+3
+if dup 2 == do
+    "not\n" puts
+elif dup 1 == do
+    "yes\n" puts
+elif dup 0 == do
+    "more\n" puts
+elif dup 3 == do
+    "true\n" puts
+else
+    "else?\n" puts
+end drop
+
+4
+if dup 2 == do
+    "not\n" puts
+elif dup 1 == do
+    "yes\n" puts
+elif dup 0 == do
+    "more\n" puts
+elif dup 3 == do
+    "true\n" puts
+else
+    "else?\n" puts
+end drop

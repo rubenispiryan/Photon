@@ -37,7 +37,7 @@ end
 
 macro streq
     while
-        over , 0 != over , 0 != and if
+        if over , 0 != over , 0 != and do
             dup2 , swap , ==
         else
             false

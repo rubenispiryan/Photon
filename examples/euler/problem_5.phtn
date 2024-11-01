@@ -18,7 +18,7 @@ macro ans tmp 8 N * + end
 
   // factorize and store factor count in tmp table
   dup 2 while over 1 > do
-    dup2 % 0 == if
+    if dup2 % 0 == do
       dup 8 * tmp + inc64
       swap over / swap
     else
@@ -28,12 +28,12 @@ macro ans tmp 8 N * + end
 
   // acc[i] = max(tmp[i], acc[i])
   0 while dup N < do
-    dup 8 * acc + ,64
-    over 8 * tmp + ,64
-    < if
-      dup 8 * acc +
-      over 8 * tmp + ,64
-      .64
+    if  dup 8 * acc + ,64
+        over 8 * tmp + ,64
+        < do
+        dup 8 * acc +
+        over 8 * tmp + ,64
+        .64
     end
     1 +
   end drop
