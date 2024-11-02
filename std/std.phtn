@@ -22,11 +22,11 @@ macro open SYS_OPEN syscall3 end
 macro close SYS_CLOSE syscall1 end
 
 macro inc64
-    dup ,64 1 + .64
+    dup ,8 1 + .8
 end
 
 macro dec64
-    dup ,64 1 - .64
+    dup ,8 1 - .8
 end
 
 macro strlen
@@ -49,7 +49,7 @@ macro streq
 end
 
 macro argv[n]
-    8 * argv + ,64 int->ptr
+    8 * argv + ,8 int->ptr
 end
 
 macro dup2 over over end

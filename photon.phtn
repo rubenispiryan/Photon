@@ -87,17 +87,17 @@ macro sizeof(Op) 16 end
 
 // expects: type:int operand:int
 macro push_op
-    op_stack_count ,64 sizeof(Op) * op_stack +
-    dup 8 + rot .64
-    swap .64
+    op_stack_count ,8 sizeof(Op) * op_stack +
+    dup 8 + rot .8
+    swap .8
     op_stack_count inc64
 end
 
 macro print_ops
-    0 while dup op_stack_count ,64 < do
+    0 while dup op_stack_count ,8 < do
         dup sizeof(Op) * op_stack +
-        dup ,64 "Type: " puts putd
-        8 + ,64 ", Operand: " puts print
+        dup ,8 "Type: " puts putd
+        8 + ,8 ", Operand: " puts print
         1 +
     end drop
 end
@@ -120,32 +120,32 @@ end
 
 // value
 macro sim_stack_push
-    if sim_stack_count ,64 SIM_STACK_CAP >= do
+    if sim_stack_count ,8 SIM_STACK_CAP >= do
         here eputs "[ERROR] data stack overflow in simulation mode" eputs 1 exit
     end
-    sim_stack_count ,64 8 * sim_stack + swap .64
+    sim_stack_count ,8 8 * sim_stack + swap .8
     sim_stack_count inc64
 end
 
 macro sim_stack_pop
-    if sim_stack_count ,64 0 <= do
+    if sim_stack_count ,8 0 <= do
         here eputs "[ERROR] data stack underflow in simulation mode" eputs 1 exit
     end
     sim_stack_count dec64
-    sim_stack_count ,64 8 * sim_stack + ,64
+    sim_stack_count ,8 8 * sim_stack + ,8
 end
 
 macro simulate_program
-    0 while dup op_stack_count ,64 < do
+    0 while dup op_stack_count ,8 < do
         dup sizeof(Op) * op_stack +
-        if dup ,64 OP_PUSH_INT == do
-            dup 8 + ,64 sim_stack_push
-        elif dup ,64 OP_ADD == do
+        if dup ,8 OP_PUSH_INT == do
+            dup 8 + ,8 sim_stack_push
+        elif dup ,8 OP_ADD == do
             sim_stack_pop
             sim_stack_pop
             +
             sim_stack_push
-        elif dup ,64 OP_PRINT == do
+        elif dup ,8 OP_PRINT == do
             sim_stack_pop
             print
         else "Unhandled Instruction\n" eputs 1 exit
@@ -156,19 +156,19 @@ end
 
 macro compile_program
     compile_header
-    0 while dup op_stack_count ,64 < do
+    0 while dup op_stack_count ,8 < do
         dup sizeof(Op) * op_stack +
-        if dup ,64 OP_PUSH_INT == do
-            "   ;; -- push int " puts dup 8 + ,64 putd " --\n" puts
-            "   ldr x0, =" puts dup 8 + ,64 putd "\n" puts
+        if dup ,8 OP_PUSH_INT == do
+            "   ;; -- push int " puts dup 8 + ,8 putd " --\n" puts
+            "   ldr x0, =" puts dup 8 + ,8 putd "\n" puts
             "   push x0\n" puts
-        elif dup ,64 OP_ADD == do
+        elif dup ,8 OP_ADD == do
             "   ;; -- add --\n" puts
             "   pop x0\n" puts
             "   pop x1\n" puts
             "   add x0, x0, x1\n" puts
             "   push x0\n" puts
-        elif dup ,64 OP_PRINT == do
+        elif dup ,8 OP_PRINT == do
             "   ;; -- print --\n" puts
             "   pop x0\n" puts
             "   bl print\n" puts

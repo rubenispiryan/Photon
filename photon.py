@@ -79,8 +79,8 @@ class Intrinsic(Enum):
     MEM = auto()
     LOAD = auto()
     STORE = auto()
-    LOAD64 = auto()
-    STORE64 = auto()
+    LOAD8 = auto()
+    STORE8 = auto()
     SYSCALL1 = auto()
     SYSCALL3 = auto()
     ARGC = auto()
@@ -182,8 +182,8 @@ INTRINSIC_NAMES = {
     'mem': Intrinsic.MEM,
     '.': Intrinsic.STORE,
     ',': Intrinsic.LOAD,
-    '.64': Intrinsic.STORE64,
-    ',64': Intrinsic.LOAD64,
+    '.8': Intrinsic.STORE8,
+    ',8': Intrinsic.LOAD8,
     'syscall1': Intrinsic.SYSCALL1,
     'syscall3': Intrinsic.SYSCALL3,
     'argc': Intrinsic.ARGC,
@@ -327,7 +327,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 if before_do_op.type == OpType.ELIF and current_stack != expected_stack:
                     notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
                     notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
-                    raise_error('Both branches of an if-elif block must produce the same stack types', op.token)
+                    raise_error('All branches of an if-elif block must produce the same stack types', op.token)
                 if before_do_op.type == OpType.WHILE or before_do_op.type == OpType.IF:
                     stack = stack_before_block
             else:
@@ -520,7 +520,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
-            elif op.operand == Intrinsic.LOAD64:
+            elif op.operand == Intrinsic.LOAD8:
                 ensure_argument_count(len(stack), op, 1)
                 a_type, a_loc = stack.pop()
                 if a_type != DataType.PTR:
@@ -528,7 +528,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                         notify_argument_origin(a_loc, order=1)
                     raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
                 stack.append((DataType.INT, op.token))
-            elif op.operand == Intrinsic.STORE64:
+            elif op.operand == Intrinsic.STORE8:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
                 b_type, b_loc = stack.pop()
@@ -794,13 +794,13 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 address = stack.pop()
                 assert type(value) == type(address) == int, 'Arguments for `.` must be `int`'
                 mem[address] = value & 0xFF
-            elif op.operand == Intrinsic.LOAD64:
+            elif op.operand == Intrinsic.LOAD8:
                 addr = stack.pop()
                 _bytes = bytearray(8)
                 for offset in range(0, 8):
                     _bytes[offset] = mem[addr + offset]
                 stack.append(int.from_bytes(_bytes, byteorder="little"))
-            elif op.operand == Intrinsic.STORE64:
+            elif op.operand == Intrinsic.STORE8:
                 store_value64 = stack.pop().to_bytes(length=8, byteorder="little")
                 store_addr64 = stack.pop()
                 for byte in store_value64:
@@ -1056,11 +1056,11 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('pop x0')
                 write_level1('ldrb w1, [x0]')
                 write_level1('push x1')
-            elif op.operand == Intrinsic.STORE64:
+            elif op.operand == Intrinsic.STORE8:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('str x0, [x1]')
-            elif op.operand == Intrinsic.LOAD64:
+            elif op.operand == Intrinsic.LOAD8:
                 write_level1('pop x0')
                 write_level1('ldr x1, [x0]')
                 write_level1('push x1')
