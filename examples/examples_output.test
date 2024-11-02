@@ -289,6 +289,7 @@ Hello World
 Hello World
 Hello World
 Hello World
+This is a C-String
 
 end_./examples/language_features/strings.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/language_features/basic_operators.phtn argv  endargv
@@ -638,3 +639,14 @@ Expected Stack Types: [<DataType.INT: 1>]
 Actual Stack Types: [<DataType.INT: 1>, <DataType.INT: 1>]
 Exit code: 1
 end_./examples/exceptions/if_elif_else_overflow.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/exceptions/cstring_puts_without_len.phtn argv  endargv
+STDIN:
+
+STDOUT:
+Error message originated inside: type_check_program
+Error message originated inside: ensure_argument_count
+Not enough arguments for: syscall3, found: 3 but required: 4
+Operation expanded from macro: write
+Operation expanded from macro: puts
+Exit code: 1
+end_./examples/exceptions/cstring_puts_without_len.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-

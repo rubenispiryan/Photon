@@ -12,3 +12,5 @@ include "std.phtn"
 "Hello World" putsln
 "Hello World" putsln
 "Hello World" putsln
+
+"This is a C-String\0" dup strlen swap putsln

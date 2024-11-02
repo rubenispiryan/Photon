@@ -199,9 +199,9 @@ macro main
     else
         program
         1 argv[n]
-        if dup "sim\0" swap drop streq do
+        if dup "sim\0" streq do
             simulate_program
-        elif dup "com\0" swap drop streq do
+        elif dup "com\0" streq do
             compile_program
         else "Invalid Subcommand\n" eputs print_usage 1 exit
         end

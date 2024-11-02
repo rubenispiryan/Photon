@@ -91,6 +91,7 @@ class Intrinsic(Enum):
 class OpType(Enum):
     PUSH_INT = auto()
     PUSH_STR = auto()
+    PUSH_CSTR = auto()
     INTRINSIC = auto()
     IF = auto()
     END = auto()
@@ -116,6 +117,7 @@ class TokenType(Enum):
     KEYWORD = auto()
     INT = auto()
     STR = auto()
+    CSTR = auto()
     CHAR = auto()
 
 
@@ -204,7 +206,7 @@ FDS: List[BinaryIO] = [sys.stdin.buffer, sys.stdout.buffer, sys.stderr.buffer]
 
 
 def make_log_message(message: str, loc: Loc) -> str:
-    return f'{loc.filename}:[{loc.line + 1}:{loc.col}]: {message}'
+    return f'{loc.filename}:[{loc.line + 1}:{loc.col}] {message}'
 
 
 def notify_user(message: str, loc: Loc) -> None:
@@ -230,8 +232,11 @@ def raise_error(message: str, place: Loc | Token, frame: int = 2) -> NoReturn:
         expand_place = place
         while i < MACRO_TRACEBACK_LIMIT and i < expanded_count:
             assert expand_place.expanded_from is not None, 'Bug in macro expansion count'
+            location = expand_place.expanded_from.loc
+            if location.filename[:2] != './':
+                location.filename = './' + location.filename
             notify_user(f'Operation expanded from macro: {expand_place.expanded_from.value}',
-                        loc=expand_place.expanded_from.loc)
+                        loc=location)
             expand_place = expand_place.expanded_from
             i += 1
         place = place.loc
@@ -272,13 +277,16 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
     stack: DataTypeStack = []
     block_stack: List[Tuple[DataTypeStack, Op]] = []  # convert stack to tuple keeping only DataType, hash and store
     for op in program:
-        assert len(OpType) == 9, 'Exhaustive handling of operations in type check'
+        assert len(OpType) == 10, 'Exhaustive handling of operations in type check'
         if op.type == OpType.PUSH_INT:
             assert type(op.operand) == int, 'Value for `PUSH_INT` must be `int`'
             stack.append((DataType.INT, op.token))
         elif op.type == OpType.PUSH_STR:
             assert type(op.operand) == str, 'Value for `PUSH_STR` must be `str`'
             stack.append((DataType.INT, op.token))
+            stack.append((DataType.PTR, op.token))
+        elif op.type == OpType.PUSH_CSTR:
+            assert type(op.operand) == str, 'Value for `PUSH_CSTR` must be `str`'
             stack.append((DataType.PTR, op.token))
         elif op.type == OpType.IF:
             block_stack.append((stack.copy(), op))
@@ -659,7 +667,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
 
 def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) -> None:
     stack: List = []
-    assert len(OpType) == 9, 'Exhaustive handling of operators in simulation'
+    assert len(OpType) == 10, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(MEM_CAPACITY)
     allocated_strs = {}
@@ -687,6 +695,17 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
             bs = bytes(op.operand, 'utf-8')
             n = len(bs)
             stack.append(n)
+            if op.operand not in allocated_strs:
+                allocated_strs[op.operand] = str_size
+                mem[str_size:str_size + n] = bs
+                str_size += n
+                if str_size > STR_CAPACITY:
+                    raise_error('String buffer overflow', op.token.loc)
+            stack.append(allocated_strs[op.operand])
+        elif op.type == OpType.PUSH_CSTR:
+            assert type(op.operand) == str, 'Value for `PUSH_CSTR` must be `str`'
+            bs = bytes(op.operand, 'utf-8') + b'\0'
+            n = len(bs)
             if op.operand not in allocated_strs:
                 allocated_strs[op.operand] = str_size
                 mem[str_size:str_size + n] = bs
@@ -913,7 +932,7 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
 
 
 def compile_program(program: List[Op]) -> None:
-    assert len(OpType) == 9, 'Exhaustive handling of operators in compilation'
+    assert len(OpType) == 10, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -947,6 +966,16 @@ def compile_program(program: List[Op]) -> None:
             if op.operand not in allocated_strs:
                 allocated_strs[op.operand] = len(strs)
                 strs.append(op.operand)
+        elif op.type == OpType.PUSH_CSTR:
+            assert type(op.operand) == str, 'Operation value must be a `str` for PUSH_CSTR'
+            cstr = op.operand + '\0'
+            address = allocated_strs.get(cstr, len(strs))
+            write_level1(f'adrp x0, str_{address}@PAGE')
+            write_level1(f'add x0, x0, str_{address}@PAGEOFF')
+            write_level1('push x0')
+            if cstr not in allocated_strs:
+                allocated_strs[cstr] = len(strs)
+                strs.append(cstr)
         elif op.type == OpType.DO:
             write_level1('pop x0')
             write_level1('tst x0, x0')
@@ -1307,7 +1336,7 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
 
 
 def parse_tokens_to_program(token_program: List[Token]) -> List[Op]:
-    assert len(TokenType) == 5, "Exhaustive handling of tokens in parse_tokens_to_program."
+    assert len(TokenType) == 6, "Exhaustive handling of tokens in parse_tokens_to_program."
     stack: List[Tuple[Token, int]] = []
     rprogram = list(reversed(token_program))
     program: List[Op] = []
@@ -1328,7 +1357,6 @@ def parse_tokens_to_program(token_program: List[Token]) -> List[Op]:
                 rprogram.append(current_macro.tokens[idx])
             continue
         if token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.INCLUDE):
-
             expand_keyword_to_tokens(token, rprogram, macros)
         else:
             program.append(parse_token_as_op(stack, token, i, program))
@@ -1339,8 +1367,8 @@ def parse_tokens_to_program(token_program: List[Token]) -> List[Op]:
 
 
 def parse_token_as_op(stack: List[Tuple[Token, int]], token: Token, i: int, program: List[Op]) -> Op | NoReturn:
-    assert len(OpType) == 9, 'Exhaustive handling of built-in words'
-    assert len(TokenType) == 5, 'Exhaustive handling of tokens in parser'
+    assert len(OpType) == 10, 'Exhaustive handling of built-in words'
+    assert len(TokenType) == 6, 'Exhaustive handling of tokens in parser'
 
     if token.type == TokenType.INT:
         if type(token.value) != int:
@@ -1354,6 +1382,10 @@ def parse_token_as_op(stack: List[Tuple[Token, int]], token: Token, i: int, prog
         if type(token.value) != str:
             raise_error('Token value must be an string', token.loc)
         return Op(type=OpType.PUSH_STR, operand=token.value, token=token, name=token.name)
+    elif token.type == TokenType.CSTR:
+        if type(token.value) != str:
+            raise_error('Token value must be an string', token.loc)
+        return Op(type=OpType.PUSH_CSTR, operand=token.value, token=token, name=token.name)
     elif token.type == TokenType.KEYWORD:
         return parse_keyword(stack, token, i, program)
     elif token.type == TokenType.WORD:
@@ -1372,8 +1404,13 @@ def seek_until(line: str, start: int, predicate: Callable[[str], bool]) -> int:
 
 
 def lex_word(word: str, location: Loc) -> Token:
-    assert len(TokenType) == 5, "Exhaustive handling of tokens in lexer"
-    if word[0] == '"':
+    assert len(TokenType) == 6, "Exhaustive handling of tokens in lexer"
+    if word[0] == '"' and len(word) > 3 and word[-3:-1] == '\\0':
+        return Token(type=TokenType.CSTR,
+                     value=word.strip('"').rstrip('\\0').encode('utf-8').decode('unicode_escape'),
+                     loc=location,
+                     name='cstring')
+    elif word[0] == '"':
         return Token(type=TokenType.STR,
                      value=word.strip('"').encode('utf-8').decode('unicode_escape'),
                      loc=location,

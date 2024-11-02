@@ -1,0 +1,3 @@
+include "std.phtn"
+
+"should raise error\0" puts
