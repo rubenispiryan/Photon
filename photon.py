@@ -324,6 +324,10 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
                     notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
                     raise_error('Stack types cannot be altered after an else-less if block', op.token)
+                if before_do_op.type == OpType.ELIF and current_stack != expected_stack:
+                    notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
+                    notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
+                    raise_error('Both branches of an if-elif block must produce the same stack types', op.token)
                 stack = stack_before_block
             else:
                 assert False, 'Unreachable'

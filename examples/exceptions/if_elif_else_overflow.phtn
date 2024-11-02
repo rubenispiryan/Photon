@@ -1,0 +1,7 @@
+if 1 10 < do
+    69 32
+elif 2 10 < do
+    420
+else
+    1 5
+end

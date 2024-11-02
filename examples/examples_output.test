@@ -618,3 +618,23 @@ else?
 here
 
 end_./examples/language_features/elif.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/exceptions/if_elif_without_else_overflow.phtn argv  endargv
+STDIN:
+
+STDOUT:
+Error message originated inside: type_check_program
+Both branches of an if-elif block must produce the same stack types
+Expected Stack Types: [<DataType.INT: 1>, <DataType.INT: 1>]
+Actual Stack Types: [<DataType.INT: 1>]
+Exit code: 1
+end_./examples/exceptions/if_elif_without_else_overflow.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+./examples/exceptions/if_elif_else_overflow.phtn argv  endargv
+STDIN:
+
+STDOUT:
+Error message originated inside: type_check_program
+Both branches of an if-else block must produce the same stack types
+Expected Stack Types: [<DataType.INT: 1>]
+Actual Stack Types: [<DataType.INT: 1>, <DataType.INT: 1>]
+Exit code: 1
+end_./examples/exceptions/if_elif_else_overflow.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
