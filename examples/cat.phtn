@@ -23,7 +23,7 @@ end
 // opens a file descriptor from a filename given as the n-th argument
 // saves it at fd
 macro open_fd_from_argv[n]
-    0 O_RDONLY argn ,8 argv[n] open
+    O_RDONLY argn ,8 argv[n] open
     if dup -1 == do
         "An error occurred when trying to open the file" putsln
         drop 1 exit

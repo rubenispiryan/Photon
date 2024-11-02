@@ -82,6 +82,7 @@ class Intrinsic(Enum):
     LOAD8 = auto()
     STORE8 = auto()
     SYSCALL1 = auto()
+    SYSCALL2 = auto()
     SYSCALL3 = auto()
     ARGC = auto()
     ARGV = auto()
@@ -187,6 +188,7 @@ INTRINSIC_NAMES = {
     '.8': Intrinsic.STORE8,
     ',8': Intrinsic.LOAD8,
     'syscall1': Intrinsic.SYSCALL1,
+    'syscall2': Intrinsic.SYSCALL2,
     'syscall3': Intrinsic.SYSCALL3,
     'argc': Intrinsic.ARGC,
     'argv': Intrinsic.ARGV,
@@ -359,7 +361,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     raise_error('Stack types cannot be altered in an if-do condition', op.token)
             block_stack.append((stack.copy(), op))
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 31, 'Exhaustive handling of intrinsics in type check'
+            assert len(Intrinsic) == 32, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -636,6 +638,21 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     raise_error(f'Invalid argument types for `{op.name}`: {(arg1_type.name, syscall_type.name)}',
                                 op.token)
                 stack.append((DataType.INT, op.token))
+            elif op.operand == Intrinsic.SYSCALL2:
+                ensure_argument_count(len(stack), op, 3)
+                syscall_type, syscall_loc = stack.pop()
+                arg2_type, arg2_loc = stack.pop()
+                arg1_type, arg1_loc = stack.pop()
+                if syscall_type != DataType.INT or arg1_type != DataType.INT:
+                    if debug:
+                        notify_argument_origin(arg1_loc, order=1)
+                        notify_argument_origin(arg2_loc, order=2)
+                        notify_argument_origin(syscall_loc, order=3)
+                    raise_error(
+                        f'Invalid argument types for `{op.name}`: '
+                        f'{(arg1_type.name, arg2_type.name, syscall_type.name)}',
+                        op.token)
+                stack.append((DataType.INT, op.token))
             elif op.operand == Intrinsic.SYSCALL3:
                 ensure_argument_count(len(stack), op, 4)
                 syscall_type, syscall_loc = stack.pop()
@@ -736,7 +753,7 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 assert type(op.operand) == int, 'Jump address must be `int`'
                 i = op.operand
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 31, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 32, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 a = stack.pop()
                 b = stack.pop()
@@ -894,6 +911,25 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                         stack.append(-1)
                 else:
                     assert False, 'Unhandled syscall number'
+            elif op.operand == Intrinsic.SYSCALL2:
+                syscall_number = stack.pop()
+                arg1 = stack.pop()
+                arg2 = stack.pop()
+                assert type(arg1) == type(arg2) == int, 'Arguments for `syscall2` must be `int`'
+                if syscall_number == 5:
+                    flags = ['rb', 'wb', 'wb+']
+                    pathname = get_cstr_from_mem(mem, arg1).decode()
+                    fdi = len(FDS)
+                    if flags[arg2] == 'rb':
+                        try:
+                            FDS.append(open(pathname, 'rb'))
+                        except FileNotFoundError:
+                            fdi = -1
+                    else:
+                        raise_error('Unsupported flag for file access', op.token)
+                    stack.append(fdi)
+                else:
+                    raise_error('Unsupported syscall number', op.token)
             elif op.operand == Intrinsic.SYSCALL3:
                 syscall_number = stack.pop()
                 arg1 = stack.pop()
@@ -908,18 +944,6 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                     FDS[arg1].write(mem[arg2:arg2 + arg3])
                     FDS[arg1].flush()
                     stack.append(arg3)
-                elif syscall_number == 5:
-                    flags = ['rb', 'wb', 'wb+']
-                    pathname = get_cstr_from_mem(mem, arg1).decode()
-                    fdi = len(FDS)
-                    if flags[arg2] == 'rb':
-                        try:
-                            FDS.append(open(pathname, 'rb'))
-                        except FileNotFoundError:
-                            fdi = -1
-                    else:
-                        raise_error('Unsupported flag for file access', op.token)
-                    stack.append(fdi)
                 else:
                     raise_error(f'Unknown syscall number: {syscall_number}', op.token.loc)
             else:
@@ -997,7 +1021,7 @@ def compile_program(program: List[Op]) -> None:
         elif op.type == OpType.IF:
             write_level1(';; -- if --')
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 31, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 32, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -1147,6 +1171,15 @@ def compile_program(program: List[Op]) -> None:
             elif op.operand == Intrinsic.SYSCALL1:
                 write_level1('pop x16')
                 write_level1('pop x0')
+                write_level1('svc #0')
+                write_level1(f'b.cc return_ok_{i}')
+                write_level1('mov x0, #-1')
+                write_base(f'return_ok_{i}:')
+                write_level1('push x0')
+            elif op.operand == Intrinsic.SYSCALL2:
+                write_level1('pop x16')
+                write_level1('pop x0')
+                write_level1('pop x1')
                 write_level1('svc #0')
                 write_level1(f'b.cc return_ok_{i}')
                 write_level1('mov x0, #-1')
