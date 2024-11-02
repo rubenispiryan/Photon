@@ -328,7 +328,8 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
                     notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
                     raise_error('Both branches of an if-elif block must produce the same stack types', op.token)
-                stack = stack_before_block
+                if before_do_op.type == OpType.WHILE or before_do_op.type == OpType.IF:
+                    stack = stack_before_block
             else:
                 assert False, 'Unreachable'
         elif op.type == OpType.WHILE:
