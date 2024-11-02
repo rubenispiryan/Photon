@@ -314,7 +314,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 assert if_block.type == OpType.IF or if_block.type == OpType.ELIF, '[BUG] No `if` or `elif` before `do-else`'
             elif block.type == OpType.DO:
                 stack_before, before_do_op = block_stack.pop()
-                assert before_do_op.type == OpType.WHILE or before_do_op.type == OpType.IF, '[BUG] No `while` or `if` before `do`'
+                assert before_do_op.type in (OpType.WHILE, OpType.IF, OpType.ELIF), '[BUG] No `while`, `if` or `elif` before `do`'
                 expected_stack = list(map(lambda x: x[0], stack_before))
                 if before_do_op.type == OpType.WHILE and current_stack != expected_stack:
                     notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
@@ -1221,15 +1221,18 @@ def parse_keyword(stack: List[Tuple[Token, int]], token: Token, i: int, program:
             program[block_index].operand = i
             if len(stack) == 0:
                 raise_error('`while` must be present before `do`', program[block_index].token.loc)
-            before_do_index = stack.pop()[1]
+            _, before_do_index = stack.pop()
             if program[before_do_index].type == OpType.WHILE:
                 return Op(type=OpType.END, token=token, name=token.value.name, operand=before_do_index)
             elif program[before_do_index].type == OpType.IF:
                 return Op(type=OpType.END, token=token, name=token.value.name)
+            elif program[before_do_index].type == OpType.ELIF:
+                program[before_do_index].operand = i
+                return Op(type=OpType.END, token=token, name=token.value.name)
             else:
-                notify_user(f'Instead of `while`, or `if` found: {program[before_do_index].type}',
+                notify_user(f'Instead of `while`, `if` or `elif` found: {program[before_do_index].type}',
                             program[before_do_index].token.loc)
-                raise_error('`while` or `if` must be present before `do`', program[block_index].token.loc)
+                raise_error('`while`, `if` or `elif` must be present before `do`', program[block_index].token.loc)
         else:
             raise_error('`end` can only be used with a `if-do`, `if-do-else`, `while-do` or `macro`',
                         token.loc)

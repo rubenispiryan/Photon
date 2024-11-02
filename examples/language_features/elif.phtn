@@ -64,3 +64,10 @@ elif dup 3 == do
 else
     "else?\n" puts
 end drop
+
+1
+if dup 2 == do
+    "no\n" puts
+elif dup 1 == do
+    "here\n" puts
+end drop
