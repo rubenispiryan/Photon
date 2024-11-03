@@ -83,9 +83,25 @@ end
 macro sizeof(Str) 16 end
 macro Str.length 0 + end
 macro Str.data 8 + end
+macro !Str.length Str.length !8 end
+macro !Str.data Str.data !8 end
+macro @Str.length Str.length @8 end
+macro @Str.data Str.data @8 int->ptr end
 
 macro @Str // str: Str -> int ptr
-    dup Str.length @8 swap Str.data @8
+    dup @Str.length swap @Str.data
+end
+
+macro !Str // n: int, s: ptr, str: Str -> None
+    rot over
+    !Str.length
+    !Str.data
+end
+
+// Remove left most character from s
+macro Str.chop() // s: Str -> None
+    dup Str.length dec8
+    Str.data inc8
 end
 
 macro Str.chop_line() // line: Str input: Str -> None
@@ -98,13 +114,11 @@ macro Str.chop_line() // line: Str input: Str -> None
             false
         end
     do
-        dup Str.length dec8
-        dup Str.data inc8
+        dup Str.chop()
         over Str.length inc8
     end
     if dup Str.length @8 0 > do
-        dup Str.length dec8
-        dup Str.data inc8
+        dup Str.chop()
     end
     drop2
 end
@@ -119,13 +133,11 @@ macro Str.chop_word() // word: Str input: Str -> None
             false
         end
     do
-        dup Str.length dec8
-        dup Str.data inc8
+        dup Str.chop()
         over Str.length inc8
     end
     if dup Str.length @8 0 > do
-        dup Str.length dec8
-        dup Str.data inc8
+        dup Str.chop()
     end
     drop2
 end
@@ -138,8 +150,7 @@ macro Str.left_strip() // input: Str -> None
             false
         end
     do
-        dup Str.length dec8
-        dup Str.data inc8
+        dup Str.chop()
     end drop
 end
 

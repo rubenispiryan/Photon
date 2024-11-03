@@ -524,7 +524,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
                 b_type, b_loc = stack.pop()
-                if a_type != DataType.PTR or b_type != DataType.INT:
+                if a_type != DataType.PTR or (b_type != DataType.INT and b_type != DataType.PTR):
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
@@ -541,7 +541,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
                 b_type, b_loc = stack.pop()
-                if a_type != DataType.PTR or b_type != DataType.INT:
+                if a_type != DataType.PTR or (b_type != DataType.INT and b_type != DataType.PTR):
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
@@ -997,8 +997,9 @@ def compile_program(program: List[Op]) -> None:
             write_level1('push x0')
         elif op.type == OpType.PUSH_STR:
             assert type(op.operand) == str, 'Operation value must be a `str` for PUSH_STR'
-            write_level1(f'ldr x0, ={len(op.operand)}')
-            write_level1('push x0')
+            if op.operand[-1] != '\0':
+                write_level1(f'ldr x0, ={len(op.operand)}')
+                write_level1('push x0')
             address = allocated_strs.get(op.operand, len(strs))
             write_level1(f'adrp x1, str_{address}@PAGE')
             write_level1(f'add x1, x1, str_{address}@PAGEOFF')
