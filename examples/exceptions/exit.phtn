@@ -1,6 +1,6 @@
 include "std.phtn"
 
-mem 23452345 !8
+mem 23452345 swap !8
 
 255 exit
 

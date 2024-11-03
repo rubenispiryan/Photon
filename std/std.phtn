@@ -68,11 +68,11 @@ macro eputs stderr write drop end
 macro eputsln eputs "\n" eputs end
 
 macro inc8
-    dup @8 1 + !8
+    dup @8 1 + swap !8
 end
 
 macro dec8
-    dup @8 1 - !8
+    dup @8 1 - swap !8
 end
 
 // struct Str {
@@ -89,8 +89,8 @@ macro @Str // str: Str -> int ptr
 end
 
 macro Str.chop_line() // line: Str input: Str -> None
-    dup2 Str.data @8 swap Str.data swap !8
-    over Str.length 0 !8
+    dup2 Str.data @8 swap Str.data !8
+    over Str.length 0 swap !8
     while
         if dup Str.length @8 0 > do
             dup Str.data @8 int->ptr @ '\n' !=
@@ -110,8 +110,8 @@ macro Str.chop_line() // line: Str input: Str -> None
 end
 
 macro Str.chop_word() // word: Str input: Str -> None
-    dup2 Str.data @8 swap Str.data swap !8
-    over Str.length 0 !8
+    dup2 Str.data @8 swap Str.data !8
+    over Str.length 0 swap !8
     while
         if dup Str.length @8 0 > do
             dup Str.data @8 int->ptr @ ' ' !=

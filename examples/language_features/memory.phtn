@@ -1,26 +1,26 @@
 include "std.phtn"
 
 // Storing 'abc' in memory using ascii
-mem 0 + 97 !
-mem 1 + 98 !
-mem 2 + 99 !
+mem 0 + 97 swap !
+mem 1 + 98 swap !
+mem 2 + 99 swap !
 
 // Printing 'abc'
 3 mem puts
 
 // Incrementing each letter to 'bcd' in memory
-mem 0 + dup @ 1 + !
-mem 1 + dup @ 1 + !
-mem 2 + dup @ 1 + !
+mem 0 + dup @ 1 + swap !
+mem 1 + dup @ 1 + swap !
+mem 2 + dup @ 1 + swap !
 
 // Printing 'bcd'
 3 mem puts
 
 // print 1000...0001 (64 bit word)
 mem 1 63 <<
-1 + !8
+1 + swap !8
 mem @8 print
 
 // print UINT64_MAX (64 bit word)
-mem 18446744073709551615 !8
+mem 18446744073709551615 swap !8
 mem @8 print

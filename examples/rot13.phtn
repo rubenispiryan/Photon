@@ -10,11 +10,11 @@ macro buffer mem end
 // str_ptr shift_amount
 macro shift_letter_by_n
     if over @ dup 'a' >= swap 'z' <= and do
-        dup2 over @ + 'a' - 26 % 'a' + !
+        dup2 over @ + 'a' - 26 % 'a' + swap !
     end
 
     if over @ dup 'A' >= swap 'Z' <= and do
-        dup2 over @ + 'A' - 26 % 'A' + !
+        dup2 over @ + 'A' - 26 % 'A' + swap !
     end
 
     drop2

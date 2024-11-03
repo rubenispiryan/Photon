@@ -6,7 +6,7 @@ include "std.phtn"
 100 while dup 1000 < do
     100 while dup 1000 < do
         if dup2 * dup dup invertN == swap mem @8 > and do
-            dup2 * mem swap !8
+            dup2 * mem !8
         end
         1 +
     end drop

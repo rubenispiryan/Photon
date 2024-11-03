@@ -88,8 +88,8 @@ macro sizeof(Op) 16 end
 // expects: type:int operand:int
 macro push_op
     op_stack_count @8 sizeof(Op) * op_stack +
-    dup 8 + rot !8
-    swap !8
+    dup 8 + rot swap !8
+    !8
     op_stack_count inc8
 end
 
@@ -110,7 +110,7 @@ macro putd
     while over 0 > do
       1 - dup rot
       10 dup2 / rot rot %
-      rot swap '0' + ! swap
+      rot swap '0' + swap ! swap
     end
     dup
     putd_buffer PUTD_BUFFER_CAP + swap - swap puts
@@ -123,7 +123,7 @@ macro sim_stack_push
     if sim_stack_count @8 SIM_STACK_CAP >= do
         here eputs "[ERROR] data stack overflow in simulation mode" eputs 1 exit
     end
-    sim_stack_count @8 8 * sim_stack + swap !8
+    sim_stack_count @8 8 * sim_stack + !8
     sim_stack_count inc8
 end
 

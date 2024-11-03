@@ -54,7 +54,6 @@ def asm_setup(write_base: Callable[[str], None], write_level1: Callable[[str], N
     write_level1('add     sp, sp,  #48')
     write_level1('ret')
 
-# TODO: Change the order of arguments for ! and !8
 class Intrinsic(Enum):
     ADD = auto()
     SUB = auto()
@@ -525,7 +524,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
                 b_type, b_loc = stack.pop()
-                if a_type != DataType.INT or b_type != DataType.PTR:
+                if a_type != DataType.PTR or b_type != DataType.INT:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
@@ -542,7 +541,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
                 b_type, b_loc = stack.pop()
-                if a_type != DataType.INT or b_type != DataType.PTR:
+                if a_type != DataType.PTR or b_type != DataType.INT:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
@@ -843,8 +842,8 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 assert type(address) == int, 'Arguments for `,` must be `int`'
                 stack.append(mem[address])
             elif op.operand == Intrinsic.STORE:
-                value = stack.pop()
                 address = stack.pop()
+                value = stack.pop()
                 assert type(value) == type(address) == int, 'Arguments for `.` must be `int`'
                 mem[address] = value & 0xFF
             elif op.operand == Intrinsic.LOAD8:
@@ -854,8 +853,8 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                     _bytes[offset] = mem[addr + offset]
                 stack.append(int.from_bytes(_bytes, byteorder="little"))
             elif op.operand == Intrinsic.STORE8:
-                store_value64 = stack.pop().to_bytes(length=8, byteorder="little")
                 store_addr64 = stack.pop()
+                store_value64 = stack.pop().to_bytes(length=8, byteorder="little")
                 for byte in store_value64:
                     mem[store_addr64] = byte
                     store_addr64 += 1
@@ -1109,16 +1108,16 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('ldr x0, [x0]')
                 write_level1('push x0')
             elif op.operand == Intrinsic.STORE:
-                write_level1('pop x0')
                 write_level1('pop x1')
+                write_level1('pop x0')
                 write_level1('strb w0, [x1]')
             elif op.operand == Intrinsic.LOAD:
                 write_level1('pop x0')
                 write_level1('ldrb w1, [x0]')
                 write_level1('push x1')
             elif op.operand == Intrinsic.STORE8:
-                write_level1('pop x0')
                 write_level1('pop x1')
+                write_level1('pop x0')
                 write_level1('str x0, [x1]')
             elif op.operand == Intrinsic.LOAD8:
                 write_level1('pop x0')
