@@ -651,3 +651,12 @@ Operation expanded from macro: puts
 Exit code: 1
 end_./examples/exceptions/cstring_puts_without_len.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 -
+--#--#--#--#--#-
+-
+./examples/split_file.phtn argv  endargv
+STDIN:
+
+STDOUT:
+Filename is required
+Exit code: 1
+end_./examples/split_file.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-

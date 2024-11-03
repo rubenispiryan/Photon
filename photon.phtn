@@ -90,7 +90,7 @@ macro push_op
     op_stack_count ,8 sizeof(Op) * op_stack +
     dup 8 + rot .8
     swap .8
-    op_stack_count inc64
+    op_stack_count inc8
 end
 
 macro print_ops
@@ -124,14 +124,14 @@ macro sim_stack_push
         here eputs "[ERROR] data stack overflow in simulation mode" eputs 1 exit
     end
     sim_stack_count ,8 8 * sim_stack + swap .8
-    sim_stack_count inc64
+    sim_stack_count inc8
 end
 
 macro sim_stack_pop
     if sim_stack_count ,8 0 <= do
         here eputs "[ERROR] data stack underflow in simulation mode" eputs 1 exit
     end
-    sim_stack_count dec64
+    sim_stack_count dec8
     sim_stack_count ,8 8 * sim_stack + ,8
 end
 

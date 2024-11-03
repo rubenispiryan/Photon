@@ -4,6 +4,8 @@ macro SYS_READ 3 end
 macro SYS_WRITE 4 end
 macro SYS_OPEN 5 end
 macro SYS_CLOSE 6 end
+macro SYS_MMAP 197 end
+macro SYS_FSTAT64 339 end
 
 // File Access Modes
 macro O_RDONLY 0 end

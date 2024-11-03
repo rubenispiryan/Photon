@@ -165,7 +165,7 @@ def record_stdin(arg_filenames: list[str]) -> None:
             stdin = sys.stdin.read()
             create_example(arg_filename, stdin=stdin)
 
-
+# TODO: Some examples cannot be simulated
 if __name__ == '__main__':
     deb = '-d' in sys.argv or '--debug' in sys.argv
     reset = '--reset' in sys.argv

@@ -54,7 +54,7 @@ def asm_setup(write_base: Callable[[str], None], write_level1: Callable[[str], N
     write_level1('add     sp, sp,  #48')
     write_level1('ret')
 
-
+# TODO: Change the order of arguments for . and .8
 class Intrinsic(Enum):
     ADD = auto()
     SUB = auto()
@@ -84,15 +84,16 @@ class Intrinsic(Enum):
     SYSCALL1 = auto()
     SYSCALL2 = auto()
     SYSCALL3 = auto()
+    SYSCALL6 = auto()
     ARGC = auto()
     ARGV = auto()
     CAST_PTR = auto()
     HERE = auto()
 
+
 class OpType(Enum):
     PUSH_INT = auto()
     PUSH_STR = auto()
-    PUSH_CSTR = auto()
     INTRINSIC = auto()
     IF = auto()
     END = auto()
@@ -118,7 +119,6 @@ class TokenType(Enum):
     KEYWORD = auto()
     INT = auto()
     STR = auto()
-    CSTR = auto()
     CHAR = auto()
 
 
@@ -190,6 +190,7 @@ INTRINSIC_NAMES = {
     'syscall1': Intrinsic.SYSCALL1,
     'syscall2': Intrinsic.SYSCALL2,
     'syscall3': Intrinsic.SYSCALL3,
+    'syscall6': Intrinsic.SYSCALL6,
     'argc': Intrinsic.ARGC,
     'argv': Intrinsic.ARGV,
     'int->ptr': Intrinsic.CAST_PTR,
@@ -279,16 +280,14 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
     stack: DataTypeStack = []
     block_stack: List[Tuple[DataTypeStack, Op]] = []  # convert stack to tuple keeping only DataType, hash and store
     for op in program:
-        assert len(OpType) == 10, 'Exhaustive handling of operations in type check'
+        assert len(OpType) == 9, 'Exhaustive handling of operations in type check'
         if op.type == OpType.PUSH_INT:
             assert type(op.operand) == int, 'Value for `PUSH_INT` must be `int`'
             stack.append((DataType.INT, op.token))
         elif op.type == OpType.PUSH_STR:
             assert type(op.operand) == str, 'Value for `PUSH_STR` must be `str`'
-            stack.append((DataType.INT, op.token))
-            stack.append((DataType.PTR, op.token))
-        elif op.type == OpType.PUSH_CSTR:
-            assert type(op.operand) == str, 'Value for `PUSH_CSTR` must be `str`'
+            if op.operand[-1] != '\0':
+                stack.append((DataType.INT, op.token))
             stack.append((DataType.PTR, op.token))
         elif op.type == OpType.IF:
             block_stack.append((stack.copy(), op))
@@ -324,7 +323,8 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 assert if_block.type == OpType.IF or if_block.type == OpType.ELIF, '[BUG] No `if` or `elif` before `do-else`'
             elif block.type == OpType.DO:
                 stack_before, before_do_op = block_stack.pop()
-                assert before_do_op.type in (OpType.WHILE, OpType.IF, OpType.ELIF), '[BUG] No `while`, `if` or `elif` before `do`'
+                assert before_do_op.type in (
+                OpType.WHILE, OpType.IF, OpType.ELIF), '[BUG] No `while`, `if` or `elif` before `do`'
                 expected_stack = list(map(lambda x: x[0], stack_before))
                 if before_do_op.type == OpType.WHILE and current_stack != expected_stack:
                     notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
@@ -361,7 +361,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     raise_error('Stack types cannot be altered in an if-do condition', op.token)
             block_stack.append((stack.copy(), op))
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 32, 'Exhaustive handling of intrinsics in type check'
+            assert len(Intrinsic) == 33, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -631,7 +631,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 ensure_argument_count(len(stack), op, 2)
                 syscall_type, syscall_loc = stack.pop()
                 arg1_type, arg1_loc = stack.pop()
-                if syscall_type != DataType.INT or arg1_type != DataType.INT:
+                if syscall_type != DataType.INT:
                     if debug:
                         notify_argument_origin(arg1_loc, order=1)
                         notify_argument_origin(syscall_loc, order=2)
@@ -643,7 +643,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 syscall_type, syscall_loc = stack.pop()
                 arg2_type, arg2_loc = stack.pop()
                 arg1_type, arg1_loc = stack.pop()
-                if syscall_type != DataType.INT or arg1_type != DataType.INT:
+                if syscall_type != DataType.INT:
                     if debug:
                         notify_argument_origin(arg1_loc, order=1)
                         notify_argument_origin(arg2_loc, order=2)
@@ -659,7 +659,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                 arg3_type, arg3_loc = stack.pop()
                 arg2_type, arg2_loc = stack.pop()
                 arg1_type, arg1_loc = stack.pop()
-                if syscall_type != DataType.INT or arg1_type != DataType.INT:
+                if syscall_type != DataType.INT:
                     if debug:
                         notify_argument_origin(arg1_loc, order=1)
                         notify_argument_origin(arg2_loc, order=2)
@@ -668,6 +668,30 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     raise_error(
                         f'Invalid argument types for `{op.name}`: '
                         f'{(arg1_type.name, arg2_type.name, arg3_type.name, syscall_type.name)}',
+                        op.token)
+                stack.append((DataType.INT, op.token))
+            elif op.operand == Intrinsic.SYSCALL6:
+                ensure_argument_count(len(stack), op, 7)
+                syscall_type, syscall_loc = stack.pop()
+                arg6_type, arg6_loc = stack.pop()
+                arg5_type, arg5_loc = stack.pop()
+                arg4_type, arg4_loc = stack.pop()
+                arg3_type, arg3_loc = stack.pop()
+                arg2_type, arg2_loc = stack.pop()
+                arg1_type, arg1_loc = stack.pop()
+                if syscall_type != DataType.INT:
+                    if debug:
+                        notify_argument_origin(arg1_loc, order=1)
+                        notify_argument_origin(arg2_loc, order=2)
+                        notify_argument_origin(arg3_loc, order=3)
+                        notify_argument_origin(arg4_loc, order=4)
+                        notify_argument_origin(arg5_loc, order=5)
+                        notify_argument_origin(arg6_loc, order=6)
+                        notify_argument_origin(syscall_loc, order=7)
+                    raise_error(
+                        f'Invalid argument types for `{op.name}`: '
+                        f'{arg1_type.name, arg2_type.name, arg3_type.name, arg4_type.name}'
+                        f'{arg5_type.name, arg6_type.name, syscall_type.name}',
                         op.token)
                 stack.append((DataType.INT, op.token))
             else:
@@ -684,7 +708,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
 
 def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) -> None:
     stack: List = []
-    assert len(OpType) == 10, 'Exhaustive handling of operators in simulation'
+    assert len(OpType) == 9, 'Exhaustive handling of operators in simulation'
     i = 0
     mem = bytearray(MEM_CAPACITY)
     allocated_strs = {}
@@ -711,22 +735,15 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
             assert type(op.operand) == str, 'Value for `PUSH_STR` must be `str`'
             bs = bytes(op.operand, 'utf-8')
             n = len(bs)
-            stack.append(n)
+            if op.operand[-1] != '\0':
+                stack.append(n)
             if op.operand not in allocated_strs:
                 allocated_strs[op.operand] = str_size
                 mem[str_size:str_size + n] = bs
+                mem[str_size + n] = 0
                 str_size += n
-                if str_size > STR_CAPACITY:
-                    raise_error('String buffer overflow', op.token.loc)
-            stack.append(allocated_strs[op.operand])
-        elif op.type == OpType.PUSH_CSTR:
-            assert type(op.operand) == str, 'Value for `PUSH_CSTR` must be `str`'
-            bs = bytes(op.operand, 'utf-8') + b'\0'
-            n = len(bs)
-            if op.operand not in allocated_strs:
-                allocated_strs[op.operand] = str_size
-                mem[str_size:str_size + n] = bs
-                str_size += n
+                if op.operand[-1] != '\0':
+                    str_size += 1
                 if str_size > STR_CAPACITY:
                     raise_error('String buffer overflow', op.token.loc)
             stack.append(allocated_strs[op.operand])
@@ -753,7 +770,7 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 assert type(op.operand) == int, 'Jump address must be `int`'
                 i = op.operand
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 32, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 33, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 a = stack.pop()
                 b = stack.pop()
@@ -938,7 +955,7 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 assert type(arg1) == type(arg2) == type(arg3) == int, 'Arguments for `syscall3` must be `int`'
                 if syscall_number == 3:
                     data = FDS[arg1].readline(arg3)
-                    mem[arg2:arg2+len(data)] = data
+                    mem[arg2:arg2 + len(data)] = data
                     stack.append(len(data))
                 elif syscall_number == 4:
                     FDS[arg1].write(mem[arg2:arg2 + arg3])
@@ -956,7 +973,7 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
 
 
 def compile_program(program: List[Op]) -> None:
-    assert len(OpType) == 10, 'Exhaustive handling of operators in compilation'
+    assert len(OpType) == 9, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -990,16 +1007,6 @@ def compile_program(program: List[Op]) -> None:
             if op.operand not in allocated_strs:
                 allocated_strs[op.operand] = len(strs)
                 strs.append(op.operand)
-        elif op.type == OpType.PUSH_CSTR:
-            assert type(op.operand) == str, 'Operation value must be a `str` for PUSH_CSTR'
-            cstr = op.operand + '\0'
-            address = allocated_strs.get(cstr, len(strs))
-            write_level1(f'adrp x0, str_{address}@PAGE')
-            write_level1(f'add x0, x0, str_{address}@PAGEOFF')
-            write_level1('push x0')
-            if cstr not in allocated_strs:
-                allocated_strs[cstr] = len(strs)
-                strs.append(cstr)
         elif op.type == OpType.DO:
             write_level1('pop x0')
             write_level1('tst x0, x0')
@@ -1021,7 +1028,7 @@ def compile_program(program: List[Op]) -> None:
         elif op.type == OpType.IF:
             write_level1(';; -- if --')
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 32, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 33, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -1195,6 +1202,19 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('mov x0, #-1')
                 write_base(f'return_ok_{i}:')
                 write_level1('push x0')
+            elif op.operand == Intrinsic.SYSCALL6:
+                write_level1('pop x16')
+                write_level1('pop x0')
+                write_level1('pop x1')
+                write_level1('pop x2')
+                write_level1('pop x3')
+                write_level1('pop x4')
+                write_level1('pop x5')
+                write_level1('svc #0')
+                write_level1(f'b.cc return_ok_{i}')
+                write_level1('mov x0, #-1')
+                write_base(f'return_ok_{i}:')
+                write_level1('push x0')
             else:
                 raise_error(f'Unhandled intrinsic: {op.name}',
                             op.token.loc)
@@ -1343,6 +1363,7 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
         if next_token.type != TokenType.KEYWORD or next_token.value != Keyword.END:
             raise_error(f'Expected `end` at the end of macro definition but found: `{next_token.value}`',
                         next_token.loc)
+    # TODO: Double include of same file leads to redefinition of macro
     elif token.value == Keyword.INCLUDE:
         if len(rprogram) == 0:
             raise_error('Expected name of the include file but found nothing', token.loc)
@@ -1369,7 +1390,7 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
 
 
 def parse_tokens_to_program(token_program: List[Token]) -> List[Op]:
-    assert len(TokenType) == 6, "Exhaustive handling of tokens in parse_tokens_to_program."
+    assert len(TokenType) == 5, "Exhaustive handling of tokens in parse_tokens_to_program."
     stack: List[Tuple[Token, int]] = []
     rprogram = list(reversed(token_program))
     program: List[Op] = []
@@ -1400,8 +1421,8 @@ def parse_tokens_to_program(token_program: List[Token]) -> List[Op]:
 
 
 def parse_token_as_op(stack: List[Tuple[Token, int]], token: Token, i: int, program: List[Op]) -> Op | NoReturn:
-    assert len(OpType) == 10, 'Exhaustive handling of built-in words'
-    assert len(TokenType) == 6, 'Exhaustive handling of tokens in parser'
+    assert len(OpType) == 9, 'Exhaustive handling of built-in words'
+    assert len(TokenType) == 5, 'Exhaustive handling of tokens in parser'
 
     if token.type == TokenType.INT:
         if type(token.value) != int:
@@ -1415,10 +1436,6 @@ def parse_token_as_op(stack: List[Tuple[Token, int]], token: Token, i: int, prog
         if type(token.value) != str:
             raise_error('Token value must be an string', token.loc)
         return Op(type=OpType.PUSH_STR, operand=token.value, token=token, name=token.name)
-    elif token.type == TokenType.CSTR:
-        if type(token.value) != str:
-            raise_error('Token value must be an string', token.loc)
-        return Op(type=OpType.PUSH_CSTR, operand=token.value, token=token, name=token.name)
     elif token.type == TokenType.KEYWORD:
         return parse_keyword(stack, token, i, program)
     elif token.type == TokenType.WORD:
@@ -1437,13 +1454,13 @@ def seek_until(line: str, start: int, predicate: Callable[[str], bool]) -> int:
 
 
 def lex_word(word: str, location: Loc) -> Token:
-    assert len(TokenType) == 6, "Exhaustive handling of tokens in lexer"
-    if word[0] == '"' and len(word) > 3 and word[-3:-1] == '\\0':
-        return Token(type=TokenType.CSTR,
-                     value=word.strip('"').rstrip('\\0').encode('utf-8').decode('unicode_escape'),
-                     loc=location,
-                     name='cstring')
-    elif word[0] == '"':
+    assert len(TokenType) == 5, "Exhaustive handling of tokens in lexer"
+    if word[0] == '"':
+        if word.strip('"')[-2:] == '\\0':
+            return Token(type=TokenType.STR,
+                         value=word.strip('"').encode('utf-8').decode('unicode_escape') + '\0',
+                         loc=location,
+                         name='string')
         return Token(type=TokenType.STR,
                      value=word.strip('"').encode('utf-8').decode('unicode_escape'),
                      loc=location,
@@ -1556,7 +1573,7 @@ def generate_program_control_flow(program: List[Op], filename: str) -> None:
 
 
 if __name__ == '__main__':
-    _, *argv= sys.argv
+    _, *argv = sys.argv
     if len(argv) < 2:
         usage_help()
         exit(1)

@@ -19,7 +19,7 @@ macro ans tmp 8 N * + end
   // factorize and store factor count in tmp table
   dup 2 while over 1 > do
     if dup2 % 0 == do
-      dup 8 * tmp + inc64
+      dup 8 * tmp + inc8
       swap over / swap
     else
       1 +

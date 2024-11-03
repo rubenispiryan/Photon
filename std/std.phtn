@@ -10,23 +10,137 @@ macro stdin 0 end
 macro stdout 1 end
 macro stderr 2 end
 
+// syscall wrappers
 macro write SYS_WRITE syscall3 end
+macro read SYS_READ syscall3 end
+macro exit SYS_EXIT syscall1 drop end
+macro open SYS_OPEN syscall2 end
+macro close SYS_CLOSE syscall1 end
+macro fstat64 SYS_FSTAT64 syscall2 end
+macro mmap SYS_MMAP syscall6 end
+
+// struct stat of fstat64
+macro sizeof(stat) 144 end
+macro stat.st_dev 0 + end
+macro stat.st_mode 4 + end
+macro stat.st_nlink 6 + end
+macro stat.st_ino 8 + end
+macro stat.st_uid 16 + end
+macro stat.st_gid 20 + end
+macro stat.st_rdev 24 + end
+macro stat.st_atimespec 32 + end
+macro stat.st_mtimespec 48 + end
+macro stat.st_ctimespec 64 + end
+macro stat.st_size 96 + end
+macro stat.st_blocks 104 + end
+macro stat.st_blksize 112 + end
+macro stat.st_flags 116 + end
+macro stat.st_gen 120 + end
+macro stat.st_lspare 124 + end
+macro stat.st_qspare 128 + end
+macro sizeof(st_dev) 4 end
+macro sizeof(st_mode) 2 end
+macro sizeof(st_nlink) 2 end
+macro sizeof(st_ino) 8 end
+macro sizeof(st_uid) 4 end
+macro sizeof(st_gid) 4 end
+macro sizeof(st_rdev) 4 end
+macro sizeof(st_atimespec) 16 end
+macro sizeof(st_mtimespec) 16 end
+macro sizeof(st_ctimespec) 16 end
+macro sizeof(st_size) 8 end
+macro sizeof(st_blocks) 8 end
+macro sizeof(st_blksize) 4 end
+macro sizeof(st_flags) 4 end
+macro sizeof(st_gen) 4 end
+macro sizeof(st_lspare) 4 end
+macro sizeof(st_qspare) 16 end
+
+
+// mmap args
+macro MAP_PRIVATE 2 end
+macro PROT_READ 1 end
+
+
 macro puts stdout write drop end
 macro putsln puts "\n" puts end
 macro eputs stderr write drop end
-macro read SYS_READ syscall3 end
-macro exit SYS_EXIT syscall1 drop end
+macro eputsln eputs "\n" eputs end
 
-// file macros
-macro open SYS_OPEN syscall2 end
-macro close SYS_CLOSE syscall1 end
-
-macro inc64
+macro inc8
     dup ,8 1 + .8
 end
 
-macro dec64
+macro dec8
     dup ,8 1 - .8
+end
+
+// struct Str {
+//   length: uint64 (8 bytes)
+//   data: char* (8 bytes)
+// }
+
+macro sizeof(Str) 16 end
+macro Str.length 0 + end
+macro Str.data 8 + end
+
+macro @Str
+    dup Str.length ,8 swap Str.data ,8
+end
+
+macro Str.chop_line() // line: Str input: Str -> None
+    dup2 Str.data ,8 swap Str.data swap .8
+    over Str.length 0 .8
+    while
+        if dup Str.length ,8 0 > do
+            dup Str.data ,8 int->ptr , '\n' !=
+        else
+            false
+        end
+    do
+        dup Str.length dec8
+        dup Str.data inc8
+        over Str.length inc8
+    end
+    if dup Str.length ,8 0 > do
+        dup Str.length dec8
+        dup Str.data inc8
+    end
+    drop2
+end
+
+macro Str.chop_word() // word: Str input: Str -> None
+    dup2 Str.data ,8 swap Str.data swap .8
+    over Str.length 0 .8
+    while
+        if dup Str.length ,8 0 > do
+            dup Str.data ,8 int->ptr , ' ' !=
+        else
+            false
+        end
+    do
+        dup Str.length dec8
+        dup Str.data inc8
+        over Str.length inc8
+    end
+    if dup Str.length ,8 0 > do
+        dup Str.length dec8
+        dup Str.data inc8
+    end
+    drop2
+end
+
+macro Str.left_strip() // input: Str -> None
+    while
+        if dup Str.length ,8 0 > do
+            dup Str.data ,8 int->ptr , ' ' ==
+        else
+            false
+        end
+    do
+        dup Str.length dec8
+        dup Str.data inc8
+    end drop
 end
 
 macro strlen
