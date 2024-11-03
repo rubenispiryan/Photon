@@ -78,6 +78,10 @@ class Intrinsic(Enum):
     MEM = auto()
     LOAD = auto()
     STORE = auto()
+    LOAD2 = auto()
+    STORE2 = auto()
+    LOAD4 = auto()
+    STORE4 = auto()
     LOAD8 = auto()
     STORE8 = auto()
     SYSCALL1 = auto()
@@ -184,6 +188,10 @@ INTRINSIC_NAMES = {
     'mem': Intrinsic.MEM,
     '!': Intrinsic.STORE,
     '@': Intrinsic.LOAD,
+    '!2': Intrinsic.STORE2,
+    '@2': Intrinsic.LOAD2,
+    '!4': Intrinsic.STORE4,
+    '@4': Intrinsic.LOAD4,
     '!8': Intrinsic.STORE8,
     '@8': Intrinsic.LOAD8,
     'syscall1': Intrinsic.SYSCALL1,
@@ -360,7 +368,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     raise_error('Stack types cannot be altered in an if-do condition', op.token)
             block_stack.append((stack.copy(), op))
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 33, 'Exhaustive handling of intrinsics in type check'
+            assert len(Intrinsic) == 37, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -521,6 +529,40 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
                 stack.append((DataType.INT, op.token))
             elif op.operand == Intrinsic.STORE:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type != DataType.PTR or (b_type != DataType.INT and b_type != DataType.PTR):
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.LOAD2:
+                ensure_argument_count(len(stack), op, 1)
+                a_type, a_loc = stack.pop()
+                if a_type != DataType.PTR:
+                    if debug:
+                        notify_argument_origin(a_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+                stack.append((DataType.INT, op.token))
+            elif op.operand == Intrinsic.STORE2:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type != DataType.PTR or (b_type != DataType.INT and b_type != DataType.PTR):
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.LOAD4:
+                ensure_argument_count(len(stack), op, 1)
+                a_type, a_loc = stack.pop()
+                if a_type != DataType.PTR:
+                    if debug:
+                        notify_argument_origin(a_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+                stack.append((DataType.INT, op.token))
+            elif op.operand == Intrinsic.STORE4:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
                 b_type, b_loc = stack.pop()
@@ -769,7 +811,7 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 assert type(op.operand) == int, 'Jump address must be `int`'
                 i = op.operand
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 33, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 37, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 a = stack.pop()
                 b = stack.pop()
@@ -846,6 +888,30 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 value = stack.pop()
                 assert type(value) == type(address) == int, 'Arguments for `.` must be `int`'
                 mem[address] = value & 0xFF
+            elif op.operand == Intrinsic.LOAD2:
+                addr = stack.pop()
+                _bytes = bytearray(2)
+                for offset in range(0, 2):
+                    _bytes[offset] = mem[addr + offset]
+                stack.append(int.from_bytes(_bytes, byteorder="little"))
+            elif op.operand == Intrinsic.STORE2:
+                store_addr16 = stack.pop()
+                store_value16 = stack.pop().to_bytes(length=2, byteorder="little")
+                for byte in store_value16:
+                    mem[store_addr16] = byte
+                    store_addr16 += 1
+            elif op.operand == Intrinsic.LOAD4:
+                addr = stack.pop()
+                _bytes = bytearray(4)
+                for offset in range(0, 4):
+                    _bytes[offset] = mem[addr + offset]
+                stack.append(int.from_bytes(_bytes, byteorder="little"))
+            elif op.operand == Intrinsic.STORE4:
+                store_addr32 = stack.pop()
+                store_value32 = stack.pop().to_bytes(length=4, byteorder="little")
+                for byte in store_value32:
+                    mem[store_addr32] = byte
+                    store_addr32 += 1
             elif op.operand == Intrinsic.LOAD8:
                 addr = stack.pop()
                 _bytes = bytearray(8)
@@ -1028,7 +1094,7 @@ def compile_program(program: List[Op]) -> None:
         elif op.type == OpType.IF:
             write_level1(';; -- if --')
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 33, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 37, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -1115,6 +1181,22 @@ def compile_program(program: List[Op]) -> None:
             elif op.operand == Intrinsic.LOAD:
                 write_level1('pop x0')
                 write_level1('ldrb w1, [x0]')
+                write_level1('push x1')
+            elif op.operand == Intrinsic.STORE2:
+                write_level1('pop x1')
+                write_level1('pop x0')
+                write_level1('strh w0, [x1]')
+            elif op.operand == Intrinsic.LOAD2:
+                write_level1('pop x0')
+                write_level1('ldrh w1, [x0]')
+                write_level1('push x1')
+            elif op.operand == Intrinsic.STORE4:
+                write_level1('pop x1')
+                write_level1('pop x0')
+                write_level1('str w0, [x1]')
+            elif op.operand == Intrinsic.LOAD4:
+                write_level1('pop x0')
+                write_level1('ldr w1, [x0]')
                 write_level1('push x1')
             elif op.operand == Intrinsic.STORE8:
                 write_level1('pop x1')

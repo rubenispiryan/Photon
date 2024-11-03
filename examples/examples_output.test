@@ -346,6 +346,8 @@ STDIN:
 STDOUT:
 abcbcd9223372036854775809
 18446744073709551615
+65535
+4294967295
 
 end_./examples/language_features/memory.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/language_features/loops.phtn argv  endargv
