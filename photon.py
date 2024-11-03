@@ -54,7 +54,7 @@ def asm_setup(write_base: Callable[[str], None], write_level1: Callable[[str], N
     write_level1('add     sp, sp,  #48')
     write_level1('ret')
 
-# TODO: Change the order of arguments for . and .8
+# TODO: Change the order of arguments for ! and !8
 class Intrinsic(Enum):
     ADD = auto()
     SUB = auto()
@@ -183,10 +183,10 @@ INTRINSIC_NAMES = {
     '<=': Intrinsic.LTE,
     '!=': Intrinsic.NE,
     'mem': Intrinsic.MEM,
-    '.': Intrinsic.STORE,
-    ',': Intrinsic.LOAD,
-    '.8': Intrinsic.STORE8,
-    ',8': Intrinsic.LOAD8,
+    '!': Intrinsic.STORE,
+    '@': Intrinsic.LOAD,
+    '!8': Intrinsic.STORE8,
+    '@8': Intrinsic.LOAD8,
     'syscall1': Intrinsic.SYSCALL1,
     'syscall2': Intrinsic.SYSCALL2,
     'syscall3': Intrinsic.SYSCALL3,
@@ -1517,7 +1517,7 @@ def generate_program_control_flow(program: List[Op], filename: str) -> None:
     write_base = write_indent(dotfile, 0)
     write_level1 = write_indent(dotfile, 1)
     write_base('digraph ControlFlow {')
-    write_level1('size="8,8!"')
+    write_level1('size="8@8!"')
     write_level1('center=true')
     write_level1('ratio=fill')
     assert len(OpType) == 9, 'Exhaustive handling of op types in control flow'

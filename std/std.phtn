@@ -68,11 +68,11 @@ macro eputs stderr write drop end
 macro eputsln eputs "\n" eputs end
 
 macro inc8
-    dup ,8 1 + .8
+    dup @8 1 + !8
 end
 
 macro dec8
-    dup ,8 1 - .8
+    dup @8 1 - !8
 end
 
 // struct Str {
@@ -84,16 +84,16 @@ macro sizeof(Str) 16 end
 macro Str.length 0 + end
 macro Str.data 8 + end
 
-macro @Str
-    dup Str.length ,8 swap Str.data ,8
+macro @Str // str: Str -> int ptr
+    dup Str.length @8 swap Str.data @8
 end
 
 macro Str.chop_line() // line: Str input: Str -> None
-    dup2 Str.data ,8 swap Str.data swap .8
-    over Str.length 0 .8
+    dup2 Str.data @8 swap Str.data swap !8
+    over Str.length 0 !8
     while
-        if dup Str.length ,8 0 > do
-            dup Str.data ,8 int->ptr , '\n' !=
+        if dup Str.length @8 0 > do
+            dup Str.data @8 int->ptr @ '\n' !=
         else
             false
         end
@@ -102,7 +102,7 @@ macro Str.chop_line() // line: Str input: Str -> None
         dup Str.data inc8
         over Str.length inc8
     end
-    if dup Str.length ,8 0 > do
+    if dup Str.length @8 0 > do
         dup Str.length dec8
         dup Str.data inc8
     end
@@ -110,11 +110,11 @@ macro Str.chop_line() // line: Str input: Str -> None
 end
 
 macro Str.chop_word() // word: Str input: Str -> None
-    dup2 Str.data ,8 swap Str.data swap .8
-    over Str.length 0 .8
+    dup2 Str.data @8 swap Str.data swap !8
+    over Str.length 0 !8
     while
-        if dup Str.length ,8 0 > do
-            dup Str.data ,8 int->ptr , ' ' !=
+        if dup Str.length @8 0 > do
+            dup Str.data @8 int->ptr @ ' ' !=
         else
             false
         end
@@ -123,7 +123,7 @@ macro Str.chop_word() // word: Str input: Str -> None
         dup Str.data inc8
         over Str.length inc8
     end
-    if dup Str.length ,8 0 > do
+    if dup Str.length @8 0 > do
         dup Str.length dec8
         dup Str.data inc8
     end
@@ -132,8 +132,8 @@ end
 
 macro Str.left_strip() // input: Str -> None
     while
-        if dup Str.length ,8 0 > do
-            dup Str.data ,8 int->ptr , ' ' ==
+        if dup Str.length @8 0 > do
+            dup Str.data @8 int->ptr @ ' ' ==
         else
             false
         end
@@ -145,25 +145,25 @@ end
 
 macro strlen
    dup
-   while dup , 0 != do 1 + end
+   while dup @ 0 != do 1 + end
    swap -
 end
 
-macro streq
+macro streq // str1: ptr str2: ptr -> bool
     while
-        if over , 0 != over , 0 != and do
-            dup2 , swap , ==
+        if over @ 0 != over @ 0 != and do
+            dup2 @ swap @ ==
         else
             false
         end
     do
         1 + swap 1 +
     end
-    , 0 == swap , 0 == and
+    @ 0 == swap @ 0 == and
 end
 
 macro argv[n]
-    8 * argv + ,8 int->ptr
+    8 * argv + @8 int->ptr
 end
 
 macro dup2 over over end

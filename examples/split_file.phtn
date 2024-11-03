@@ -18,36 +18,36 @@ if dup -1 == do
     1 exit
 end
 
-fd swap .8
+fd swap !8
 
-stat_buffer fd ,8 fstat64
+stat_buffer fd @8 fstat64
 
 if dup -1 == do
     "Failed to call fstat on file: " eputs 1 argv[n] dup strlen swap eputsln
     1 exit
 end drop
 
-stat_buffer stat.st_size ,8 content Str.length swap .8
+stat_buffer stat.st_size @8 content Str.length swap !8
 
 0                       // offset
-fd ,8                   // fd
+fd @8                   // fd
 MAP_PRIVATE             // flags
 PROT_READ               // prot
-content Str.length ,8   // len
+content Str.length @8   // len
 NULL                    // addr
 mmap
 
-content Str.data swap .8
+content Str.data swap !8
 
-if content Str.data ,8 0 < do
+if content Str.data @8 0 < do
   "Could not memory map file " eputs 1 argv[n] dup strlen swap eputs "\n" eputs
   1 exit
 end
 
 
-while content Str.length ,8 0 > do
+while content Str.length @8 0 > do
     line content Str.chop_line()
-    while line Str.length ,8 0 > do
+    while line Str.length @8 0 > do
         line Str.left_strip()
         word line Str.chop_word()
         word @Str putsln

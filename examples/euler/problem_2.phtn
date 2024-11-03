@@ -4,10 +4,10 @@ include "std.phtn"
 
 1 1 while dup 4000000 < do
     if dup 2 % 0 == do
-        dup mem ,8 +
-        mem swap .8
+        dup mem @8 +
+        mem swap !8
     end
     swap over +
 end drop2
 
-mem ,8 print
+mem @8 print

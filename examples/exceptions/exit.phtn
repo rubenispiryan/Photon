@@ -1,7 +1,7 @@
 include "std.phtn"
 
-mem 23452345 .8
+mem 23452345 !8
 
 255 exit
 
-mem ,8 print
+mem @8 print
