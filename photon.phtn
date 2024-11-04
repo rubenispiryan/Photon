@@ -63,7 +63,8 @@ end
 
 // Memory layout
 macro fd mem end
-macro stat_buffer fd 8 + end // type: stat
+macro loc fd 8 + end // type: Loc
+macro stat_buffer loc sizeof(Loc) + end // type: stat
 macro content stat_buffer sizeof(stat) + end // type: Str
 macro line content sizeof(Str) + end // type: Str
 macro word line sizeof(Str) + end // type: Str
@@ -91,6 +92,27 @@ macro OP_DROP     5 end
 macro OP_COUNT    6 end
 
 
+// struct Loc {
+//   filename: ptr    (8 bytes)
+//   line_num: uint64 (8 bytes)
+//   col_num:  uint64 (8 bytes)
+// }
+
+macro sizeof(Loc) 24 end
+macro Loc.filename 0 end
+macro Loc.line_num 8 end
+macro Loc.col_num 16 end
+macro @Loc.filename Loc.filename + @8 end
+macro @Loc.line_num Loc.line_num + @8 end
+macro @Loc.col_num Loc.col_num + @8 end
+macro @Loc
+    dup @Loc.filename swap
+    dup @Loc.line_num swap
+    @Loc.col_num
+end
+macro !Loc.filename Loc.filename + !8 end
+macro !Loc.line_num Loc.line_num + !8 end
+macro !Loc.col_num Loc.col_num + !8 end
 
 macro sizeof(Op) 16 end
 macro Op.type 0 end
@@ -103,7 +125,7 @@ macro !Op !Op.operand !Op.type end
 macro @Op dup @Op.type swap @Op.operand end
 
 // struct Op {
-//   type: uint64 (8 bytes)
+//   type:    uint64 (8 bytes)
 //   operand: uint64 (8 bytes)
 // }
 
@@ -112,6 +134,24 @@ macro push_op
     op_stack_count @8 sizeof(Op) * op_stack +
     dup rot swap !Op
     op_stack_count inc8
+end
+
+macro Loc.puts() // loc: Loc -> None
+    @Loc
+    rot dup ->ptr strlen swap puts ":" puts
+    "[" puts
+    swap 1 + putd ":" puts
+    putd
+    "] " puts
+end
+
+macro Loc.eputs() // loc: Loc -> None
+    @Loc
+    rot dup ->ptr strlen swap eputs ":" eputs
+    "[" eputs
+    swap 1 + eputd ":" eputs
+    putd
+    "] " eputs
 end
 
 macro putd
@@ -126,6 +166,22 @@ macro putd
     end
     dup
     putd_buffer PUTD_BUFFER_CAP + swap - swap puts
+  end
+  drop
+end
+
+macro eputd
+  if dup 0 == do
+    "0" puts
+  else
+    putd_buffer PUTD_BUFFER_CAP +
+    while over 0 > do
+      1 - dup rot
+      10 dup2 / rot rot %
+      rot swap '0' + swap ! swap
+    end
+    dup
+    putd_buffer PUTD_BUFFER_CAP + swap - swap eputs
   end
   drop
 end
@@ -155,13 +211,18 @@ macro Str.parse_int() // n: int, s: ptr -> int
     0 0 while dup parse_int_var @Str.length < do
         dup parse_int_var @Str.data + @
         if dup isdigit not do
-            "Unknown word: " eputs word @Str eputsln
+            report_error "Unknown word: " eputs word @Str eputsln
             1 exit
         end
         '0' - rot +
         swap
         1 +
     end drop
+end
+
+macro report_error // n: int, s: ptr -> None
+    loc Loc.eputs()
+    "[ERROR] " eputs
 end
 
 // Memory map file and save the pointer in content: Str
@@ -260,7 +321,7 @@ macro simulate_program
             dup
             sim_stack_push
             sim_stack_push
-        else "Unhandled Instruction\n" eputs 1 exit
+        else "Unhandled Instruction: " eputs dup @Op.type eputd "\n" eputs 1 exit
         end drop
         1 +
     end drop
@@ -299,7 +360,7 @@ macro compile_program
             "   pop x0\n" puts
             "   push x0\n" puts
             "   push x0\n" puts
-        else "Unhandled Instruction\n" eputs 1 exit
+        else "Unhandled Instruction: " eputs dup @Op.type eputd "\n" eputs  1 exit
         end drop
         1 +
     end drop
@@ -319,9 +380,12 @@ end
 // Expects that line, word are allocated
 macro parse_file_as_op
     here 6 assert_op_count
-    while content Str.length @8 0 > do
-    line content Str.chop_line()
-        while line Str.length @8 0 > do
+    2 argv[n] loc !Loc.filename
+    0 while content Str.length @8 0 > do
+        dup loc !Loc.line_num
+        line content Str.chop_line()
+        0 while line Str.length @8 0 > do
+            dup loc !Loc.col_num
             line Str.left_strip()
             word line Str.chop_word()
             if word @Str "+" Str.equal() do
@@ -337,8 +401,10 @@ macro parse_file_as_op
             else
                 OP_PUSH_INT word @Str Str.parse_int() push_op
             end
-        end
-    end
+            1 +
+        end drop
+        1 +
+    end drop
 end
 
 macro print_usage

@@ -86,7 +86,7 @@ macro Str.data 8 + end
 macro !Str.length Str.length !8 end
 macro !Str.data Str.data !8 end
 macro @Str.length Str.length @8 end
-macro @Str.data Str.data @8 int->ptr end
+macro @Str.data Str.data @8 ->ptr end
 
 macro @Str // str: Str -> int ptr
     dup @Str.length swap @Str.data
@@ -109,7 +109,7 @@ macro Str.chop_line() // line: Str input: Str -> None
     over Str.length 0 swap !8
     while
         if dup Str.length @8 0 > do
-            dup Str.data @8 int->ptr @ '\n' !=
+            dup Str.data @8 ->ptr @ '\n' !=
         else
             false
         end
@@ -128,7 +128,7 @@ macro Str.chop_word() // word: Str input: Str -> None
     over Str.length 0 swap !8
     while
         if dup Str.length @8 0 > do
-            dup Str.data @8 int->ptr @ ' ' !=
+            dup Str.data @8 ->ptr @ ' ' !=
         else
             false
         end
@@ -145,7 +145,7 @@ end
 macro Str.left_strip() // input: Str -> None
     while
         if dup Str.length @8 0 > do
-            dup Str.data @8 int->ptr @ ' ' ==
+            dup Str.data @8 ->ptr @ ' ' ==
         else
             false
         end
@@ -174,7 +174,7 @@ macro streq // str1: ptr str2: ptr -> bool
 end
 
 macro argv[n]
-    8 * argv + @8 int->ptr
+    8 * argv + @8 ->ptr
 end
 
 macro not
@@ -182,7 +182,7 @@ macro not
 end
 
 macro isdigit
-    dup '0' >=
+    '0' >=
     over '9' <=
     and
 end
