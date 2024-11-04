@@ -177,6 +177,10 @@ macro argv[n]
     8 * argv + @8 int->ptr
 end
 
+macro not
+    ->int bnot 1 and ->bool
+end
+
 macro dup2 over over end
 macro drop2 drop drop end
 
