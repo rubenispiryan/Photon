@@ -92,6 +92,8 @@ class Intrinsic(Enum):
     ARGC = auto()
     ARGV = auto()
     CAST_PTR = auto()
+    CAST_INT = auto()
+    CAST_BOOL = auto()
     HERE = auto()
 
 
@@ -202,7 +204,9 @@ INTRINSIC_NAMES = {
     'syscall6': Intrinsic.SYSCALL6,
     'argc': Intrinsic.ARGC,
     'argv': Intrinsic.ARGV,
-    'int->ptr': Intrinsic.CAST_PTR,
+    '->ptr': Intrinsic.CAST_PTR,
+    '->int': Intrinsic.CAST_INT,
+    '->bool': Intrinsic.CAST_BOOL,
     'here': Intrinsic.HERE,
 }
 
@@ -370,7 +374,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     raise_error('Stack types cannot be altered in an if-do condition', op.token)
             block_stack.append((stack.copy(), op))
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 38, 'Exhaustive handling of intrinsics in type check'
+            assert len(Intrinsic) == 40, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -676,6 +680,22 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                         notify_argument_origin(a_loc, order=1)
                     raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
                 stack.append((DataType.PTR, op.token))
+            elif op.operand == Intrinsic.CAST_INT:
+                ensure_argument_count(len(stack), op, 1)
+                a_type, a_loc = stack.pop()
+                if a_type != DataType.BOOL:
+                    if debug:
+                        notify_argument_origin(a_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+                stack.append((DataType.INT, op.token))
+            elif op.operand == Intrinsic.CAST_BOOL:
+                ensure_argument_count(len(stack), op, 1)
+                a_type, a_loc = stack.pop()
+                if a_type != DataType.INT:
+                    if debug:
+                        notify_argument_origin(a_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+                stack.append((DataType.BOOL, op.token))
             elif op.operand == Intrinsic.HERE:
                 stack.append((DataType.INT, op.token))
                 stack.append((DataType.PTR, op.token))
@@ -822,7 +842,7 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 assert type(op.operand) == int, 'Jump address must be `int`'
                 i = op.operand
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 38, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 40, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 a = stack.pop()
                 b = stack.pop()
@@ -968,6 +988,12 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
             elif op.operand == Intrinsic.CAST_PTR:
                 i += 1
                 continue
+            elif op.operand == Intrinsic.CAST_INT:
+                i += 1
+                continue
+            elif op.operand == Intrinsic.CAST_BOOL:
+                i += 1
+                continue
             elif op.operand == Intrinsic.HERE:
                 here_text = f'{op.token.loc.filename}:[{op.token.loc.line + 1}:{op.token.loc.col}]: '
                 bs = bytes(here_text, 'utf-8')
@@ -1094,7 +1120,7 @@ def compile_program(program: List[Op]) -> None:
         elif op.type == OpType.IF:
             write_level1(';; -- if --')
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 38, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 40, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -1249,6 +1275,10 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('push x0')
                 write_level1('push x2')
             elif op.operand == Intrinsic.CAST_PTR:
+                continue
+            elif op.operand == Intrinsic.CAST_INT:
+                continue
+            elif op.operand == Intrinsic.CAST_BOOL:
                 continue
             elif op.operand == Intrinsic.HERE:
                 here_text = f'{op.token.loc.filename}:[{op.token.loc.line + 1}:{op.token.loc.col}]: '
