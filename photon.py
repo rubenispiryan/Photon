@@ -890,40 +890,25 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 mem[address] = value & 0xFF
             elif op.operand == Intrinsic.LOAD2:
                 addr = stack.pop()
-                _bytes = bytearray(2)
-                for offset in range(0, 2):
-                    _bytes[offset] = mem[addr + offset]
-                stack.append(int.from_bytes(_bytes, byteorder="little"))
+                stack.append(int.from_bytes(mem[addr:addr + 2], byteorder="little"))
             elif op.operand == Intrinsic.STORE2:
                 store_addr16 = stack.pop()
-                store_value16 = stack.pop().to_bytes(length=2, byteorder="little")
-                for byte in store_value16:
-                    mem[store_addr16] = byte
-                    store_addr16 += 1
+                store_value16 = stack.pop()
+                mem[store_addr16:store_addr16 + 2] = store_value16.to_bytes(length=2, byteorder="little")
             elif op.operand == Intrinsic.LOAD4:
                 addr = stack.pop()
-                _bytes = bytearray(4)
-                for offset in range(0, 4):
-                    _bytes[offset] = mem[addr + offset]
-                stack.append(int.from_bytes(_bytes, byteorder="little"))
+                stack.append(int.from_bytes(mem[addr:addr + 4], byteorder="little"))
             elif op.operand == Intrinsic.STORE4:
                 store_addr32 = stack.pop()
-                store_value32 = stack.pop().to_bytes(length=4, byteorder="little")
-                for byte in store_value32:
-                    mem[store_addr32] = byte
-                    store_addr32 += 1
+                store_value32 = stack.pop()
+                mem[store_addr32:store_addr32 + 4] = store_value32.to_bytes(length=4, byteorder="little")
             elif op.operand == Intrinsic.LOAD8:
                 addr = stack.pop()
-                _bytes = bytearray(8)
-                for offset in range(0, 8):
-                    _bytes[offset] = mem[addr + offset]
-                stack.append(int.from_bytes(_bytes, byteorder="little"))
+                stack.append(int.from_bytes(mem[addr:addr + 8], byteorder="little"))
             elif op.operand == Intrinsic.STORE8:
                 store_addr64 = stack.pop()
-                store_value64 = stack.pop().to_bytes(length=8, byteorder="little")
-                for byte in store_value64:
-                    mem[store_addr64] = byte
-                    store_addr64 += 1
+                store_value64 = stack.pop()
+                mem[store_addr64:store_addr64 + 8] = store_value64.to_bytes(length=8, byteorder="little")
             elif op.operand == Intrinsic.OR:
                 a = stack.pop()
                 b = stack.pop()
