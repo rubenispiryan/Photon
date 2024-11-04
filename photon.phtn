@@ -153,7 +153,12 @@ end
 macro Str.parse_int() // n: int, s: ptr -> int
     parse_int_var !Str
     0 0 while dup parse_int_var @Str.length < do
-        dup parse_int_var @Str.data + @ '0' - rot +
+        dup parse_int_var @Str.data + @
+        if dup isdigit not do
+            "Unknown word: " eputs word @Str eputsln
+            1 exit
+        end
+        '0' - rot +
         swap
         1 +
     end drop
