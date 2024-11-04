@@ -85,8 +85,10 @@ macro MEM_CAPACITY 640000 end
 macro OP_PUSH_INT 0 end
 macro OP_ADD      1 end
 macro OP_PRINT    2 end
-macro OP_SUB    3 end
-macro OP_COUNT    4 end
+macro OP_SUB      3 end
+macro OP_DUP      4 end
+macro OP_DROP     5 end
+macro OP_COUNT    6 end
 
 
 
@@ -226,7 +228,7 @@ macro assert_op_count // here_len: int here_str: ptr expected_count: int
 end
 
 macro simulate_program
-    here 4 assert_op_count
+    here 6 assert_op_count
     0 while dup op_stack_count @8 < do
         dup sizeof(Op) * op_stack +
         if dup @Op.type OP_PUSH_INT == do
@@ -245,6 +247,14 @@ macro simulate_program
         elif dup @Op.type OP_PRINT == do
             sim_stack_pop
             print
+        elif dup @Op.type OP_DROP == do
+            sim_stack_pop
+            drop
+        elif dup @Op.type OP_DUP == do
+            sim_stack_pop
+            dup
+            sim_stack_push
+            sim_stack_push
         else "Unhandled Instruction\n" eputs 1 exit
         end drop
         1 +
@@ -252,7 +262,7 @@ macro simulate_program
 end
 
 macro compile_program
-    here 4 assert_op_count
+    here 6 assert_op_count
     compile_header
     0 while dup op_stack_count @8 < do
         dup sizeof(Op) * op_stack +
@@ -276,6 +286,14 @@ macro compile_program
             "   ;; -- print --\n" puts
             "   pop x0\n" puts
             "   bl print\n" puts
+        elif dup @Op.type OP_DROP == do
+            "   ;; -- drop --\n" puts
+            "   pop x0\n" puts
+        elif dup @Op.type OP_DUP == do
+            "   ;; -- dup --\n" puts
+            "   pop x0\n" puts
+            "   push x0\n" puts
+            "   push x0\n" puts
         else "Unhandled Instruction\n" eputs 1 exit
         end drop
         1 +
@@ -295,7 +313,7 @@ end
 // Expects file contents to be in content: Str
 // Expects that line, word are allocated
 macro parse_file_as_op
-    here 4 assert_op_count
+    here 6 assert_op_count
     while content Str.length @8 0 > do
     line content Str.chop_line()
         while line Str.length @8 0 > do
@@ -307,6 +325,10 @@ macro parse_file_as_op
                 OP_SUB 0 push_op
             elif word @Str "print" Str.equal() do
                 OP_PRINT 0 push_op
+            elif word @Str "dup" Str.equal() do
+                OP_DUP 0 push_op
+            elif word @Str "drop" Str.equal() do
+                OP_DROP 0 push_op
             else
                 OP_PUSH_INT word @Str Str.parse_int() push_op
             end
