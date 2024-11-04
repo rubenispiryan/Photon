@@ -239,6 +239,7 @@ macro simulate_program
         elif dup @Op.type OP_SUB == do
             sim_stack_pop
             sim_stack_pop
+            swap
             -
             sim_stack_push
         elif dup @Op.type OP_PRINT == do
