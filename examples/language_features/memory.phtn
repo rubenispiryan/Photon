@@ -24,3 +24,10 @@ mem @8 print
 // print UINT64_MAX (64 bit word)
 mem 18446744073709551615 swap !8
 mem @8 print
+
+// 2 and 4 byte
+256 256 * 1 - mem !2
+mem @2 print
+
+256 256 * 256 * 256 * 1 - mem !4
+mem @4 print

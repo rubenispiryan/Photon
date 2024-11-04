@@ -70,6 +70,7 @@ class Intrinsic(Enum):
     DROP = auto()
     AND = auto()
     OR = auto()
+    BITNOT = auto()
     SHIFT_RIGHT = auto()
     SHIFT_LEFT = auto()
     SWAP = auto()
@@ -78,6 +79,10 @@ class Intrinsic(Enum):
     MEM = auto()
     LOAD = auto()
     STORE = auto()
+    LOAD2 = auto()
+    STORE2 = auto()
+    LOAD4 = auto()
+    STORE4 = auto()
     LOAD8 = auto()
     STORE8 = auto()
     SYSCALL1 = auto()
@@ -87,6 +92,8 @@ class Intrinsic(Enum):
     ARGC = auto()
     ARGV = auto()
     CAST_PTR = auto()
+    CAST_INT = auto()
+    CAST_BOOL = auto()
     HERE = auto()
 
 
@@ -173,6 +180,7 @@ INTRINSIC_NAMES = {
     'drop': Intrinsic.DROP,
     'and': Intrinsic.AND,
     'or': Intrinsic.OR,
+    'bnot': Intrinsic.BITNOT,
     '>>': Intrinsic.SHIFT_RIGHT,
     '<<': Intrinsic.SHIFT_LEFT,
     'swap': Intrinsic.SWAP,
@@ -184,6 +192,10 @@ INTRINSIC_NAMES = {
     'mem': Intrinsic.MEM,
     '!': Intrinsic.STORE,
     '@': Intrinsic.LOAD,
+    '!2': Intrinsic.STORE2,
+    '@2': Intrinsic.LOAD2,
+    '!4': Intrinsic.STORE4,
+    '@4': Intrinsic.LOAD4,
     '!8': Intrinsic.STORE8,
     '@8': Intrinsic.LOAD8,
     'syscall1': Intrinsic.SYSCALL1,
@@ -192,7 +204,9 @@ INTRINSIC_NAMES = {
     'syscall6': Intrinsic.SYSCALL6,
     'argc': Intrinsic.ARGC,
     'argv': Intrinsic.ARGV,
-    'int->ptr': Intrinsic.CAST_PTR,
+    '->ptr': Intrinsic.CAST_PTR,
+    '->int': Intrinsic.CAST_INT,
+    '->bool': Intrinsic.CAST_BOOL,
     'here': Intrinsic.HERE,
 }
 
@@ -360,7 +374,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     raise_error('Stack types cannot be altered in an if-do condition', op.token)
             block_stack.append((stack.copy(), op))
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 33, 'Exhaustive handling of intrinsics in type check'
+            assert len(Intrinsic) == 40, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -529,6 +543,40 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.LOAD2:
+                ensure_argument_count(len(stack), op, 1)
+                a_type, a_loc = stack.pop()
+                if a_type != DataType.PTR:
+                    if debug:
+                        notify_argument_origin(a_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+                stack.append((DataType.INT, op.token))
+            elif op.operand == Intrinsic.STORE2:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type != DataType.PTR or (b_type != DataType.INT and b_type != DataType.PTR):
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.LOAD4:
+                ensure_argument_count(len(stack), op, 1)
+                a_type, a_loc = stack.pop()
+                if a_type != DataType.PTR:
+                    if debug:
+                        notify_argument_origin(a_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+                stack.append((DataType.INT, op.token))
+            elif op.operand == Intrinsic.STORE4:
+                ensure_argument_count(len(stack), op, 2)
+                a_type, a_loc = stack.pop()
+                b_type, b_loc = stack.pop()
+                if a_type != DataType.PTR or (b_type != DataType.INT and b_type != DataType.PTR):
+                    if debug:
+                        notify_argument_origin(b_loc, order=1)
+                        notify_argument_origin(a_loc, order=2)
+                    raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
             elif op.operand == Intrinsic.LOAD8:
                 ensure_argument_count(len(stack), op, 1)
                 a_type, a_loc = stack.pop()
@@ -572,6 +620,15 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.BITNOT:
+                ensure_argument_count(len(stack), op, 1)
+                a_type, a_loc = stack.pop()
+                if a_type == DataType.INT:
+                    stack.append((DataType.INT, op.token))
+                else:
+                    if debug:
+                        notify_argument_origin(a_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
             elif op.operand == Intrinsic.SHIFT_RIGHT:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -623,6 +680,22 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                         notify_argument_origin(a_loc, order=1)
                     raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
                 stack.append((DataType.PTR, op.token))
+            elif op.operand == Intrinsic.CAST_INT:
+                ensure_argument_count(len(stack), op, 1)
+                a_type, a_loc = stack.pop()
+                if a_type != DataType.BOOL:
+                    if debug:
+                        notify_argument_origin(a_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+                stack.append((DataType.INT, op.token))
+            elif op.operand == Intrinsic.CAST_BOOL:
+                ensure_argument_count(len(stack), op, 1)
+                a_type, a_loc = stack.pop()
+                if a_type != DataType.INT:
+                    if debug:
+                        notify_argument_origin(a_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
+                stack.append((DataType.BOOL, op.token))
             elif op.operand == Intrinsic.HERE:
                 stack.append((DataType.INT, op.token))
                 stack.append((DataType.PTR, op.token))
@@ -769,7 +842,7 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 assert type(op.operand) == int, 'Jump address must be `int`'
                 i = op.operand
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 33, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 40, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 a = stack.pop()
                 b = stack.pop()
@@ -846,18 +919,27 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 value = stack.pop()
                 assert type(value) == type(address) == int, 'Arguments for `.` must be `int`'
                 mem[address] = value & 0xFF
+            elif op.operand == Intrinsic.LOAD2:
+                addr = stack.pop()
+                stack.append(int.from_bytes(mem[addr:addr + 2], byteorder="little"))
+            elif op.operand == Intrinsic.STORE2:
+                store_addr16 = stack.pop()
+                store_value16 = stack.pop()
+                mem[store_addr16:store_addr16 + 2] = store_value16.to_bytes(length=2, byteorder="little")
+            elif op.operand == Intrinsic.LOAD4:
+                addr = stack.pop()
+                stack.append(int.from_bytes(mem[addr:addr + 4], byteorder="little"))
+            elif op.operand == Intrinsic.STORE4:
+                store_addr32 = stack.pop()
+                store_value32 = stack.pop()
+                mem[store_addr32:store_addr32 + 4] = store_value32.to_bytes(length=4, byteorder="little")
             elif op.operand == Intrinsic.LOAD8:
                 addr = stack.pop()
-                _bytes = bytearray(8)
-                for offset in range(0, 8):
-                    _bytes[offset] = mem[addr + offset]
-                stack.append(int.from_bytes(_bytes, byteorder="little"))
+                stack.append(int.from_bytes(mem[addr:addr + 8], byteorder="little"))
             elif op.operand == Intrinsic.STORE8:
                 store_addr64 = stack.pop()
-                store_value64 = stack.pop().to_bytes(length=8, byteorder="little")
-                for byte in store_value64:
-                    mem[store_addr64] = byte
-                    store_addr64 += 1
+                store_value64 = stack.pop()
+                mem[store_addr64:store_addr64 + 8] = store_value64.to_bytes(length=8, byteorder="little")
             elif op.operand == Intrinsic.OR:
                 a = stack.pop()
                 b = stack.pop()
@@ -868,6 +950,10 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `and` must be `int`'
                 stack.append(a & b)
+            elif op.operand == Intrinsic.BITNOT:
+                a = stack.pop()
+                assert type(a) == int, 'Argument for `bnot` must be `int`'
+                stack.append(~a & 0xFFFFFFFFFFFFFFFF)
             elif op.operand == Intrinsic.SHIFT_RIGHT:
                 a = stack.pop()
                 b = stack.pop()
@@ -900,6 +986,12 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 stack.append(a)
                 stack.append(c)
             elif op.operand == Intrinsic.CAST_PTR:
+                i += 1
+                continue
+            elif op.operand == Intrinsic.CAST_INT:
+                i += 1
+                continue
+            elif op.operand == Intrinsic.CAST_BOOL:
                 i += 1
                 continue
             elif op.operand == Intrinsic.HERE:
@@ -1028,7 +1120,7 @@ def compile_program(program: List[Op]) -> None:
         elif op.type == OpType.IF:
             write_level1(';; -- if --')
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 33, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 40, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -1116,6 +1208,22 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('pop x0')
                 write_level1('ldrb w1, [x0]')
                 write_level1('push x1')
+            elif op.operand == Intrinsic.STORE2:
+                write_level1('pop x1')
+                write_level1('pop x0')
+                write_level1('strh w0, [x1]')
+            elif op.operand == Intrinsic.LOAD2:
+                write_level1('pop x0')
+                write_level1('ldrh w1, [x0]')
+                write_level1('push x1')
+            elif op.operand == Intrinsic.STORE4:
+                write_level1('pop x1')
+                write_level1('pop x0')
+                write_level1('str w0, [x1]')
+            elif op.operand == Intrinsic.LOAD4:
+                write_level1('pop x0')
+                write_level1('ldr w1, [x0]')
+                write_level1('push x1')
             elif op.operand == Intrinsic.STORE8:
                 write_level1('pop x1')
                 write_level1('pop x0')
@@ -1133,6 +1241,10 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('and x0, x0, x1')
+                write_level1('push x0')
+            elif op.operand == Intrinsic.BITNOT:
+                write_level1('pop x0')
+                write_level1('mvn x0, x0')
                 write_level1('push x0')
             elif op.operand == Intrinsic.SHIFT_RIGHT:
                 write_level1('pop x0')
@@ -1163,6 +1275,10 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('push x0')
                 write_level1('push x2')
             elif op.operand == Intrinsic.CAST_PTR:
+                continue
+            elif op.operand == Intrinsic.CAST_INT:
+                continue
+            elif op.operand == Intrinsic.CAST_BOOL:
                 continue
             elif op.operand == Intrinsic.HERE:
                 here_text = f'{op.token.loc.filename}:[{op.token.loc.line + 1}:{op.token.loc.col}]: '

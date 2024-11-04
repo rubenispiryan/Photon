@@ -61,19 +61,10 @@ macro compile_footer
     "   .skip " puts MEM_CAPACITY putd "\n" puts
 end
 
-// Constants
-macro PUTD_BUFFER_CAP 32 end
-macro SIM_STACK_CAP 1024 end
-macro MEM_CAPACITY 640000 end
-
-// Operation Enum
-macro OP_PUSH_INT 0 end
-macro OP_ADD      1 end
-macro OP_PRINT    2 end
-
 // Memory layout
 macro fd mem end
-macro stat_buffer fd 8 + end // type: stat
+macro loc fd 8 + end // type: Loc
+macro stat_buffer loc sizeof(Loc) + end // type: stat
 macro content stat_buffer sizeof(stat) + end // type: Str
 macro line content sizeof(Str) + end // type: Str
 macro word line sizeof(Str) + end // type: Str
@@ -86,6 +77,42 @@ macro sim_stack sim_stack_count 8 + end
 macro op_stack_count sim_stack SIM_STACK_CAP + end
 macro op_stack op_stack_count 8 + end
 
+// Constants
+macro PUTD_BUFFER_CAP 32 end
+macro SIM_STACK_CAP 1024 end
+macro MEM_CAPACITY 640000 end
+
+// Operation Enum
+macro OP_PUSH_INT 0 end
+macro OP_ADD      1 end
+macro OP_PRINT    2 end
+macro OP_SUB      3 end
+macro OP_DUP      4 end
+macro OP_DROP     5 end
+macro OP_COUNT    6 end
+
+
+// struct Loc {
+//   filename: ptr    (8 bytes)
+//   line_num: uint64 (8 bytes)
+//   col_num:  uint64 (8 bytes)
+// }
+
+macro sizeof(Loc) 24 end
+macro Loc.filename 0 end
+macro Loc.line_num 8 end
+macro Loc.col_num 16 end
+macro @Loc.filename Loc.filename + @8 end
+macro @Loc.line_num Loc.line_num + @8 end
+macro @Loc.col_num Loc.col_num + @8 end
+macro @Loc
+    dup @Loc.filename swap
+    dup @Loc.line_num swap
+    @Loc.col_num
+end
+macro !Loc.filename Loc.filename + !8 end
+macro !Loc.line_num Loc.line_num + !8 end
+macro !Loc.col_num Loc.col_num + !8 end
 
 macro sizeof(Op) 16 end
 macro Op.type 0 end
@@ -98,7 +125,7 @@ macro !Op !Op.operand !Op.type end
 macro @Op dup @Op.type swap @Op.operand end
 
 // struct Op {
-//   type: uint64 (8 bytes)
+//   type:    uint64 (8 bytes)
 //   operand: uint64 (8 bytes)
 // }
 
@@ -109,13 +136,22 @@ macro push_op
     op_stack_count inc8
 end
 
-macro print_ops
-    0 while dup op_stack_count @8 < do
-        dup sizeof(Op) * op_stack +
-        "Type: " puts dup @Op.type putd
-        ", Operand: " puts @Op.operand print
-        1 +
-    end drop
+macro Loc.puts() // loc: Loc -> None
+    @Loc
+    rot dup ->ptr strlen swap puts ":" puts
+    "[" puts
+    swap 1 + putd ":" puts
+    putd
+    "] " puts
+end
+
+macro Loc.eputs() // loc: Loc -> None
+    @Loc
+    rot dup ->ptr strlen swap eputs ":" eputs
+    "[" eputs
+    swap 1 + eputd ":" eputs
+    putd
+    "] " eputs
 end
 
 macro putd
@@ -130,6 +166,22 @@ macro putd
     end
     dup
     putd_buffer PUTD_BUFFER_CAP + swap - swap puts
+  end
+  drop
+end
+
+macro eputd
+  if dup 0 == do
+    "0" puts
+  else
+    putd_buffer PUTD_BUFFER_CAP +
+    while over 0 > do
+      1 - dup rot
+      10 dup2 / rot rot %
+      rot swap '0' + swap ! swap
+    end
+    dup
+    putd_buffer PUTD_BUFFER_CAP + swap - swap eputs
   end
   drop
 end
@@ -157,71 +209,20 @@ end
 macro Str.parse_int() // n: int, s: ptr -> int
     parse_int_var !Str
     0 0 while dup parse_int_var @Str.length < do
-        dup parse_int_var @Str.data + @ '0' - rot +
+        dup parse_int_var @Str.data + @
+        if dup isdigit not do
+            report_error "Unknown word: " eputs word @Str eputsln
+            1 exit
+        end
+        '0' - rot +
         swap
         1 +
     end drop
 end
 
-// value
-macro sim_stack_push
-    if sim_stack_count @8 SIM_STACK_CAP >= do
-        here eputs "[ERROR] data stack overflow in simulation mode" eputs 1 exit
-    end
-    sim_stack_count @8 8 * sim_stack + !8
-    sim_stack_count inc8
-end
-
-macro sim_stack_pop
-    if sim_stack_count @8 0 <= do
-        here eputs "[ERROR] data stack underflow in simulation mode" eputs 1 exit
-    end
-    sim_stack_count dec8
-    sim_stack_count @8 8 * sim_stack + @8
-end
-
-macro simulate_program
-    0 while dup op_stack_count @8 < do
-        dup sizeof(Op) * op_stack +
-        if dup @Op.type OP_PUSH_INT == do
-            dup @Op.operand sim_stack_push
-        elif dup @Op.type OP_ADD == do
-            sim_stack_pop
-            sim_stack_pop
-            +
-            sim_stack_push
-        elif dup @Op.type OP_PRINT == do
-            sim_stack_pop
-            print
-        else "Unhandled Instruction\n" eputs 1 exit
-        end drop
-        1 +
-    end drop
-end
-
-macro compile_program
-    compile_header
-    0 while dup op_stack_count @8 < do
-        dup sizeof(Op) * op_stack +
-        if dup @Op.type OP_PUSH_INT == do
-            "   ;; -- push int " puts dup @Op.operand putd " --\n" puts
-            "   ldr x0, =" puts dup @Op.operand putd "\n" puts
-            "   push x0\n" puts
-        elif dup @Op.type OP_ADD == do
-            "   ;; -- add --\n" puts
-            "   pop x0\n" puts
-            "   pop x1\n" puts
-            "   add x0, x0, x1\n" puts
-            "   push x0\n" puts
-        elif dup @Op.type OP_PRINT == do
-            "   ;; -- print --\n" puts
-            "   pop x0\n" puts
-            "   bl print\n" puts
-        else "Unhandled Instruction\n" eputs 1 exit
-        end drop
-        1 +
-    end drop
-    compile_footer
+macro report_error // n: int, s: ptr -> None
+    loc Loc.eputs()
+    "[ERROR] " eputs
 end
 
 // Memory map file and save the pointer in content: Str
@@ -266,23 +267,144 @@ macro mmap_file
     end
 end
 
+// value
+macro sim_stack_push
+    if sim_stack_count @8 SIM_STACK_CAP >= do
+        here eputs "[ERROR] data stack overflow in simulation mode" eputs 1 exit
+    end
+    sim_stack_count @8 8 * sim_stack + !8
+    sim_stack_count inc8
+end
+
+macro sim_stack_pop
+    if sim_stack_count @8 0 <= do
+        here eputs "[ERROR] data stack underflow in simulation mode" eputs 1 exit
+    end
+    sim_stack_count dec8
+    sim_stack_count @8 8 * sim_stack + @8
+end
+
+// TODO: Add drop3 Intrinsic
+macro assert_op_count // here_len: int here_str: ptr expected_count: int
+    if dup OP_COUNT != do
+        drop
+        eputs "Assertion Fail: Exhaustive handling of Op types" eputsln
+        1 exit
+    else drop2 drop end
+end
+
+macro simulate_program
+    here 6 assert_op_count
+    0 while dup op_stack_count @8 < do
+        dup sizeof(Op) * op_stack +
+        if dup @Op.type OP_PUSH_INT == do
+            dup @Op.operand sim_stack_push
+        elif dup @Op.type OP_ADD == do
+            sim_stack_pop
+            sim_stack_pop
+            +
+            sim_stack_push
+        elif dup @Op.type OP_SUB == do
+            sim_stack_pop
+            sim_stack_pop
+            swap
+            -
+            sim_stack_push
+        elif dup @Op.type OP_PRINT == do
+            sim_stack_pop
+            print
+        elif dup @Op.type OP_DROP == do
+            sim_stack_pop
+            drop
+        elif dup @Op.type OP_DUP == do
+            sim_stack_pop
+            dup
+            sim_stack_push
+            sim_stack_push
+        else "Unhandled Instruction: " eputs dup @Op.type eputd "\n" eputs 1 exit
+        end drop
+        1 +
+    end drop
+end
+
+macro compile_program
+    here 6 assert_op_count
+    compile_header
+    0 while dup op_stack_count @8 < do
+        dup sizeof(Op) * op_stack +
+        if dup @Op.type OP_PUSH_INT == do
+            "   ;; -- push int " puts dup @Op.operand putd " --\n" puts
+            "   ldr x0, =" puts dup @Op.operand putd "\n" puts
+            "   push x0\n" puts
+        elif dup @Op.type OP_ADD == do
+            "   ;; -- add --\n" puts
+            "   pop x0\n" puts
+            "   pop x1\n" puts
+            "   add x0, x0, x1\n" puts
+            "   push x0\n" puts
+        elif dup @Op.type OP_SUB == do
+            "   ;; -- sub --\n" puts
+            "   pop x0\n" puts
+            "   pop x1\n" puts
+            "   sub x0, x1, x0\n" puts
+            "   push x0\n" puts
+        elif dup @Op.type OP_PRINT == do
+            "   ;; -- print --\n" puts
+            "   pop x0\n" puts
+            "   bl print\n" puts
+        elif dup @Op.type OP_DROP == do
+            "   ;; -- drop --\n" puts
+            "   pop x0\n" puts
+        elif dup @Op.type OP_DUP == do
+            "   ;; -- dup --\n" puts
+            "   pop x0\n" puts
+            "   push x0\n" puts
+            "   push x0\n" puts
+        else "Unhandled Instruction: " eputs dup @Op.type eputd "\n" eputs  1 exit
+        end drop
+        1 +
+    end drop
+    compile_footer
+end
+
+macro print_ops
+    0 while dup op_stack_count @8 < do
+        dup sizeof(Op) * op_stack +
+        "Type: " puts dup @Op.type putd
+        ", Operand: " puts @Op.operand print
+        1 +
+    end drop
+end
+
 // Expects file contents to be in content: Str
 // Expects that line, word are allocated
 macro parse_file_as_op
-    while content Str.length @8 0 > do
-    line content Str.chop_line()
-        while line Str.length @8 0 > do
+    here 6 assert_op_count
+    2 argv[n] loc !Loc.filename
+    0 while content Str.length @8 0 > do
+        dup loc !Loc.line_num
+        line content Str.chop_line()
+        0 while line Str.length @8 0 > do
+            dup loc !Loc.col_num
             line Str.left_strip()
             word line Str.chop_word()
             if word @Str "+" Str.equal() do
                 OP_ADD 0 push_op
+            elif word @Str "-" Str.equal() do
+                OP_SUB 0 push_op
             elif word @Str "print" Str.equal() do
                 OP_PRINT 0 push_op
+            elif word @Str "dup" Str.equal() do
+                OP_DUP 0 push_op
+            elif word @Str "drop" Str.equal() do
+                OP_DROP 0 push_op
             else
                 OP_PUSH_INT word @Str Str.parse_int() push_op
             end
-        end
-    end
+            1 +
+        end drop
+        1 +
+    end drop
 end
 
 macro print_usage
@@ -296,15 +418,15 @@ macro main
     if argc 2 < do
         print_usage
     else
+        mmap_file
+        parse_file_as_op
         1 argv[n]
         if dup "sim\0" streq do
-            mmap_file
-            parse_file_as_op
             simulate_program
         elif dup "com\0" streq do
-            mmap_file
-            parse_file_as_op
             compile_program
+        elif dup "dump\0" streq do
+            print_ops
         else "Invalid Subcommand\n" eputs print_usage 1 exit
         end
         drop
