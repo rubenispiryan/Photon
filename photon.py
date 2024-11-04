@@ -70,6 +70,7 @@ class Intrinsic(Enum):
     DROP = auto()
     AND = auto()
     OR = auto()
+    BITNOT = auto()
     SHIFT_RIGHT = auto()
     SHIFT_LEFT = auto()
     SWAP = auto()
@@ -177,6 +178,7 @@ INTRINSIC_NAMES = {
     'drop': Intrinsic.DROP,
     'and': Intrinsic.AND,
     'or': Intrinsic.OR,
+    'bnot': Intrinsic.BITNOT,
     '>>': Intrinsic.SHIFT_RIGHT,
     '<<': Intrinsic.SHIFT_LEFT,
     'swap': Intrinsic.SWAP,
@@ -368,7 +370,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     raise_error('Stack types cannot be altered in an if-do condition', op.token)
             block_stack.append((stack.copy(), op))
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 37, 'Exhaustive handling of intrinsics in type check'
+            assert len(Intrinsic) == 38, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -614,6 +616,15 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
                     raise_error(f'Invalid argument types for `{op.name}`: {(b_type.name, a_type.name)}', op.token)
+            elif op.operand == Intrinsic.BITNOT:
+                ensure_argument_count(len(stack), op, 1)
+                a_type, a_loc = stack.pop()
+                if a_type == DataType.INT:
+                    stack.append((DataType.INT, op.token))
+                else:
+                    if debug:
+                        notify_argument_origin(a_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
             elif op.operand == Intrinsic.SHIFT_RIGHT:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -811,7 +822,7 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 assert type(op.operand) == int, 'Jump address must be `int`'
                 i = op.operand
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 37, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 38, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 a = stack.pop()
                 b = stack.pop()
@@ -919,6 +930,10 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 b = stack.pop()
                 assert type(a) == type(b) == int, 'Arguments for `and` must be `int`'
                 stack.append(a & b)
+            elif op.operand == Intrinsic.BITNOT:
+                a = stack.pop()
+                assert type(a) == int, 'Argument for `bnot` must be `int`'
+                stack.append(~a & 0xFFFFFFFFFFFFFFFF)
             elif op.operand == Intrinsic.SHIFT_RIGHT:
                 a = stack.pop()
                 b = stack.pop()
@@ -1079,7 +1094,7 @@ def compile_program(program: List[Op]) -> None:
         elif op.type == OpType.IF:
             write_level1(';; -- if --')
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 37, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 38, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -1200,6 +1215,10 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('and x0, x0, x1')
+                write_level1('push x0')
+            elif op.operand == Intrinsic.BITNOT:
+                write_level1('pop x0')
+                write_level1('mvn x0, x0')
                 write_level1('push x0')
             elif op.operand == Intrinsic.SHIFT_RIGHT:
                 write_level1('pop x0')
