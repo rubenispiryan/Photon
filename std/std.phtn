@@ -191,3 +191,7 @@ macro dup2 over over end
 macro drop2 drop drop end
 
 macro % dup2 / * - end
+
+// Deprecated
+
+memory mem 640000 end

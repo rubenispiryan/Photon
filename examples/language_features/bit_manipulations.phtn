@@ -7,7 +7,7 @@
 9 0 or print
 
 // Bitwise not
-1 not print
+1 bnot print
 
 // Unsigned shifts
 2 3 << print
