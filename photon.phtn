@@ -61,16 +61,6 @@ macro compile_footer
     "   .skip " puts MEM_CAPACITY putd "\n" puts
 end
 
-// Constants
-macro PUTD_BUFFER_CAP 32 end
-macro SIM_STACK_CAP 1024 end
-macro MEM_CAPACITY 640000 end
-
-// Operation Enum
-macro OP_PUSH_INT 0 end
-macro OP_ADD      1 end
-macro OP_PRINT    2 end
-
 // Memory layout
 macro fd mem end
 macro stat_buffer fd 8 + end // type: stat
@@ -85,6 +75,19 @@ macro sim_stack_count putd_buffer PUTD_BUFFER_CAP + end
 macro sim_stack sim_stack_count 8 + end
 macro op_stack_count sim_stack SIM_STACK_CAP + end
 macro op_stack op_stack_count 8 + end
+
+// Constants
+macro PUTD_BUFFER_CAP 32 end
+macro SIM_STACK_CAP 1024 end
+macro MEM_CAPACITY 640000 end
+
+// Operation Enum
+macro OP_PUSH_INT 0 end
+macro OP_ADD      1 end
+macro OP_PRINT    2 end
+macro OP_SUB    3 end
+macro OP_COUNT    4 end
+
 
 
 macro sizeof(Op) 16 end
@@ -107,15 +110,6 @@ macro push_op
     op_stack_count @8 sizeof(Op) * op_stack +
     dup rot swap !Op
     op_stack_count inc8
-end
-
-macro print_ops
-    0 while dup op_stack_count @8 < do
-        dup sizeof(Op) * op_stack +
-        "Type: " puts dup @Op.type putd
-        ", Operand: " puts @Op.operand print
-        1 +
-    end drop
 end
 
 macro putd
@@ -163,67 +157,6 @@ macro Str.parse_int() // n: int, s: ptr -> int
     end drop
 end
 
-// value
-macro sim_stack_push
-    if sim_stack_count @8 SIM_STACK_CAP >= do
-        here eputs "[ERROR] data stack overflow in simulation mode" eputs 1 exit
-    end
-    sim_stack_count @8 8 * sim_stack + !8
-    sim_stack_count inc8
-end
-
-macro sim_stack_pop
-    if sim_stack_count @8 0 <= do
-        here eputs "[ERROR] data stack underflow in simulation mode" eputs 1 exit
-    end
-    sim_stack_count dec8
-    sim_stack_count @8 8 * sim_stack + @8
-end
-
-macro simulate_program
-    0 while dup op_stack_count @8 < do
-        dup sizeof(Op) * op_stack +
-        if dup @Op.type OP_PUSH_INT == do
-            dup @Op.operand sim_stack_push
-        elif dup @Op.type OP_ADD == do
-            sim_stack_pop
-            sim_stack_pop
-            +
-            sim_stack_push
-        elif dup @Op.type OP_PRINT == do
-            sim_stack_pop
-            print
-        else "Unhandled Instruction\n" eputs 1 exit
-        end drop
-        1 +
-    end drop
-end
-
-macro compile_program
-    compile_header
-    0 while dup op_stack_count @8 < do
-        dup sizeof(Op) * op_stack +
-        if dup @Op.type OP_PUSH_INT == do
-            "   ;; -- push int " puts dup @Op.operand putd " --\n" puts
-            "   ldr x0, =" puts dup @Op.operand putd "\n" puts
-            "   push x0\n" puts
-        elif dup @Op.type OP_ADD == do
-            "   ;; -- add --\n" puts
-            "   pop x0\n" puts
-            "   pop x1\n" puts
-            "   add x0, x0, x1\n" puts
-            "   push x0\n" puts
-        elif dup @Op.type OP_PRINT == do
-            "   ;; -- print --\n" puts
-            "   pop x0\n" puts
-            "   bl print\n" puts
-        else "Unhandled Instruction\n" eputs 1 exit
-        end drop
-        1 +
-    end drop
-    compile_footer
-end
-
 // Memory map file and save the pointer in content: Str
 macro mmap_file
     if argc 3 < do
@@ -266,9 +199,102 @@ macro mmap_file
     end
 end
 
+// value
+macro sim_stack_push
+    if sim_stack_count @8 SIM_STACK_CAP >= do
+        here eputs "[ERROR] data stack overflow in simulation mode" eputs 1 exit
+    end
+    sim_stack_count @8 8 * sim_stack + !8
+    sim_stack_count inc8
+end
+
+macro sim_stack_pop
+    if sim_stack_count @8 0 <= do
+        here eputs "[ERROR] data stack underflow in simulation mode" eputs 1 exit
+    end
+    sim_stack_count dec8
+    sim_stack_count @8 8 * sim_stack + @8
+end
+
+// TODO: Add drop3 Intrinsic
+macro assert_op_count // here_len: int here_str: ptr expected_count: int
+    if dup OP_COUNT != do
+        drop
+        eputs "Assertion Fail: Exhaustive handling of Op types" eputsln
+        1 exit
+    else drop2 drop end
+end
+
+macro simulate_program
+    here 4 assert_op_count
+    0 while dup op_stack_count @8 < do
+        dup sizeof(Op) * op_stack +
+        if dup @Op.type OP_PUSH_INT == do
+            dup @Op.operand sim_stack_push
+        elif dup @Op.type OP_ADD == do
+            sim_stack_pop
+            sim_stack_pop
+            +
+            sim_stack_push
+        elif dup @Op.type OP_SUB == do
+            sim_stack_pop
+            sim_stack_pop
+            -
+            sim_stack_push
+        elif dup @Op.type OP_PRINT == do
+            sim_stack_pop
+            print
+        else "Unhandled Instruction\n" eputs 1 exit
+        end drop
+        1 +
+    end drop
+end
+
+macro compile_program
+    here 4 assert_op_count
+    compile_header
+    0 while dup op_stack_count @8 < do
+        dup sizeof(Op) * op_stack +
+        if dup @Op.type OP_PUSH_INT == do
+            "   ;; -- push int " puts dup @Op.operand putd " --\n" puts
+            "   ldr x0, =" puts dup @Op.operand putd "\n" puts
+            "   push x0\n" puts
+        elif dup @Op.type OP_ADD == do
+            "   ;; -- add --\n" puts
+            "   pop x0\n" puts
+            "   pop x1\n" puts
+            "   add x0, x0, x1\n" puts
+            "   push x0\n" puts
+        elif dup @Op.type OP_SUB == do
+            "   ;; -- sub --\n" puts
+            "   pop x0\n" puts
+            "   pop x1\n" puts
+            "   sub x0, x1, x0\n" puts
+            "   push x0\n" puts
+        elif dup @Op.type OP_PRINT == do
+            "   ;; -- print --\n" puts
+            "   pop x0\n" puts
+            "   bl print\n" puts
+        else "Unhandled Instruction\n" eputs 1 exit
+        end drop
+        1 +
+    end drop
+    compile_footer
+end
+
+macro print_ops
+    0 while dup op_stack_count @8 < do
+        dup sizeof(Op) * op_stack +
+        "Type: " puts dup @Op.type putd
+        ", Operand: " puts @Op.operand print
+        1 +
+    end drop
+end
+
 // Expects file contents to be in content: Str
 // Expects that line, word are allocated
 macro parse_file_as_op
+    here 4 assert_op_count
     while content Str.length @8 0 > do
     line content Str.chop_line()
         while line Str.length @8 0 > do
@@ -276,6 +302,8 @@ macro parse_file_as_op
             word line Str.chop_word()
             if word @Str "+" Str.equal() do
                 OP_ADD 0 push_op
+            elif word @Str "-" Str.equal() do
+                OP_SUB 0 push_op
             elif word @Str "print" Str.equal() do
                 OP_PRINT 0 push_op
             else
@@ -296,15 +324,15 @@ macro main
     if argc 2 < do
         print_usage
     else
+        mmap_file
+        parse_file_as_op
         1 argv[n]
         if dup "sim\0" streq do
-            mmap_file
-            parse_file_as_op
             simulate_program
         elif dup "com\0" streq do
-            mmap_file
-            parse_file_as_op
             compile_program
+        elif dup "dump\0" streq do
+            print_ops
         else "Invalid Subcommand\n" eputs print_usage 1 exit
         end
         drop
