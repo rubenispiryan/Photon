@@ -4,7 +4,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple, Optional, BinaryIO
+from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple, Optional, BinaryIO, Reversible
 
 
 @dataclass
@@ -141,9 +141,12 @@ class Token:
     value: int | str | Keyword
     loc: Loc
     name: str
-    tokens: list['Token'] | None = None
     expanded_from: Optional['Token'] = None
     expanded_count: int = 0
+
+@dataclass
+class Macro(Token):
+    tokens: List[Token] | None = None
 
 
 @dataclass
@@ -1452,7 +1455,7 @@ def parse_keyword(stack: List[Tuple[Token, int]], token: Token, i: int, ops: Lis
         raise_error(f'Unknown keyword token: {token.value}', token.loc)
 
 
-def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[str, Token]) -> NoReturn | None:
+def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[str, Macro]) -> NoReturn | None:
     assert len(Keyword) == 9, 'Exhaustive handling of keywords in compile_keyword_to_program'
     if token.value == Keyword.MACRO:
         if len(rprogram) == 0:
@@ -1470,7 +1473,7 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
         if len(rprogram) == 0:
             raise_error(f'Expected `end` at the end of empty macro definition but found: `{macro_name.value}`',
                         macro_name.loc)
-        macros[macro_name.value] = Token(TokenType.KEYWORD, Keyword.MACRO,
+        macros[macro_name.value] = Macro(TokenType.KEYWORD, Keyword.MACRO,
                                          loc=token.loc, name=macro_name.value, tokens=[])
         block_count = 0
         while len(rprogram) > 0:
@@ -1515,7 +1518,7 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
     return None
 
 def evaluate_memory_definition(rprogram: List[Token], token: Token,
-                               macros: Dict[str, Token], memories: Dict[str, MemAddr]) -> Tuple[str, int]:
+                               macros: Dict[str, Macro], memories: Dict[str, MemAddr]) -> Tuple[str, int]:
     if len(rprogram) == 0:
         raise_error('Expected name of the memory but found nothing', token.loc)
     memory_name = rprogram.pop()
@@ -1549,6 +1552,13 @@ def evaluate_memory_definition(rprogram: List[Token], token: Token,
             a = memory_size_stack.pop()
             b = memory_size_stack.pop()
             memory_size_stack.append(a * b)
+        elif token.type == TokenType.WORD and type(token.value) == str and token.value in macros:
+            current_macro = macros[token.value]
+            assert current_macro.tokens is not None, 'Macro tokens not saved'
+            for idx in range(len(current_macro.tokens) - 1, -1, -1):
+                current_macro.tokens[idx].expanded_from = token
+                current_macro.tokens[idx].expanded_count = token.expanded_count + 1
+                rprogram.append(current_macro.tokens[idx])
         else:
             raise_error(f'Unsupported token in memory definition: {token.value}', token.loc)
     if token.type != TokenType.KEYWORD or token.value != Keyword.END:
@@ -1564,7 +1574,7 @@ def parse_tokens_to_program(token_program: List[Token]) -> Program:
     stack: List[Tuple[Token, int]] = []
     rprogram = list(reversed(token_program))
     program = Program([], 0)
-    macros: Dict[str, Token] = {}
+    macros: Dict[str, Macro] = {}
     memories: Dict[str, MemAddr] = {}
     i = 0
     while len(rprogram) > 0:
