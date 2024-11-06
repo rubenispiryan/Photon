@@ -61,25 +61,9 @@ macro compile_footer
     "   .skip " puts MEM_CAPACITY putd "\n" puts
 end
 
-// Memory layout
-macro fd mem end
-macro loc fd 8 + end // type: Loc
-macro stat_buffer loc sizeof(Loc) + end // type: stat
-macro content stat_buffer sizeof(stat) + end // type: Str
-macro line content sizeof(Str) + end // type: Str
-macro word line sizeof(Str) + end // type: Str
-macro streq_a word sizeof(Str) + end // type: Str
-macro streq_b streq_a sizeof(Str) + end // type: Str
-macro parse_int_var streq_b sizeof(Str) + end // type: Str
-macro putd_buffer parse_int_var sizeof(Str) + end
-macro sim_stack_count putd_buffer PUTD_BUFFER_CAP + end
-macro sim_stack sim_stack_count 8 + end
-macro op_stack_count sim_stack SIM_STACK_CAP + end
-macro op_stack op_stack_count 8 + end
-
 // Constants
-macro PUTD_BUFFER_CAP 32 end
 macro SIM_STACK_CAP 1024 end
+macro OP_STACK_CAP 1024 end
 macro MEM_CAPACITY 640000 end
 
 // Operation Enum
@@ -114,6 +98,11 @@ macro !Loc.filename Loc.filename + !8 end
 macro !Loc.line_num Loc.line_num + !8 end
 macro !Loc.col_num Loc.col_num + !8 end
 
+// struct Op {
+//   type:    uint64 (8 bytes)
+//   operand: uint64 (8 bytes)
+// }
+
 macro sizeof(Op) 16 end
 macro Op.type 0 end
 macro Op.operand 8 end
@@ -124,10 +113,17 @@ macro @Op.operand Op.operand + @8 end
 macro !Op !Op.operand !Op.type end
 macro @Op dup @Op.type swap @Op.operand end
 
-// struct Op {
-//   type:    uint64 (8 bytes)
-//   operand: uint64 (8 bytes)
-// }
+// Memory layout
+memory fd sizeof(ptr) end
+memory loc sizeof(Loc) end
+memory stat_buffer sizeof(stat) end
+memory content sizeof(Str) end
+memory line sizeof(Str) end
+memory word sizeof(Str) end
+memory sim_stack_count sizeof(u64) end
+memory sim_stack sizeof(u64) SIM_STACK_CAP * end
+memory op_stack_count sizeof(u64) end
+memory op_stack sizeof(Op) OP_STACK_CAP * end
 
 // expects: type:int operand:int
 macro push_op
@@ -154,71 +150,6 @@ macro Loc.eputs() // loc: Loc -> None
     "] " eputs
 end
 
-macro putd
-  if dup 0 == do
-    "0" puts
-  else
-    putd_buffer PUTD_BUFFER_CAP +
-    while over 0 > do
-      1 - dup rot
-      10 dup2 / rot rot %
-      rot swap '0' + swap ! swap
-    end
-    dup
-    putd_buffer PUTD_BUFFER_CAP + swap - swap puts
-  end
-  drop
-end
-
-macro eputd
-  if dup 0 == do
-    "0" puts
-  else
-    putd_buffer PUTD_BUFFER_CAP +
-    while over 0 > do
-      1 - dup rot
-      10 dup2 / rot rot %
-      rot swap '0' + swap ! swap
-    end
-    dup
-    putd_buffer PUTD_BUFFER_CAP + swap - swap eputs
-  end
-  drop
-end
-
-// Requires streq_a, streq_b Str pointers in memory
-macro Str.equal() // n1: int, s1: ptr, n2: int, s2: ptr -> bool
-    streq_a !Str
-    streq_b !Str
-    if streq_a @Str.length streq_b @Str.length == do
-        0 while
-            if dup streq_a @Str.length < do
-                streq_a @Str.data @ streq_b @Str.data @ ==
-            else
-                false
-            end
-        do
-            1 +
-        end
-        streq_a @Str.length ==
-    else
-        false
-    end
-end
-
-macro Str.parse_int() // n: int, s: ptr -> int
-    parse_int_var !Str
-    0 0 while dup parse_int_var @Str.length < do
-        dup parse_int_var @Str.data + @
-        if dup isdigit not do
-            report_error "Unknown word: " eputs word @Str eputsln
-            1 exit
-        end
-        '0' - rot +
-        swap
-        1 +
-    end drop
-end
 
 macro report_error // n: int, s: ptr -> None
     loc Loc.eputs()
