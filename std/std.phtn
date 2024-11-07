@@ -19,6 +19,10 @@ macro close SYS_CLOSE syscall1 end
 macro fstat64 SYS_FSTAT64 syscall2 end
 macro mmap SYS_MMAP syscall6 end
 
+// type sizes
+macro sizeof(ptr) 8 end
+macro sizeof(u64) 8 end
+
 // struct stat of fstat64
 macro sizeof(stat) 144 end
 macro stat.st_dev 0 + end
@@ -154,6 +158,42 @@ macro Str.left_strip() // input: Str -> None
     end drop
 end
 
+memory streq_a sizeof(Str) end
+memory streq_b sizeof(Str) end
+macro Str.equal() // n1: int, s1: ptr, n2: int, s2: ptr -> bool
+    streq_a !Str
+    streq_b !Str
+    if streq_a @Str.length streq_b @Str.length == do
+        0 while
+            if dup streq_a @Str.length < do
+                streq_a @Str.data @ streq_b @Str.data @ ==
+            else
+                false
+            end
+        do
+            1 +
+        end
+        streq_a @Str.length ==
+    else
+        false
+    end
+end
+
+memory parse_int_var sizeof(Str) end
+macro Str.parse_int() // n: int, s: ptr -> int
+    parse_int_var !Str
+    0 0 while dup parse_int_var @Str.length < do
+        dup parse_int_var @Str.data + @
+        if dup isdigit not do
+            report_error "Unknown word: " eputs word @Str eputsln
+            1 exit
+        end
+        '0' - rot +
+        swap
+        1 +
+    end drop
+end
+
 macro strlen
    dup
    while dup @ 0 != do 1 + end
@@ -185,6 +225,42 @@ macro isdigit
     '0' >=
     over '9' <=
     and
+end
+
+macro PUTD_BUFFER_CAP 32 end
+memory putd_buffer PUTD_BUFFER_CAP end
+// puts int into stdout
+macro putd
+  if dup 0 == do
+    "0" puts
+  else
+    putd_buffer PUTD_BUFFER_CAP +
+    while over 0 > do
+      1 - dup rot
+      10 dup2 / rot rot %
+      rot swap '0' + swap ! swap
+    end
+    dup
+    putd_buffer PUTD_BUFFER_CAP + swap - swap puts
+  end
+  drop
+end
+
+// puts int into stderr
+macro eputd
+  if dup 0 == do
+    "0" puts
+  else
+    putd_buffer PUTD_BUFFER_CAP +
+    while over 0 > do
+      1 - dup rot
+      10 dup2 / rot rot %
+      rot swap '0' + swap ! swap
+    end
+    dup
+    putd_buffer PUTD_BUFFER_CAP + swap - swap eputs
+  end
+  drop
 end
 
 macro dup2 over over end
