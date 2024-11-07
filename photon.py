@@ -4,7 +4,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple, Optional, BinaryIO
+from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple, Optional, BinaryIO, Reversible
 
 
 @dataclass
@@ -76,7 +76,6 @@ class Intrinsic(Enum):
     SWAP = auto()
     OVER = auto()
     ROT = auto()
-    MEM = auto()
     LOAD = auto()
     STORE = auto()
     LOAD2 = auto()
@@ -100,6 +99,7 @@ class Intrinsic(Enum):
 class OpType(Enum):
     PUSH_INT = auto()
     PUSH_STR = auto()
+    PUSH_MEM = auto()
     INTRINSIC = auto()
     IF = auto()
     END = auto()
@@ -118,6 +118,7 @@ class Keyword(Enum):
     DO = auto()
     MACRO = auto()
     INCLUDE = auto()
+    MEMORY = auto()
 
 
 class TokenType(Enum):
@@ -140,9 +141,12 @@ class Token:
     value: int | str | Keyword
     loc: Loc
     name: str
-    tokens: list['Token'] | None = None
     expanded_from: Optional['Token'] = None
     expanded_count: int = 0
+
+@dataclass
+class Macro(Token):
+    tokens: List[Token] | None = None
 
 
 @dataclass
@@ -152,6 +156,11 @@ class Op:
     name: str
     operand: int | str | Intrinsic | None = None
     addr: int | None = None
+
+@dataclass
+class Program:
+    ops: list[Op]
+    memory_capacity: int
 
 
 KEYWORD_NAMES = {
@@ -163,6 +172,7 @@ KEYWORD_NAMES = {
     'do': Keyword.DO,
     'macro': Keyword.MACRO,
     'include': Keyword.INCLUDE,
+    'memory': Keyword.MEMORY,
 }
 
 assert len(KEYWORD_NAMES) == len(Keyword), 'Exhaustive handling of keywords'
@@ -189,7 +199,6 @@ INTRINSIC_NAMES = {
     '>=': Intrinsic.GTE,
     '<=': Intrinsic.LTE,
     '!=': Intrinsic.NE,
-    'mem': Intrinsic.MEM,
     '!': Intrinsic.STORE,
     '@': Intrinsic.LOAD,
     '!2': Intrinsic.STORE2,
@@ -217,8 +226,10 @@ MACRO_TRACEBACK_LIMIT = 10
 NULL_POINTER_PADDING = 1  # padding to make 0 an invalid address
 ARG_PTR_CAPACITY = 640 + NULL_POINTER_PADDING
 STR_CAPACITY = 640_000 + ARG_PTR_CAPACITY
-MEM_CAPACITY = 640_000 + STR_CAPACITY
 FDS: List[BinaryIO] = [sys.stdin.buffer, sys.stdout.buffer, sys.stderr.buffer]
+
+DataTypeStack = List[Tuple[DataType, Token]]
+MemAddr = int
 
 
 def make_log_message(message: str, loc: Loc) -> str:
@@ -286,14 +297,11 @@ def notify_argument_origin(loc: Token, order: int = 1) -> None:
     notify_user(f'Argument {order} was created at this location', loc.loc)
 
 
-DataTypeStack = List[Tuple[DataType, Token]]
-
-
-def type_check_program(program: List[Op], debug: bool = False) -> None:
+def type_check_program(program: Program, debug: bool = False) -> None:
     stack: DataTypeStack = []
     block_stack: List[Tuple[DataTypeStack, Op]] = []  # convert stack to tuple keeping only DataType, hash and store
-    for op in program:
-        assert len(OpType) == 9, 'Exhaustive handling of operations in type check'
+    for op in program.ops:
+        assert len(OpType) == 10, 'Exhaustive handling of operations in type check'
         if op.type == OpType.PUSH_INT:
             assert type(op.operand) == int, 'Value for `PUSH_INT` must be `int`'
             stack.append((DataType.INT, op.token))
@@ -301,6 +309,8 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
             assert type(op.operand) == str, 'Value for `PUSH_STR` must be `str`'
             if op.operand[-1] != '\0':
                 stack.append((DataType.INT, op.token))
+            stack.append((DataType.PTR, op.token))
+        elif op.type == OpType.PUSH_MEM:
             stack.append((DataType.PTR, op.token))
         elif op.type == OpType.IF:
             block_stack.append((stack.copy(), op))
@@ -374,7 +384,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
                     raise_error('Stack types cannot be altered in an if-do condition', op.token)
             block_stack.append((stack.copy(), op))
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 40, 'Exhaustive handling of intrinsics in type check'
+            assert len(Intrinsic) == 39, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -520,8 +530,6 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
             elif op.operand == Intrinsic.DROP:
                 ensure_argument_count(len(stack), op, 1)
                 stack.pop()
-            elif op.operand == Intrinsic.MEM:
-                stack.append((DataType.PTR, op.token))
             elif op.operand == Intrinsic.ARGC:
                 stack.append((DataType.INT, op.token))
             elif op.operand == Intrinsic.ARGV:
@@ -675,7 +683,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
             elif op.operand == Intrinsic.CAST_PTR:
                 ensure_argument_count(len(stack), op, 1)
                 a_type, a_loc = stack.pop()
-                if a_type != DataType.INT:
+                if a_type != DataType.INT and a_type != DataType.PTR:
                     if debug:
                         notify_argument_origin(a_loc, order=1)
                     raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
@@ -683,7 +691,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
             elif op.operand == Intrinsic.CAST_INT:
                 ensure_argument_count(len(stack), op, 1)
                 a_type, a_loc = stack.pop()
-                if a_type != DataType.BOOL:
+                if a_type != DataType.BOOL and a_type != DataType.INT:
                     if debug:
                         notify_argument_origin(a_loc, order=1)
                     raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
@@ -691,7 +699,7 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
             elif op.operand == Intrinsic.CAST_BOOL:
                 ensure_argument_count(len(stack), op, 1)
                 a_type, a_loc = stack.pop()
-                if a_type != DataType.INT:
+                if a_type != DataType.INT and a_type != DataType.BOOL:
                     if debug:
                         notify_argument_origin(a_loc, order=1)
                     raise_error(f'Invalid argument types for `{op.name}`: {a_type.name}', op.token)
@@ -778,11 +786,11 @@ def type_check_program(program: List[Op], debug: bool = False) -> None:
         raise_error(f'Unhandled data on the stack: {current_stack}', stack[-1][1])
 
 
-def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) -> None:
+def simulate_little_endian_macos(program: Program, input_arguments: List[str]) -> None:
     stack: List = []
-    assert len(OpType) == 9, 'Exhaustive handling of operators in simulation'
+    assert len(OpType) == 10, 'Exhaustive handling of operators in simulation'
     i = 0
-    mem = bytearray(MEM_CAPACITY)
+    mem = bytearray(STR_CAPACITY + program.memory_capacity)
     allocated_strs = {}
     ptr_size = NULL_POINTER_PADDING
     str_size = ARG_PTR_CAPACITY
@@ -798,8 +806,8 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
         assert ptr_size <= ARG_PTR_CAPACITY, "Argument pointer buffer overflow"
     argc = len(input_arguments)
     argv_start = NULL_POINTER_PADDING
-    while i < len(program):
-        op = program[i]
+    while i < len(program.ops):
+        op = program.ops[i]
         if op.type == OpType.PUSH_INT:
             assert type(op.operand) == int, 'Value for `PUSH_INT` must be `int`'
             stack.append(op.operand)
@@ -819,6 +827,9 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 if str_size > STR_CAPACITY:
                     raise_error('String buffer overflow', op.token.loc)
             stack.append(allocated_strs[op.operand])
+        elif op.type == OpType.PUSH_MEM:
+            assert type(op.operand) == int, 'Operand for `PUSH_MEM` must be `int`'
+            stack.append(STR_CAPACITY + op.operand)
         elif op.type == OpType.IF:
             i += 1
             continue
@@ -842,7 +853,7 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 assert type(op.operand) == int, 'Jump address must be `int`'
                 i = op.operand
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 40, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 39, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 a = stack.pop()
                 b = stack.pop()
@@ -904,8 +915,6 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
                 stack.append(a)
             elif op.operand == Intrinsic.DROP:
                 stack.pop()
-            elif op.operand == Intrinsic.MEM:
-                stack.append(STR_CAPACITY)
             elif op.operand == Intrinsic.ARGC:
                 stack.append(argc)
             elif op.operand == Intrinsic.ARGV:
@@ -1063,8 +1072,8 @@ def simulate_little_endian_macos(program: List[Op], input_arguments: List[str]) 
         i += 1
 
 
-def compile_program(program: List[Op]) -> None:
-    assert len(OpType) == 9, 'Exhaustive handling of operators in compilation'
+def compile_program(program: Program) -> None:
+    assert len(OpType) == 10, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -1081,8 +1090,8 @@ def compile_program(program: List[Op]) -> None:
     write_level1('str x1, [x2]')
     strs: List[str] = []
     allocated_strs: Dict[str, int] = {}
-    for i in range(len(program)):
-        op = program[i]
+    for i in range(len(program.ops)):
+        op = program.ops[i]
         if op.type == OpType.PUSH_INT:
             assert type(op.operand) == int, 'Operation value must be an `int` for PUSH_INT'
             write_level1(f'ldr x0, ={op.operand}')
@@ -1099,6 +1108,12 @@ def compile_program(program: List[Op]) -> None:
             if op.operand not in allocated_strs:
                 allocated_strs[op.operand] = len(strs)
                 strs.append(op.operand)
+        elif op.type == OpType.PUSH_MEM:
+            write_level1('adrp x0, mem@PAGE')
+            write_level1('add x0, x0, mem@PAGEOFF')
+            write_level1(f'ldr x1, ={op.operand}')
+            write_level1('add x0, x0, x1')
+            write_level1('push x0')
         elif op.type == OpType.DO:
             write_level1('pop x0')
             write_level1('tst x0, x0')
@@ -1120,7 +1135,7 @@ def compile_program(program: List[Op]) -> None:
         elif op.type == OpType.IF:
             write_level1(';; -- if --')
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 40, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 39, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -1186,10 +1201,6 @@ def compile_program(program: List[Op]) -> None:
                 write_level1('push x0')
             elif op.operand == Intrinsic.DROP:
                 write_level1('pop x0')
-            elif op.operand == Intrinsic.MEM:
-                write_level1('adrp x0, mem@PAGE')
-                write_level1('add x0, x0, mem@PAGEOFF')
-                write_level1('push x0')
             elif op.operand == Intrinsic.ARGC:
                 write_level1('adrp x0, argc@PAGE')
                 write_level1('add x0, x0, argc@PAGEOFF')
@@ -1348,7 +1359,7 @@ def compile_program(program: List[Op]) -> None:
         write_level1(f'str_{i}: .asciz "{word}"')
     write_base('.section __DATA, __bss')
     write_base('mem:')
-    write_level1(f'.skip {MEM_CAPACITY}')
+    write_level1(f'.skip {program.memory_capacity}')
     out.close()
 
 
@@ -1361,8 +1372,8 @@ def usage_help() -> None:
     print('         --run   Used with `com` to run immediately')
 
 
-def parse_keyword(stack: List[Tuple[Token, int]], token: Token, i: int, program: List[Op]) -> NoReturn | Op:
-    assert len(Keyword) == 8, 'Exhaustive handling of keywords in parse_keyword'
+def parse_keyword(stack: List[Tuple[Token, int]], token: Token, i: int, ops: List[Op]) -> NoReturn | Op:
+    assert len(Keyword) == 9, 'Exhaustive handling of keywords in parse_keyword'
     if type(token.value) != Keyword:
         raise_error(f'Token value `{token.value}` must be a Keyword, but found: {type(token.value)}', token.loc)
     if token.value == Keyword.IF:
@@ -1372,29 +1383,29 @@ def parse_keyword(stack: List[Tuple[Token, int]], token: Token, i: int, program:
         if len(stack) < 2:
             raise_error(f'`elif` can only be used with an `if-do` or `elif-do`', token.loc)
         _, do_index = stack.pop()
-        if program[do_index].type != OpType.DO:
+        if ops[do_index].type != OpType.DO:
             if do_index:
-                notify_user(f'Instead of `do` found: {program[do_index].type}', program[do_index].token.loc)
+                notify_user(f'Instead of `do` found: {ops[do_index].type}', ops[do_index].token.loc)
             raise_error(f'`elif` can only be used with an `if-do` or `elif-do`', token.loc)
         _, if_index = stack.pop()
-        if program[if_index].type != OpType.IF and program[if_index].type != OpType.ELIF:
-            notify_user(f'Instead of `if` or `elif` found: {program[if_index].type}',
-                        program[if_index].token.loc)
-            raise_error('`if` or `elif` must be present before `do`', program[if_index].token.loc)
-        if program[if_index].type == OpType.ELIF:
-            program[if_index].operand = i - 1
-        program[do_index].operand = i
+        if ops[if_index].type != OpType.IF and ops[if_index].type != OpType.ELIF:
+            notify_user(f'Instead of `if` or `elif` found: {ops[if_index].type}',
+                        ops[if_index].token.loc)
+            raise_error('`if` or `elif` must be present before `do`', ops[if_index].token.loc)
+        if ops[if_index].type == OpType.ELIF:
+            ops[if_index].operand = i - 1
+        ops[do_index].operand = i
         stack.append((token, i))
         return Op(type=OpType.ELIF, token=token, name=token.value.name)
     elif token.value == Keyword.ELSE:
         if len(stack) < 2:
             raise_error(f'`else` can only be used with an `if-do` or `elif-do`', token.loc)
         _, do_index = stack.pop()
-        if program[do_index].type != OpType.DO and program[do_index].type != OpType.ELIF:
+        if ops[do_index].type != OpType.DO and ops[do_index].type != OpType.ELIF:
             if do_index:
-                notify_user(f'Instead of `do` found: {program[do_index].type}', program[do_index].token.loc)
+                notify_user(f'Instead of `do` found: {ops[do_index].type}', ops[do_index].token.loc)
             raise_error(f'`else` can only be used with an `if-do` or `elif-do`', token.loc)
-        program[do_index].operand = i
+        ops[do_index].operand = i
         stack.append((token, i))
         return Op(type=OpType.ELSE, token=token, name=token.value.name)
     elif token.value == Keyword.WHILE:
@@ -1408,43 +1419,44 @@ def parse_keyword(stack: List[Tuple[Token, int]], token: Token, i: int, program:
             raise_error('`end` can only be used with a `if-do`, `if-do-else`, `while-do` or `macro`',
                         token.loc)
         block, block_index = stack.pop()
-        if program[block_index].type == OpType.ELSE:
-            program[block_index].operand = i
+        if ops[block_index].type == OpType.ELSE:
+            ops[block_index].operand = i
             if len(stack) == 0:
-                raise_error('`if-do` must be present before `else`', program[block_index].token.loc)
+                raise_error('`if-do` must be present before `else`', ops[block_index].token.loc)
             _, if_index = stack.pop()
-            if program[if_index].type != OpType.IF and program[if_index].type != OpType.ELIF:
-                notify_user(f'Instead of `if` or `elif` found: {program[if_index].type}',
-                            program[if_index].token.loc)
-                raise_error('`if` or `elif` must be present before `do`', program[if_index].token.loc)
-            if program[if_index].type == OpType.ELIF:
-                program[if_index].operand = i
+            if ops[if_index].type != OpType.IF and ops[if_index].type != OpType.ELIF:
+                notify_user(f'Instead of `if` or `elif` found: {ops[if_index].type}',
+                            ops[if_index].token.loc)
+                raise_error('`if` or `elif` must be present before `do`', ops[if_index].token.loc)
+            if ops[if_index].type == OpType.ELIF:
+                ops[if_index].operand = i
             return Op(type=OpType.END, token=token, name=token.value.name)
-        elif program[block_index].type == OpType.DO:
-            program[block_index].operand = i
+        elif ops[block_index].type == OpType.DO:
+            ops[block_index].operand = i
             if len(stack) == 0:
-                raise_error('`while` must be present before `do`', program[block_index].token.loc)
+                raise_error('`while` must be present before `do`', ops[block_index].token.loc)
             _, before_do_index = stack.pop()
-            if program[before_do_index].type == OpType.WHILE:
+            if ops[before_do_index].type == OpType.WHILE:
                 return Op(type=OpType.END, token=token, name=token.value.name, operand=before_do_index)
-            elif program[before_do_index].type == OpType.IF:
+            elif ops[before_do_index].type == OpType.IF:
                 return Op(type=OpType.END, token=token, name=token.value.name)
-            elif program[before_do_index].type == OpType.ELIF:
-                program[before_do_index].operand = i
+            elif ops[before_do_index].type == OpType.ELIF:
+                ops[before_do_index].operand = i
                 return Op(type=OpType.END, token=token, name=token.value.name)
             else:
-                notify_user(f'Instead of `while`, `if` or `elif` found: {program[before_do_index].type}',
-                            program[before_do_index].token.loc)
-                raise_error('`while`, `if` or `elif` must be present before `do`', program[block_index].token.loc)
+                notify_user(f'Instead of `while`, `if` or `elif` found: {ops[before_do_index].type}',
+                            ops[before_do_index].token.loc)
+                raise_error('`while`, `if` or `elif` must be present before `do`', ops[block_index].token.loc)
         else:
-            raise_error('`end` can only be used with a `if-do`, `if-do-else`, `while-do` or `macro`',
+            notify_user(f'Instead of `else` or `do` found: {ops[block_index].type}', ops[block_index].token.loc)
+            raise_error('`end` can only be used with an `if-do`, `if-do-else`, `while-do` or `macro`',
                         token.loc)
     else:
         raise_error(f'Unknown keyword token: {token.value}', token.loc)
 
 
-def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[str, Token]) -> NoReturn | None:
-    assert len(Keyword) == 8, 'Exhaustive handling of keywords in compile_keyword_to_program'
+def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[str, Macro]) -> NoReturn | None:
+    assert len(Keyword) == 9, 'Exhaustive handling of keywords in compile_keyword_to_program'
     if token.value == Keyword.MACRO:
         if len(rprogram) == 0:
             raise_error('Expected name of the macro but found nothing', token.loc)
@@ -1461,17 +1473,18 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
         if len(rprogram) == 0:
             raise_error(f'Expected `end` at the end of empty macro definition but found: `{macro_name.value}`',
                         macro_name.loc)
-        macros[macro_name.value] = Token(TokenType.KEYWORD, Keyword.MACRO,
+        macros[macro_name.value] = Macro(TokenType.KEYWORD, Keyword.MACRO,
                                          loc=token.loc, name=macro_name.value, tokens=[])
         block_count = 0
         while len(rprogram) > 0:
             next_token = rprogram.pop()
+            assert len(Keyword) == 9, 'Exhaustive handling of keywords in macro expansion'
             if next_token.type == TokenType.KEYWORD and next_token.value == Keyword.END:
                 if block_count == 0:
                     break
                 block_count -= 1
             elif next_token.type == TokenType.KEYWORD and next_token.value in (
-                    Keyword.MACRO, Keyword.IF, Keyword.WHILE):
+                    Keyword.MACRO, Keyword.IF, Keyword.WHILE, Keyword.MEMORY):
                 block_count += 1
             macro_tokens = macros[macro_name.value].tokens
             assert macro_tokens is not None, 'Macro tokens not saved'
@@ -1504,13 +1517,66 @@ def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[s
         raise_error(f'Keyword token not compilable to tokens: {token.value}', token.loc)
     return None
 
+def evaluate_memory_definition(rprogram: List[Token], token: Token,
+                               macros: Dict[str, Macro], memories: Dict[str, MemAddr]) -> Tuple[str, int]:
+    if len(rprogram) == 0:
+        raise_error('Expected name of the memory but found nothing', token.loc)
+    memory_name = rprogram.pop()
+    if type(memory_name.value) == Keyword:
+        raise_error(f'Redefinition of keyword: `{memory_name.value.name.lower()}`', memory_name.loc)
+    if memory_name.type != TokenType.WORD or type(memory_name.value) != str:
+        raise_error(f'Expected memory name to be: `word`, but found: `{memory_name.name}`', memory_name.loc)
+    if memory_name.value in INTRINSIC_NAMES:
+        raise_error(f'Redefinition of intrinsic word: `{memory_name.value}`', memory_name.loc)
+    if memory_name.value in macros:
+        notify_user(f'Macro `{memory_name.value}` was defined at this location', macros[memory_name.value].loc)
+        raise_error(f'Redefinition of existing macro: `{memory_name.value}`', memory_name.loc)
+    if memory_name.value in memories:
+        raise_error(f'Redefinition of existing memory: `{memory_name.value}`', memory_name.loc)
+    if len(rprogram) == 0:
+        raise_error(f'Expected `end` at the end of empty memory definition but found: `{memory_name.value}`',
+                    memory_name.loc)
+    memory_size_stack: List[int] = []
+    while len(rprogram) > 0:
+        token = rprogram.pop()
+        if token.type == TokenType.KEYWORD and token.value == Keyword.END:
+            break
+        elif token.type == TokenType.INT:
+            assert type(token.value) == int, 'Token value must be an integer'
+            memory_size_stack.append(token.value)
+        elif token.type == TokenType.WORD and type(token.value) == str and INTRINSIC_NAMES.get(token.value, '') == Intrinsic.ADD:
+            # TODO: Check for memory_size_stack underflow
+            a = memory_size_stack.pop()
+            b = memory_size_stack.pop()
+            memory_size_stack.append(a + b)
+        elif token.type == TokenType.WORD and type(token.value) == str and INTRINSIC_NAMES.get(token.value, '') == Intrinsic.MUL:
+            a = memory_size_stack.pop()
+            b = memory_size_stack.pop()
+            memory_size_stack.append(a * b)
+        elif token.type == TokenType.WORD and type(token.value) == str and token.value in macros:
+            current_macro = macros[token.value]
+            assert current_macro.tokens is not None, 'Macro tokens not saved'
+            for idx in range(len(current_macro.tokens) - 1, -1, -1):
+                current_macro.tokens[idx].expanded_from = token
+                current_macro.tokens[idx].expanded_count = token.expanded_count + 1
+                rprogram.append(current_macro.tokens[idx])
+        else:
+            raise_error(f'Unsupported token in memory definition: {token.value}', token.loc)
+    if token.type != TokenType.KEYWORD or token.value != Keyword.END:
+        raise_error(f'Expected `end` at the end of memory definition but found: `{token.value}`',
+                    token.loc)
+    if len(memory_size_stack) != 1:
+        raise_error('Memory definition expects only 1 integer', token.loc)
+    return memory_name.value, memory_size_stack.pop()
 
-def parse_tokens_to_program(token_program: List[Token]) -> List[Op]:
+def parse_tokens_to_program(token_program: List[Token]) -> Program:
     assert len(TokenType) == 5, "Exhaustive handling of tokens in parse_tokens_to_program."
+    assert len(Keyword) == 9, "Exhaustive handling of keywords in parse_tokens_to_program."
     stack: List[Tuple[Token, int]] = []
     rprogram = list(reversed(token_program))
-    program: List[Op] = []
-    macros: Dict[str, Token] = {}
+    program = Program([], 0)
+    macros: Dict[str, Macro] = {}
+    memories: Dict[str, MemAddr] = {}
     i = 0
     while len(rprogram) > 0:
         token = rprogram.pop()
@@ -1525,19 +1591,26 @@ def parse_tokens_to_program(token_program: List[Token]) -> List[Op]:
                 current_macro.tokens[idx].expanded_from = token
                 current_macro.tokens[idx].expanded_count = token.expanded_count + 1
                 rprogram.append(current_macro.tokens[idx])
-            continue
-        if token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.INCLUDE):
+        elif token.value in memories:
+            assert type(token.value) == str, 'Compiler Error: non string memory name was saved'
+            program.ops.append(Op(type=OpType.PUSH_MEM, token=token, operand=memories[token.value], name=token.value))
+            i += 1
+        elif token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.INCLUDE):
             expand_keyword_to_tokens(token, rprogram, macros)
+        elif token.type == TokenType.KEYWORD and token.value == Keyword.MEMORY:
+            memory_name, memory_size = evaluate_memory_definition(rprogram, token, macros, memories)
+            memories[memory_name] = program.memory_capacity
+            program.memory_capacity += memory_size
         else:
-            program.append(parse_token_as_op(stack, token, i, program))
+            program.ops.append(parse_token_as_op(stack, token, i, program.ops))
             i += 1
     if len(stack) != 0:
         raise_error('Found an unclosed block', stack[-1][0].loc)
     return program
 
 
-def parse_token_as_op(stack: List[Tuple[Token, int]], token: Token, i: int, program: List[Op]) -> Op | NoReturn:
-    assert len(OpType) == 9, 'Exhaustive handling of built-in words'
+def parse_token_as_op(stack: List[Tuple[Token, int]], token: Token, i: int, ops: List[Op]) -> Op | NoReturn:
+    assert len(OpType) == 10, 'Exhaustive handling of built-in words'
     assert len(TokenType) == 5, 'Exhaustive handling of tokens in parser'
 
     if token.type == TokenType.INT:
@@ -1553,7 +1626,7 @@ def parse_token_as_op(stack: List[Tuple[Token, int]], token: Token, i: int, prog
             raise_error('Token value must be an string', token.loc)
         return Op(type=OpType.PUSH_STR, operand=token.value, token=token, name=token.name)
     elif token.type == TokenType.KEYWORD:
-        return parse_keyword(stack, token, i, program)
+        return parse_keyword(stack, token, i, ops)
     elif token.type == TokenType.WORD:
         assert type(token.value) == str, "`word` must be a string"
         if token.value not in INTRINSIC_NAMES:
@@ -1628,7 +1701,7 @@ def lex_file(file_path: str) -> List[Token]:
     return program
 
 
-def generate_program_control_flow(program: List[Op], filename: str) -> None:
+def generate_program_control_flow(program: Program, filename: str) -> None:
     dotfile = open(filename.replace('.phtn', '.dot'), 'w')
     write_base = write_indent(dotfile, 0)
     write_level1 = write_indent(dotfile, 1)
@@ -1638,8 +1711,8 @@ def generate_program_control_flow(program: List[Op], filename: str) -> None:
     write_level1('ratio=fill')
     assert len(OpType) == 9, 'Exhaustive handling of op types in control flow'
     i = 0
-    for i in range(len(program)):
-        op = program[i]
+    for i in range(len(program.ops)):
+        op = program.ops[i]
         if op.type == OpType.PUSH_INT:
             write_level1(f'Node_{i} [label={op.operand}]')
             write_level1(f'Node_{i} -> Node_{i + 1}')

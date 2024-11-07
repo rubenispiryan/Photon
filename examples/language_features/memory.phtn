@@ -1,5 +1,7 @@
 include "std.phtn"
 
+memory mem 8 end
+
 // Storing 'abc' in memory using ascii
 mem 0 + 97 swap !
 mem 1 + 98 swap !
