@@ -1545,6 +1545,7 @@ def evaluate_memory_definition(rprogram: List[Token], token: Token,
             assert type(token.value) == int, 'Token value must be an integer'
             memory_size_stack.append(token.value)
         elif token.type == TokenType.WORD and type(token.value) == str and INTRINSIC_NAMES.get(token.value, '') == Intrinsic.ADD:
+            # TODO: Check for memory_size_stack underflow
             a = memory_size_stack.pop()
             b = memory_size_stack.pop()
             memory_size_stack.append(a + b)
