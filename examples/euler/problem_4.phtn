@@ -3,6 +3,8 @@
 include "math.phtn"
 include "std.phtn"
 
+memory mem sizeof(u64) end
+
 100 while dup 1000 < do
     100 while dup 1000 < do
         if dup2 * dup dup invertN == swap mem @8 > and do

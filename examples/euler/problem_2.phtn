@@ -2,6 +2,8 @@
 
 include "std.phtn"
 
+memory mem sizeof(u64) end
+
 1 1 while dup 4000000 < do
     if dup 2 % 0 == do
         dup mem @8 +

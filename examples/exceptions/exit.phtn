@@ -1,5 +1,7 @@
 include "std.phtn"
 
+memory mem sizeof(u64) end
+
 mem 23452345 swap !8
 
 255 exit

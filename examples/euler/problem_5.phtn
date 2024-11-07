@@ -5,9 +5,9 @@ include "std.phtn"
 macro N 20 end
 
 // |acc          |tmp           |ans|
-macro acc mem end
-macro tmp mem 8 N * + end
-macro ans tmp 8 N * + end
+memory acc 8 N * end
+memory tmp 8 N * end
+memory ans sizeof(u64) end
 
 2 while dup N <= do
   // clean up the tmp table

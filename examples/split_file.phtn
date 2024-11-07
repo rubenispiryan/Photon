@@ -1,10 +1,10 @@
 include "std.phtn"
 
-macro fd mem end
-macro stat_buffer fd 8 + end // type: stat
-macro content stat_buffer sizeof(stat) + end // type: Str
-macro line content sizeof(Str) + end // type: Str
-macro word line sizeof(Str) + end // type: Str
+memory fd sizeof(ptr) end
+memory stat_buffer sizeof(stat) end
+memory content sizeof(Str) end
+memory line sizeof(Str) end
+memory word sizeof(Str) end
 
 if argc 2 < do
     "Filename is required\n" eputs

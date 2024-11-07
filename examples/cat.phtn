@@ -1,14 +1,14 @@
-// This is an implementation of UNIX cat command in Photon
+// This is an implementation of the UNIX cat command in Photon
 
 include "std.phtn"
 
 macro BUFFER_CAP 1024 end
 
 // memory layout
-macro fd mem end
-macro buffer_count mem 8 + end
-macro argn buffer_count 8 + end
-macro buffer argn 8 + end
+memory fd sizeof(ptr) end
+memory buffer_count sizeof(u64) end
+memory argn sizeof(u64) end
+memory buffer BUFFER_CAP end
 
 // remove count from string literal
 macro only_str swap drop end
