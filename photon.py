@@ -103,12 +103,14 @@ class OpType(Enum):
     PUSH_MEM = auto()
     INTRINSIC = auto()
     IF = auto()
-    END = auto()
     ELSE = auto()
     ELIF = auto()
     WHILE = auto()
     DO = auto()
-
+    PROC = auto()
+    CALL = auto()
+    RET = auto()
+    END = auto()
 
 class Keyword(Enum):
     IF = auto()
@@ -118,6 +120,7 @@ class Keyword(Enum):
     WHILE = auto()
     DO = auto()
     MACRO = auto()
+    PROC = auto()
     INCLUDE = auto()
     MEMORY = auto()
 
@@ -176,6 +179,7 @@ KEYWORD_NAMES = {
     'macro': Keyword.MACRO,
     'include': Keyword.INCLUDE,
     'memory': Keyword.MEMORY,
+    'proc': Keyword.PROC,
 }
 
 assert len(KEYWORD_NAMES) == len(Keyword), 'Exhaustive handling of keywords'
@@ -233,6 +237,7 @@ FDS: List[BinaryIO] = [sys.stdin.buffer, sys.stdout.buffer, sys.stderr.buffer]
 
 DataTypeStack = List[Tuple[DataType, Token]]
 MemAddr = int
+ProcAddr = int
 
 
 def make_log_message(message: str, loc: Loc) -> str:
@@ -790,8 +795,9 @@ def type_check_program(program: Program, debug: bool = False) -> None:
 
 
 def simulate_little_endian_macos(program: Program, input_arguments: List[str]) -> None:
-    stack: List = []
-    assert len(OpType) == 10, 'Exhaustive handling of operators in simulation'
+    assert len(OpType) == 13, 'Exhaustive handling of operators in simulation'
+    stack: List[int] = []
+    return_stack: List[int] = []
     i = 0
     mem = bytearray(STR_CAPACITY + program.memory_capacity)
     allocated_strs = {}
@@ -855,6 +861,13 @@ def simulate_little_endian_macos(program: Program, input_arguments: List[str]) -
             if a == 0:
                 assert type(op.operand) == int, 'Jump address must be `int`'
                 i = op.operand
+        elif op.type == OpType.PROC:
+            i = op.operand
+        elif op.type == OpType.CALL:
+            return_stack.append(i)
+            i = op.operand
+        elif op.type == OpType.RET:
+            i = return_stack.pop()
         elif op.type == OpType.INTRINSIC:
             assert len(Intrinsic) == 39, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
@@ -1382,11 +1395,12 @@ class Parsing:
         self.rprogram = list(reversed(token_program))
         self.macros: Dict[str, Macro] = {}
         self.memories: Dict[str, MemAddr] = {}
+        self.procs: Dict[str, ProcAddr] = {}
         self.index = 0
 
     def parse_tokens_to_program(self) -> Program:
-        assert len(TokenType) == 5, "Exhaustive handling of tokens in parse_tokens_to_program."
-        assert len(Keyword) == 9, "Exhaustive handling of keywords in parse_tokens_to_program."
+        assert len(OpType) == 13, "Exhaustive handling of op types in parse_tokens_to_program."
+        assert len(Keyword) == 10, "Exhaustive handling of keywords in parse_tokens_to_program."
         while len(self.rprogram) > 0:
             token = self.rprogram.pop()
             if token.value in self.macros:
@@ -1405,6 +1419,10 @@ class Parsing:
                 self.program.ops.append(
                     Op(type=OpType.PUSH_MEM, token=token, operand=self.memories[token.value], name=token.value))
                 self.index += 1
+            elif token.value in self.procs:
+                assert type(token.value) == str, 'Compiler Error: non string process name was saved'
+                self.program.ops.append(Op(type=OpType.CALL, token=token, operand=self.procs[token.value], name=token.value))
+                self.index += 1
             elif token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.INCLUDE):
                 self.expand_keyword_to_tokens(token)
             elif token.type == TokenType.KEYWORD and token.value == Keyword.MEMORY:
@@ -1419,7 +1437,7 @@ class Parsing:
         return self.program
 
     def parse_keyword(self, token: Token) -> NoReturn | Op:
-        assert len(Keyword) == 9, 'Exhaustive handling of keywords in parse_keyword'
+        assert len(Keyword) == 10, 'Exhaustive handling of keywords in parse_keyword'
         if type(token.value) != Keyword:
             raise_error(f'Token value `{token.value}` must be a Keyword, but found: {type(token.value)}', token.loc)
         if token.value == Keyword.IF:
@@ -1462,9 +1480,21 @@ class Parsing:
         elif token.value == Keyword.DO:
             self.stack.append((token, self.index))
             return Op(type=OpType.DO, token=token, name=token.value.name)
+        elif token.value == Keyword.PROC:
+            if len(self.rprogram) == 0:
+                raise_error('Expected name of the procedure but found nothing', token.loc)
+            proc_name = self.rprogram.pop()
+            self.check_block_name_validity(proc_name)
+            if len(self.rprogram) == 0:
+                raise_error(f'Expected `end` at the end of empty procedure definition but found: `{proc_name.value}`',
+                            proc_name.loc)
+            assert type(proc_name.value) == str, 'Procedure name value must be a string'
+            self.procs[proc_name.value] = self.index
+            self.stack.append((token, self.index))
+            return Op(type=OpType.PROC, token=token, name=token.value.name)
         elif token.value == Keyword.END:
             if len(self.stack) == 0:
-                raise_error('`end` can only be used with a `if-do`, `if-do-else`, `while-do` or `macro`',
+                raise_error('`end` can only be used with a `if-do`, `if-do-else`, `while-do`, `proc` or `macro`',
                             token.loc)
             block, block_index = self.stack.pop()
             if self.program.ops[block_index].type == OpType.ELSE:
@@ -1482,7 +1512,8 @@ class Parsing:
             elif self.program.ops[block_index].type == OpType.DO:
                 self.program.ops[block_index].operand = self.index
                 if len(self.stack) == 0:
-                    raise_error('`while` must be present before `do`', self.program.ops[block_index].token.loc)
+                    raise_error('`while`, `if` or `elif` must be present before `do`',
+                                self.program.ops[block_index].token.loc)
                 _, before_do_index = self.stack.pop()
                 if self.program.ops[before_do_index].type == OpType.WHILE:
                     return Op(type=OpType.END, token=token, name=token.value.name, operand=before_do_index)
@@ -1496,16 +1527,19 @@ class Parsing:
                                 self.program.ops[before_do_index].token.loc)
                     raise_error('`while`, `if` or `elif` must be present before `do`',
                                 self.program.ops[block_index].token.loc)
+            elif self.program.ops[block_index].type == OpType.PROC:
+                self.program.ops[block_index].operand = self.index
+                return Op(type=OpType.RET, token=token, name=token.value.name)
             else:
                 notify_user(f'Instead of `else` or `do` found: {self.program.ops[block_index].type}',
                             self.program.ops[block_index].token.loc)
-                raise_error('`end` can only be used with an `if-do`, `if-do-else`, `while-do` or `macro`',
+                raise_error('`end` can only be used with an `if-do`, `if-do-else`, `while-do`, `proc` or `macro`',
                             token.loc)
         else:
             raise_error(f'Unknown keyword token: {token.value}', token.loc)
 
     def expand_keyword_to_tokens(self, token: Token) -> NoReturn | None:
-        assert len(Keyword) == 9, 'Exhaustive handling of keywords in compile_keyword_to_program'
+        assert len(Keyword) == 10, 'Exhaustive handling of keywords in compile_keyword_to_program'
         if token.value == Keyword.MACRO:
             if len(self.rprogram) == 0:
                 raise_error('Expected name of the macro but found nothing', token.loc)
@@ -1520,13 +1554,13 @@ class Parsing:
             block_count = 0
             while len(self.rprogram) > 0:
                 next_token = self.rprogram.pop()
-                assert len(Keyword) == 9, 'Exhaustive handling of keywords in macro expansion'
+                assert len(Keyword) == 10, 'Exhaustive handling of keywords in macro expansion'
                 if next_token.type == TokenType.KEYWORD and next_token.value == Keyword.END:
                     if block_count == 0:
                         break
                     block_count -= 1
                 elif next_token.type == TokenType.KEYWORD and next_token.value in (
-                        Keyword.MACRO, Keyword.IF, Keyword.WHILE, Keyword.MEMORY):
+                        Keyword.MACRO, Keyword.IF, Keyword.WHILE, Keyword.MEMORY, Keyword.PROC):
                     block_count += 1
                 macro_tokens = self.macros[macro_name.value].tokens
                 assert macro_tokens is not None, 'Macro tokens not saved'
@@ -1619,9 +1653,8 @@ class Parsing:
         return None
 
     def parse_token_as_op(self, token: Token) -> Op | NoReturn:
-        assert len(OpType) == 10, 'Exhaustive handling of built-in words'
+        assert len(OpType) == 13, 'Exhaustive handling of built-in words'
         assert len(TokenType) == 5, 'Exhaustive handling of tokens in parser'
-
         if token.type == TokenType.INT:
             if type(token.value) != int:
                 raise_error('Token value must be an integer', token.loc)
@@ -1779,11 +1812,14 @@ if __name__ == '__main__':
     if subcommand not in ('sim', 'com', 'flow'):
         usage_help()
         exit(1)
+    debug_arg = '-d' in argv or '--debug' in argv
+    unsafe_arg = '--unsafe' in argv
     file_path_arg = argv[0]
     program_stack = lex_file(file_path_arg)
     token_parser = Parsing(program_stack)
     program_referenced = token_parser.parse_tokens_to_program()
-    type_check_program(program_referenced, '-d' in argv or '--debug' in argv)
+    if not unsafe_arg:
+        type_check_program(program_referenced, debug_arg)
     if subcommand == 'sim':
         simulate_little_endian_macos(program_referenced, argv)
     elif subcommand == 'flow':
