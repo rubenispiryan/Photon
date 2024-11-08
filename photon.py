@@ -1575,24 +1575,25 @@ class Parsing:
             elif token.type == TokenType.INT:
                 assert type(token.value) == int, 'Token value must be an integer'
                 memory_size_stack.append(token.value)
-            elif token.type == TokenType.WORD and type(token.value) == str and INTRINSIC_NAMES.get(token.value,
-                                                                                                   '') == Intrinsic.ADD:
-                # TODO: Check for memory_size_stack underflow
-                a = memory_size_stack.pop()
-                b = memory_size_stack.pop()
-                memory_size_stack.append(a + b)
-            elif token.type == TokenType.WORD and type(token.value) == str and INTRINSIC_NAMES.get(token.value,
-                                                                                                   '') == Intrinsic.MUL:
-                a = memory_size_stack.pop()
-                b = memory_size_stack.pop()
-                memory_size_stack.append(a * b)
-            elif token.type == TokenType.WORD and type(token.value) == str and token.value in self.macros:
-                current_macro = self.macros[token.value]
-                assert current_macro.tokens is not None, 'Macro tokens not saved'
-                for idx in range(len(current_macro.tokens) - 1, -1, -1):
-                    current_macro.tokens[idx].expanded_from = token
-                    current_macro.tokens[idx].expanded_count = token.expanded_count + 1
-                    self.rprogram.append(current_macro.tokens[idx])
+            elif token.type == TokenType.WORD and type(token.value) == str:
+                if INTRINSIC_NAMES.get(token.value, '') == Intrinsic.ADD:
+                    # TODO: Check for memory_size_stack underflow
+                    a = memory_size_stack.pop()
+                    b = memory_size_stack.pop()
+                    memory_size_stack.append(a + b)
+                elif INTRINSIC_NAMES.get(token.value, '') == Intrinsic.MUL:
+                    a = memory_size_stack.pop()
+                    b = memory_size_stack.pop()
+                    memory_size_stack.append(a * b)
+                elif token.value in self.macros:
+                    current_macro = self.macros[token.value]
+                    assert current_macro.tokens is not None, 'Macro tokens not saved'
+                    for idx in range(len(current_macro.tokens) - 1, -1, -1):
+                        current_macro.tokens[idx].expanded_from = token
+                        current_macro.tokens[idx].expanded_count = token.expanded_count + 1
+                        self.rprogram.append(current_macro.tokens[idx])
+                else:
+                    raise_error(f'Unsupported token in memory definition: {token.value}', token.loc)
             else:
                 raise_error(f'Unsupported token in memory definition: {token.value}', token.loc)
         if token.type != TokenType.KEYWORD or token.value != Keyword.END:
