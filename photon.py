@@ -4,7 +4,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple, Optional, BinaryIO, Reversible
+from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple, Optional, BinaryIO
 
 
 @dataclass
@@ -53,6 +53,7 @@ def asm_setup(write_base: Callable[[str], None], write_level1: Callable[[str], N
     write_level1('ldp     x29, x30, [sp,  #32]')
     write_level1('add     sp, sp,  #48')
     write_level1('ret')
+
 
 class Intrinsic(Enum):
     ADD = auto()
@@ -144,6 +145,7 @@ class Token:
     expanded_from: Optional['Token'] = None
     expanded_count: int = 0
 
+
 @dataclass
 class Macro(Token):
     tokens: List[Token] | None = None
@@ -156,6 +158,7 @@ class Op:
     name: str
     operand: int | str | Intrinsic | None = None
     addr: int | None = None
+
 
 @dataclass
 class Program:
@@ -347,7 +350,7 @@ def type_check_program(program: Program, debug: bool = False) -> None:
             elif block.type == OpType.DO:
                 stack_before, before_do_op = block_stack.pop()
                 assert before_do_op.type in (
-                OpType.WHILE, OpType.IF, OpType.ELIF), '[BUG] No `while`, `if` or `elif` before `do`'
+                    OpType.WHILE, OpType.IF, OpType.ELIF), '[BUG] No `while`, `if` or `elif` before `do`'
                 expected_stack = list(map(lambda x: x[0], stack_before))
                 if before_do_op.type == OpType.WHILE and current_stack != expected_stack:
                     notify_user(f'Expected Stack Types: {expected_stack}', op.token.loc)
@@ -1372,268 +1375,274 @@ def usage_help() -> None:
     print('         --run   Used with `com` to run immediately')
 
 
-def parse_keyword(stack: List[Tuple[Token, int]], token: Token, i: int, ops: List[Op]) -> NoReturn | Op:
-    assert len(Keyword) == 9, 'Exhaustive handling of keywords in parse_keyword'
-    if type(token.value) != Keyword:
-        raise_error(f'Token value `{token.value}` must be a Keyword, but found: {type(token.value)}', token.loc)
-    if token.value == Keyword.IF:
-        stack.append((token, i))
-        return Op(type=OpType.IF, token=token, name=token.value.name)
-    elif token.value == Keyword.ELIF:
-        if len(stack) < 2:
-            raise_error(f'`elif` can only be used with an `if-do` or `elif-do`', token.loc)
-        _, do_index = stack.pop()
-        if ops[do_index].type != OpType.DO:
-            if do_index:
-                notify_user(f'Instead of `do` found: {ops[do_index].type}', ops[do_index].token.loc)
-            raise_error(f'`elif` can only be used with an `if-do` or `elif-do`', token.loc)
-        _, if_index = stack.pop()
-        if ops[if_index].type != OpType.IF and ops[if_index].type != OpType.ELIF:
-            notify_user(f'Instead of `if` or `elif` found: {ops[if_index].type}',
-                        ops[if_index].token.loc)
-            raise_error('`if` or `elif` must be present before `do`', ops[if_index].token.loc)
-        if ops[if_index].type == OpType.ELIF:
-            ops[if_index].operand = i - 1
-        ops[do_index].operand = i
-        stack.append((token, i))
-        return Op(type=OpType.ELIF, token=token, name=token.value.name)
-    elif token.value == Keyword.ELSE:
-        if len(stack) < 2:
-            raise_error(f'`else` can only be used with an `if-do` or `elif-do`', token.loc)
-        _, do_index = stack.pop()
-        if ops[do_index].type != OpType.DO and ops[do_index].type != OpType.ELIF:
-            if do_index:
-                notify_user(f'Instead of `do` found: {ops[do_index].type}', ops[do_index].token.loc)
-            raise_error(f'`else` can only be used with an `if-do` or `elif-do`', token.loc)
-        ops[do_index].operand = i
-        stack.append((token, i))
-        return Op(type=OpType.ELSE, token=token, name=token.value.name)
-    elif token.value == Keyword.WHILE:
-        stack.append((token, i))
-        return Op(type=OpType.WHILE, token=token, name=token.value.name)
-    elif token.value == Keyword.DO:
-        stack.append((token, i))
-        return Op(type=OpType.DO, token=token, name=token.value.name)
-    elif token.value == Keyword.END:
-        if len(stack) == 0:
-            raise_error('`end` can only be used with a `if-do`, `if-do-else`, `while-do` or `macro`',
-                        token.loc)
-        block, block_index = stack.pop()
-        if ops[block_index].type == OpType.ELSE:
-            ops[block_index].operand = i
-            if len(stack) == 0:
-                raise_error('`if-do` must be present before `else`', ops[block_index].token.loc)
-            _, if_index = stack.pop()
-            if ops[if_index].type != OpType.IF and ops[if_index].type != OpType.ELIF:
-                notify_user(f'Instead of `if` or `elif` found: {ops[if_index].type}',
-                            ops[if_index].token.loc)
-                raise_error('`if` or `elif` must be present before `do`', ops[if_index].token.loc)
-            if ops[if_index].type == OpType.ELIF:
-                ops[if_index].operand = i
-            return Op(type=OpType.END, token=token, name=token.value.name)
-        elif ops[block_index].type == OpType.DO:
-            ops[block_index].operand = i
-            if len(stack) == 0:
-                raise_error('`while` must be present before `do`', ops[block_index].token.loc)
-            _, before_do_index = stack.pop()
-            if ops[before_do_index].type == OpType.WHILE:
-                return Op(type=OpType.END, token=token, name=token.value.name, operand=before_do_index)
-            elif ops[before_do_index].type == OpType.IF:
-                return Op(type=OpType.END, token=token, name=token.value.name)
-            elif ops[before_do_index].type == OpType.ELIF:
-                ops[before_do_index].operand = i
-                return Op(type=OpType.END, token=token, name=token.value.name)
+class Parsing:
+    def __init__(self, token_program: List[Token]) -> None:
+        self.program = Program([], 0)
+        self.stack: List[Tuple[Token, int]] = []
+        self.rprogram = list(reversed(token_program))
+        self.macros: Dict[str, Macro] = {}
+        self.memories: Dict[str, MemAddr] = {}
+        self.index = 0
+
+    def parse_tokens_to_program(self) -> Program:
+        assert len(TokenType) == 5, "Exhaustive handling of tokens in parse_tokens_to_program."
+        assert len(Keyword) == 9, "Exhaustive handling of keywords in parse_tokens_to_program."
+        while len(self.rprogram) > 0:
+            token = self.rprogram.pop()
+            if token.value in self.macros:
+                assert type(token.value) == str, 'Compiler Error: non string macro name was saved'
+                current_macro = self.macros[token.value]
+                current_macro.expanded_count += 1
+                if current_macro.expanded_count > MACRO_EXPANSION_LIMIT:
+                    raise_error(f'Expansion limit reached for macro: {token.value}', current_macro.loc)
+                assert current_macro.tokens is not None, 'Macro tokens not saved'
+                for idx in range(len(current_macro.tokens) - 1, -1, -1):
+                    current_macro.tokens[idx].expanded_from = token
+                    current_macro.tokens[idx].expanded_count = token.expanded_count + 1
+                    self.rprogram.append(current_macro.tokens[idx])
+            elif token.value in self.memories:
+                assert type(token.value) == str, 'Compiler Error: non string memory name was saved'
+                self.program.ops.append(
+                    Op(type=OpType.PUSH_MEM, token=token, operand=self.memories[token.value], name=token.value))
+                self.index += 1
+            elif token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.INCLUDE):
+                self.expand_keyword_to_tokens(token)
+            elif token.type == TokenType.KEYWORD and token.value == Keyword.MEMORY:
+                memory_name, memory_size = self.evaluate_memory_definition(token)
+                self.memories[memory_name] = self.program.memory_capacity
+                self.program.memory_capacity += memory_size
             else:
-                notify_user(f'Instead of `while`, `if` or `elif` found: {ops[before_do_index].type}',
-                            ops[before_do_index].token.loc)
-                raise_error('`while`, `if` or `elif` must be present before `do`', ops[block_index].token.loc)
+                self.program.ops.append(self.parse_token_as_op(token))
+                self.index += 1
+        if len(self.stack) != 0:
+            raise_error('Found an unclosed block', self.stack[-1][0].loc)
+        return self.program
+
+    def parse_keyword(self, token: Token) -> NoReturn | Op:
+        assert len(Keyword) == 9, 'Exhaustive handling of keywords in parse_keyword'
+        if type(token.value) != Keyword:
+            raise_error(f'Token value `{token.value}` must be a Keyword, but found: {type(token.value)}', token.loc)
+        if token.value == Keyword.IF:
+            self.stack.append((token, self.index))
+            return Op(type=OpType.IF, token=token, name=token.value.name)
+        elif token.value == Keyword.ELIF:
+            if len(self.stack) < 2:
+                raise_error(f'`elif` can only be used with an `if-do` or `elif-do`', token.loc)
+            _, do_index = self.stack.pop()
+            if self.program.ops[do_index].type != OpType.DO:
+                if do_index:
+                    notify_user(f'Instead of `do` found: {self.program.ops[do_index].type}',
+                                self.program.ops[do_index].token.loc)
+                raise_error(f'`elif` can only be used with an `if-do` or `elif-do`', token.loc)
+            _, if_index = self.stack.pop()
+            if self.program.ops[if_index].type != OpType.IF and self.program.ops[if_index].type != OpType.ELIF:
+                notify_user(f'Instead of `if` or `elif` found: {self.program.ops[if_index].type}',
+                            self.program.ops[if_index].token.loc)
+                raise_error('`if` or `elif` must be present before `do`', self.program.ops[if_index].token.loc)
+            if self.program.ops[if_index].type == OpType.ELIF:
+                self.program.ops[if_index].operand = self.index - 1
+            self.program.ops[do_index].operand = self.index
+            self.stack.append((token, self.index))
+            return Op(type=OpType.ELIF, token=token, name=token.value.name)
+        elif token.value == Keyword.ELSE:
+            if len(self.stack) < 2:
+                raise_error(f'`else` can only be used with an `if-do` or `elif-do`', token.loc)
+            _, do_index = self.stack.pop()
+            if self.program.ops[do_index].type != OpType.DO and self.program.ops[do_index].type != OpType.ELIF:
+                if do_index:
+                    notify_user(f'Instead of `do` found: {self.program.ops[do_index].type}',
+                                self.program.ops[do_index].token.loc)
+                raise_error(f'`else` can only be used with an `if-do` or `elif-do`', token.loc)
+            self.program.ops[do_index].operand = self.index
+            self.stack.append((token, self.index))
+            return Op(type=OpType.ELSE, token=token, name=token.value.name)
+        elif token.value == Keyword.WHILE:
+            self.stack.append((token, self.index))
+            return Op(type=OpType.WHILE, token=token, name=token.value.name)
+        elif token.value == Keyword.DO:
+            self.stack.append((token, self.index))
+            return Op(type=OpType.DO, token=token, name=token.value.name)
+        elif token.value == Keyword.END:
+            if len(self.stack) == 0:
+                raise_error('`end` can only be used with a `if-do`, `if-do-else`, `while-do` or `macro`',
+                            token.loc)
+            block, block_index = self.stack.pop()
+            if self.program.ops[block_index].type == OpType.ELSE:
+                self.program.ops[block_index].operand = self.index
+                if len(self.stack) == 0:
+                    raise_error('`if-do` must be present before `else`', self.program.ops[block_index].token.loc)
+                _, if_index = self.stack.pop()
+                if self.program.ops[if_index].type != OpType.IF and self.program.ops[if_index].type != OpType.ELIF:
+                    notify_user(f'Instead of `if` or `elif` found: {self.program.ops[if_index].type}',
+                                self.program.ops[if_index].token.loc)
+                    raise_error('`if` or `elif` must be present before `do`', self.program.ops[if_index].token.loc)
+                if self.program.ops[if_index].type == OpType.ELIF:
+                    self.program.ops[if_index].operand = self.index
+                return Op(type=OpType.END, token=token, name=token.value.name)
+            elif self.program.ops[block_index].type == OpType.DO:
+                self.program.ops[block_index].operand = self.index
+                if len(self.stack) == 0:
+                    raise_error('`while` must be present before `do`', self.program.ops[block_index].token.loc)
+                _, before_do_index = self.stack.pop()
+                if self.program.ops[before_do_index].type == OpType.WHILE:
+                    return Op(type=OpType.END, token=token, name=token.value.name, operand=before_do_index)
+                elif self.program.ops[before_do_index].type == OpType.IF:
+                    return Op(type=OpType.END, token=token, name=token.value.name)
+                elif self.program.ops[before_do_index].type == OpType.ELIF:
+                    self.program.ops[before_do_index].operand = self.index
+                    return Op(type=OpType.END, token=token, name=token.value.name)
+                else:
+                    notify_user(f'Instead of `while`, `if` or `elif` found: {self.program.ops[before_do_index].type}',
+                                self.program.ops[before_do_index].token.loc)
+                    raise_error('`while`, `if` or `elif` must be present before `do`',
+                                self.program.ops[block_index].token.loc)
+            else:
+                notify_user(f'Instead of `else` or `do` found: {self.program.ops[block_index].type}',
+                            self.program.ops[block_index].token.loc)
+                raise_error('`end` can only be used with an `if-do`, `if-do-else`, `while-do` or `macro`',
+                            token.loc)
         else:
-            notify_user(f'Instead of `else` or `do` found: {ops[block_index].type}', ops[block_index].token.loc)
-            raise_error('`end` can only be used with an `if-do`, `if-do-else`, `while-do` or `macro`',
+            raise_error(f'Unknown keyword token: {token.value}', token.loc)
+
+    def expand_keyword_to_tokens(self, token: Token) -> NoReturn | None:
+        assert len(Keyword) == 9, 'Exhaustive handling of keywords in compile_keyword_to_program'
+        if token.value == Keyword.MACRO:
+            if len(self.rprogram) == 0:
+                raise_error('Expected name of the macro but found nothing', token.loc)
+            macro_name = self.rprogram.pop()
+            self.check_block_name_validity(macro_name)
+            if len(self.rprogram) == 0:
+                raise_error(f'Expected `end` at the end of empty macro definition but found: `{macro_name.value}`',
+                            macro_name.loc)
+            assert type(macro_name.value) == str, 'Macro name value must be a string'
+            self.macros[macro_name.value] = Macro(TokenType.KEYWORD, Keyword.MACRO,
+                                                  loc=token.loc, name=macro_name.value, tokens=[])
+            block_count = 0
+            while len(self.rprogram) > 0:
+                next_token = self.rprogram.pop()
+                assert len(Keyword) == 9, 'Exhaustive handling of keywords in macro expansion'
+                if next_token.type == TokenType.KEYWORD and next_token.value == Keyword.END:
+                    if block_count == 0:
+                        break
+                    block_count -= 1
+                elif next_token.type == TokenType.KEYWORD and next_token.value in (
+                        Keyword.MACRO, Keyword.IF, Keyword.WHILE, Keyword.MEMORY):
+                    block_count += 1
+                macro_tokens = self.macros[macro_name.value].tokens
+                assert macro_tokens is not None, 'Macro tokens not saved'
+                macro_tokens.append(next_token)
+            if next_token.type != TokenType.KEYWORD or next_token.value != Keyword.END:
+                raise_error(f'Expected `end` at the end of macro definition but found: `{next_token.value}`',
+                            next_token.loc)
+        # TODO: Double include of same file leads to redefinition of macro
+        elif token.value == Keyword.INCLUDE:
+            if len(self.rprogram) == 0:
+                raise_error('Expected name of the include file but found nothing', token.loc)
+            include_name = self.rprogram.pop()
+            if include_name.type != TokenType.STR or type(include_name.value) != str:
+                raise_error(f'Expected macro name to be: `string`, but found: `{include_name.name}`', include_name.loc)
+            if not include_name.value.endswith('phtn'):
+                raise_error(
+                    f'Expected include file to end with `.phtn`, but found: `{include_name.value.split(".")[-1]}`',
+                    include_name.loc)
+            include_filepath = os.path.join('.', include_name.value)
+            std_filepath = os.path.join('./std/', include_name.value)
+            found = False
+            for include_filepath in (include_filepath, std_filepath):
+                if os.path.isfile(include_filepath):
+                    lexed_include = lex_file(include_filepath)
+                    self.rprogram.extend(reversed(lexed_include))
+                    found = True
+            if not found:
+                raise_error(f'Photon file with name: {include_name.value} not found', include_name.loc)
+        else:
+            raise_error(f'Keyword token not compilable to tokens: {token.value}', token.loc)
+        return None
+
+    def evaluate_memory_definition(self, token: Token) -> Tuple[str, int]:
+        if len(self.rprogram) == 0:
+            raise_error('Expected name of the memory but found nothing', token.loc)
+        memory_name = self.rprogram.pop()
+        self.check_block_name_validity(memory_name)
+        if len(self.rprogram) == 0:
+            raise_error(f'Expected `end` at the end of empty memory definition but found: `{memory_name.value}`',
+                        memory_name.loc)
+        memory_size_stack: List[int] = []
+        while len(self.rprogram) > 0:
+            token = self.rprogram.pop()
+            if token.type == TokenType.KEYWORD and token.value == Keyword.END:
+                break
+            elif token.type == TokenType.INT:
+                assert type(token.value) == int, 'Token value must be an integer'
+                memory_size_stack.append(token.value)
+            elif token.type == TokenType.WORD and type(token.value) == str:
+                if INTRINSIC_NAMES.get(token.value, '') == Intrinsic.ADD:
+                    # TODO: Check for memory_size_stack underflow
+                    a = memory_size_stack.pop()
+                    b = memory_size_stack.pop()
+                    memory_size_stack.append(a + b)
+                elif INTRINSIC_NAMES.get(token.value, '') == Intrinsic.MUL:
+                    a = memory_size_stack.pop()
+                    b = memory_size_stack.pop()
+                    memory_size_stack.append(a * b)
+                elif token.value in self.macros:
+                    current_macro = self.macros[token.value]
+                    assert current_macro.tokens is not None, 'Macro tokens not saved'
+                    for idx in range(len(current_macro.tokens) - 1, -1, -1):
+                        current_macro.tokens[idx].expanded_from = token
+                        current_macro.tokens[idx].expanded_count = token.expanded_count + 1
+                        self.rprogram.append(current_macro.tokens[idx])
+                else:
+                    raise_error(f'Unsupported token in memory definition: {token.value}', token.loc)
+            else:
+                raise_error(f'Unsupported token in memory definition: {token.value}', token.loc)
+        if token.type != TokenType.KEYWORD or token.value != Keyword.END:
+            raise_error(f'Expected `end` at the end of memory definition but found: `{token.value}`',
                         token.loc)
-    else:
-        raise_error(f'Unknown keyword token: {token.value}', token.loc)
+        if len(memory_size_stack) != 1:
+            raise_error('Memory definition expects only 1 integer', token.loc)
+        assert type(memory_name.value) == str, 'Memory name value must be a string'
+        return memory_name.value, memory_size_stack.pop()
 
+    def check_block_name_validity(self, token: Token) -> None | NoReturn:
+        if type(token.value) == Keyword:
+            raise_error(f'Redefinition of keyword: `{token.value.name.lower()}`', token.loc)
+        if token.type != TokenType.WORD or type(token.value) != str:
+            raise_error(f'Expected block name to be: `word`, but found: `{token.name}`', token.loc)
+        if token.value in INTRINSIC_NAMES:
+            raise_error(f'Redefinition of intrinsic word: `{token.value}`', token.loc)
+        if token.value in self.macros:
+            notify_user(f'Macro `{token.value}` was defined at this location', self.macros[token.value].loc)
+            raise_error(f'Redefinition of existing macro: `{token.value}`', token.loc)
+        if token.value in self.memories:
+            raise_error(f'Redefinition of existing memory: `{token.value}`', token.loc)
+        return None
 
-def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[str, Macro]) -> NoReturn | None:
-    assert len(Keyword) == 9, 'Exhaustive handling of keywords in compile_keyword_to_program'
-    if token.value == Keyword.MACRO:
-        if len(rprogram) == 0:
-            raise_error('Expected name of the macro but found nothing', token.loc)
-        macro_name = rprogram.pop()
-        if type(macro_name.value) == Keyword:
-            raise_error(f'Redefinition of keyword: `{macro_name.value.name.lower()}`', macro_name.loc)
-        if macro_name.type != TokenType.WORD or type(macro_name.value) != str:
-            raise_error(f'Expected macro name to be: `word`, but found: `{macro_name.name}`', macro_name.loc)
-        if macro_name.value in INTRINSIC_NAMES:
-            raise_error(f'Redefinition of intrinsic word: `{macro_name.value}`', macro_name.loc)
-        if macro_name.value in macros:
-            notify_user(f'Macro `{macro_name.value}` was defined at this location', macros[macro_name.value].loc)
-            raise_error(f'Redefinition of existing macro: `{macro_name.value}`', macro_name.loc)
-        if len(rprogram) == 0:
-            raise_error(f'Expected `end` at the end of empty macro definition but found: `{macro_name.value}`',
-                        macro_name.loc)
-        macros[macro_name.value] = Macro(TokenType.KEYWORD, Keyword.MACRO,
-                                         loc=token.loc, name=macro_name.value, tokens=[])
-        block_count = 0
-        while len(rprogram) > 0:
-            next_token = rprogram.pop()
-            assert len(Keyword) == 9, 'Exhaustive handling of keywords in macro expansion'
-            if next_token.type == TokenType.KEYWORD and next_token.value == Keyword.END:
-                if block_count == 0:
-                    break
-                block_count -= 1
-            elif next_token.type == TokenType.KEYWORD and next_token.value in (
-                    Keyword.MACRO, Keyword.IF, Keyword.WHILE, Keyword.MEMORY):
-                block_count += 1
-            macro_tokens = macros[macro_name.value].tokens
-            assert macro_tokens is not None, 'Macro tokens not saved'
-            macro_tokens.append(next_token)
-        if next_token.type != TokenType.KEYWORD or next_token.value != Keyword.END:
-            raise_error(f'Expected `end` at the end of macro definition but found: `{next_token.value}`',
-                        next_token.loc)
-    # TODO: Double include of same file leads to redefinition of macro
-    elif token.value == Keyword.INCLUDE:
-        if len(rprogram) == 0:
-            raise_error('Expected name of the include file but found nothing', token.loc)
-        include_name = rprogram.pop()
-        if include_name.type != TokenType.STR or type(include_name.value) != str:
-            raise_error(f'Expected macro name to be: `string`, but found: `{include_name.name}`', include_name.loc)
-        if not include_name.value.endswith('phtn'):
-            raise_error(
-                f'Expected include file to end with `.phtn`, but found: `{include_name.value.split(".")[-1]}`',
-                include_name.loc)
-        include_filepath = os.path.join('.', include_name.value)
-        std_filepath = os.path.join('./std/', include_name.value)
-        found = False
-        for include_filepath in (include_filepath, std_filepath):
-            if os.path.isfile(include_filepath):
-                lexed_include = lex_file(include_filepath)
-                rprogram.extend(reversed(lexed_include))
-                found = True
-        if not found:
-            raise_error(f'Photon file with name: {include_name.value} not found', include_name.loc)
-    else:
-        raise_error(f'Keyword token not compilable to tokens: {token.value}', token.loc)
-    return None
+    def parse_token_as_op(self, token: Token) -> Op | NoReturn:
+        assert len(OpType) == 10, 'Exhaustive handling of built-in words'
+        assert len(TokenType) == 5, 'Exhaustive handling of tokens in parser'
 
-def evaluate_memory_definition(rprogram: List[Token], token: Token,
-                               macros: Dict[str, Macro], memories: Dict[str, MemAddr]) -> Tuple[str, int]:
-    if len(rprogram) == 0:
-        raise_error('Expected name of the memory but found nothing', token.loc)
-    memory_name = rprogram.pop()
-    if type(memory_name.value) == Keyword:
-        raise_error(f'Redefinition of keyword: `{memory_name.value.name.lower()}`', memory_name.loc)
-    if memory_name.type != TokenType.WORD or type(memory_name.value) != str:
-        raise_error(f'Expected memory name to be: `word`, but found: `{memory_name.name}`', memory_name.loc)
-    if memory_name.value in INTRINSIC_NAMES:
-        raise_error(f'Redefinition of intrinsic word: `{memory_name.value}`', memory_name.loc)
-    if memory_name.value in macros:
-        notify_user(f'Macro `{memory_name.value}` was defined at this location', macros[memory_name.value].loc)
-        raise_error(f'Redefinition of existing macro: `{memory_name.value}`', memory_name.loc)
-    if memory_name.value in memories:
-        raise_error(f'Redefinition of existing memory: `{memory_name.value}`', memory_name.loc)
-    if len(rprogram) == 0:
-        raise_error(f'Expected `end` at the end of empty memory definition but found: `{memory_name.value}`',
-                    memory_name.loc)
-    memory_size_stack: List[int] = []
-    while len(rprogram) > 0:
-        token = rprogram.pop()
-        if token.type == TokenType.KEYWORD and token.value == Keyword.END:
-            break
-        elif token.type == TokenType.INT:
-            assert type(token.value) == int, 'Token value must be an integer'
-            memory_size_stack.append(token.value)
-        elif token.type == TokenType.WORD and type(token.value) == str and INTRINSIC_NAMES.get(token.value, '') == Intrinsic.ADD:
-            # TODO: Check for memory_size_stack underflow
-            a = memory_size_stack.pop()
-            b = memory_size_stack.pop()
-            memory_size_stack.append(a + b)
-        elif token.type == TokenType.WORD and type(token.value) == str and INTRINSIC_NAMES.get(token.value, '') == Intrinsic.MUL:
-            a = memory_size_stack.pop()
-            b = memory_size_stack.pop()
-            memory_size_stack.append(a * b)
-        elif token.type == TokenType.WORD and type(token.value) == str and token.value in macros:
-            current_macro = macros[token.value]
-            assert current_macro.tokens is not None, 'Macro tokens not saved'
-            for idx in range(len(current_macro.tokens) - 1, -1, -1):
-                current_macro.tokens[idx].expanded_from = token
-                current_macro.tokens[idx].expanded_count = token.expanded_count + 1
-                rprogram.append(current_macro.tokens[idx])
+        if token.type == TokenType.INT:
+            if type(token.value) != int:
+                raise_error('Token value must be an integer', token.loc)
+            return Op(type=OpType.PUSH_INT, operand=token.value, token=token, name=token.name)
+        elif token.type == TokenType.CHAR:
+            if type(token.value) != int:
+                raise_error('Token value must be an integer', token.loc)
+            return Op(type=OpType.PUSH_INT, operand=token.value, token=token, name=token.name)
+        elif token.type == TokenType.STR:
+            if type(token.value) != str:
+                raise_error('Token value must be an string', token.loc)
+            return Op(type=OpType.PUSH_STR, operand=token.value, token=token, name=token.name)
+        elif token.type == TokenType.KEYWORD:
+            return self.parse_keyword(token)
+        elif token.type == TokenType.WORD:
+            assert type(token.value) == str, "`word` must be a string"
+            if token.value not in INTRINSIC_NAMES:
+                raise_error(f'Unknown intrinsic name: `{token.value}`', token.loc)
+            return Op(type=OpType.INTRINSIC, operand=INTRINSIC_NAMES[token.value], token=token, name=token.value)
         else:
-            raise_error(f'Unsupported token in memory definition: {token.value}', token.loc)
-    if token.type != TokenType.KEYWORD or token.value != Keyword.END:
-        raise_error(f'Expected `end` at the end of memory definition but found: `{token.value}`',
-                    token.loc)
-    if len(memory_size_stack) != 1:
-        raise_error('Memory definition expects only 1 integer', token.loc)
-    return memory_name.value, memory_size_stack.pop()
-
-def parse_tokens_to_program(token_program: List[Token]) -> Program:
-    assert len(TokenType) == 5, "Exhaustive handling of tokens in parse_tokens_to_program."
-    assert len(Keyword) == 9, "Exhaustive handling of keywords in parse_tokens_to_program."
-    stack: List[Tuple[Token, int]] = []
-    rprogram = list(reversed(token_program))
-    program = Program([], 0)
-    macros: Dict[str, Macro] = {}
-    memories: Dict[str, MemAddr] = {}
-    i = 0
-    while len(rprogram) > 0:
-        token = rprogram.pop()
-        if token.value in macros:
-            assert type(token.value) == str, 'Compiler Error: non string macro name was saved'
-            current_macro = macros[token.value]
-            current_macro.expanded_count += 1
-            if current_macro.expanded_count > MACRO_EXPANSION_LIMIT:
-                raise_error(f'Expansion limit reached for macro: {token.value}', current_macro.loc)
-            assert current_macro.tokens is not None, 'Macro tokens not saved'
-            for idx in range(len(current_macro.tokens) - 1, -1, -1):
-                current_macro.tokens[idx].expanded_from = token
-                current_macro.tokens[idx].expanded_count = token.expanded_count + 1
-                rprogram.append(current_macro.tokens[idx])
-        elif token.value in memories:
-            assert type(token.value) == str, 'Compiler Error: non string memory name was saved'
-            program.ops.append(Op(type=OpType.PUSH_MEM, token=token, operand=memories[token.value], name=token.value))
-            i += 1
-        elif token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.INCLUDE):
-            expand_keyword_to_tokens(token, rprogram, macros)
-        elif token.type == TokenType.KEYWORD and token.value == Keyword.MEMORY:
-            memory_name, memory_size = evaluate_memory_definition(rprogram, token, macros, memories)
-            memories[memory_name] = program.memory_capacity
-            program.memory_capacity += memory_size
-        else:
-            program.ops.append(parse_token_as_op(stack, token, i, program.ops))
-            i += 1
-    if len(stack) != 0:
-        raise_error('Found an unclosed block', stack[-1][0].loc)
-    return program
-
-
-def parse_token_as_op(stack: List[Tuple[Token, int]], token: Token, i: int, ops: List[Op]) -> Op | NoReturn:
-    assert len(OpType) == 10, 'Exhaustive handling of built-in words'
-    assert len(TokenType) == 5, 'Exhaustive handling of tokens in parser'
-
-    if token.type == TokenType.INT:
-        if type(token.value) != int:
-            raise_error('Token value must be an integer', token.loc)
-        return Op(type=OpType.PUSH_INT, operand=token.value, token=token, name=token.name)
-    elif token.type == TokenType.CHAR:
-        if type(token.value) != int:
-            raise_error('Token value must be an integer', token.loc)
-        return Op(type=OpType.PUSH_INT, operand=token.value, token=token, name=token.name)
-    elif token.type == TokenType.STR:
-        if type(token.value) != str:
-            raise_error('Token value must be an string', token.loc)
-        return Op(type=OpType.PUSH_STR, operand=token.value, token=token, name=token.name)
-    elif token.type == TokenType.KEYWORD:
-        return parse_keyword(stack, token, i, ops)
-    elif token.type == TokenType.WORD:
-        assert type(token.value) == str, "`word` must be a string"
-        if token.value not in INTRINSIC_NAMES:
-            raise_error(f'Unknown intrinsic name: `{token.value}`', token.loc)
-        return Op(type=OpType.INTRINSIC, operand=INTRINSIC_NAMES[token.value], token=token, name=token.value)
-    else:
-        raise_error(f'Unhandled token: {token}', token.loc)
+            raise_error(f'Unhandled token: {token}', token.loc)
 
 
 def seek_until(line: str, start: int, predicate: Callable[[str], bool]) -> int:
@@ -1772,7 +1781,8 @@ if __name__ == '__main__':
         exit(1)
     file_path_arg = argv[0]
     program_stack = lex_file(file_path_arg)
-    program_referenced = parse_tokens_to_program(program_stack)
+    token_parser = Parsing(program_stack)
+    program_referenced = token_parser.parse_tokens_to_program()
     type_check_program(program_referenced, '-d' in argv or '--debug' in argv)
     if subcommand == 'sim':
         simulate_little_endian_macos(program_referenced, argv)
