@@ -4,7 +4,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple, Optional, BinaryIO, Reversible
+from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple, Optional, BinaryIO
 
 
 @dataclass
@@ -1455,24 +1455,18 @@ def parse_keyword(stack: List[Tuple[Token, int]], token: Token, i: int, ops: Lis
         raise_error(f'Unknown keyword token: {token.value}', token.loc)
 
 
-def expand_keyword_to_tokens(token: Token, rprogram: List[Token], macros: Dict[str, Macro]) -> NoReturn | None:
+def expand_keyword_to_tokens(token: Token, rprogram: List[Token],
+                             macros: Dict[str, Macro], memories: Dict[str, MemAddr]) -> NoReturn | None:
     assert len(Keyword) == 9, 'Exhaustive handling of keywords in compile_keyword_to_program'
     if token.value == Keyword.MACRO:
         if len(rprogram) == 0:
             raise_error('Expected name of the macro but found nothing', token.loc)
         macro_name = rprogram.pop()
-        if type(macro_name.value) == Keyword:
-            raise_error(f'Redefinition of keyword: `{macro_name.value.name.lower()}`', macro_name.loc)
-        if macro_name.type != TokenType.WORD or type(macro_name.value) != str:
-            raise_error(f'Expected macro name to be: `word`, but found: `{macro_name.name}`', macro_name.loc)
-        if macro_name.value in INTRINSIC_NAMES:
-            raise_error(f'Redefinition of intrinsic word: `{macro_name.value}`', macro_name.loc)
-        if macro_name.value in macros:
-            notify_user(f'Macro `{macro_name.value}` was defined at this location', macros[macro_name.value].loc)
-            raise_error(f'Redefinition of existing macro: `{macro_name.value}`', macro_name.loc)
+        check_block_name_validity(macro_name, macros, memories)
         if len(rprogram) == 0:
             raise_error(f'Expected `end` at the end of empty macro definition but found: `{macro_name.value}`',
                         macro_name.loc)
+        assert type(macro_name.value) == str, 'Macro name value must be a string'
         macros[macro_name.value] = Macro(TokenType.KEYWORD, Keyword.MACRO,
                                          loc=token.loc, name=macro_name.value, tokens=[])
         block_count = 0
@@ -1522,17 +1516,7 @@ def evaluate_memory_definition(rprogram: List[Token], token: Token,
     if len(rprogram) == 0:
         raise_error('Expected name of the memory but found nothing', token.loc)
     memory_name = rprogram.pop()
-    if type(memory_name.value) == Keyword:
-        raise_error(f'Redefinition of keyword: `{memory_name.value.name.lower()}`', memory_name.loc)
-    if memory_name.type != TokenType.WORD or type(memory_name.value) != str:
-        raise_error(f'Expected memory name to be: `word`, but found: `{memory_name.name}`', memory_name.loc)
-    if memory_name.value in INTRINSIC_NAMES:
-        raise_error(f'Redefinition of intrinsic word: `{memory_name.value}`', memory_name.loc)
-    if memory_name.value in macros:
-        notify_user(f'Macro `{memory_name.value}` was defined at this location', macros[memory_name.value].loc)
-        raise_error(f'Redefinition of existing macro: `{memory_name.value}`', memory_name.loc)
-    if memory_name.value in memories:
-        raise_error(f'Redefinition of existing memory: `{memory_name.value}`', memory_name.loc)
+    check_block_name_validity(memory_name, macros, memories)
     if len(rprogram) == 0:
         raise_error(f'Expected `end` at the end of empty memory definition but found: `{memory_name.value}`',
                     memory_name.loc)
@@ -1567,7 +1551,22 @@ def evaluate_memory_definition(rprogram: List[Token], token: Token,
                     token.loc)
     if len(memory_size_stack) != 1:
         raise_error('Memory definition expects only 1 integer', token.loc)
+    assert type(memory_name.value) == str, 'Memory name value must be a string'
     return memory_name.value, memory_size_stack.pop()
+
+def check_block_name_validity(token: Token, macros: Dict[str, Macro], memories: Dict[str, MemAddr]) -> None | NoReturn:
+    if type(token.value) == Keyword:
+        raise_error(f'Redefinition of keyword: `{token.value.name.lower()}`', token.loc)
+    if token.type != TokenType.WORD or type(token.value) != str:
+        raise_error(f'Expected block name to be: `word`, but found: `{token.name}`', token.loc)
+    if token.value in INTRINSIC_NAMES:
+        raise_error(f'Redefinition of intrinsic word: `{token.value}`', token.loc)
+    if token.value in macros:
+        notify_user(f'Macro `{token.value}` was defined at this location', macros[token.value].loc)
+        raise_error(f'Redefinition of existing macro: `{token.value}`', token.loc)
+    if token.value in memories:
+        raise_error(f'Redefinition of existing memory: `{token.value}`', token.loc)
+    return None
 
 def parse_tokens_to_program(token_program: List[Token]) -> Program:
     assert len(TokenType) == 5, "Exhaustive handling of tokens in parse_tokens_to_program."
@@ -1596,7 +1595,7 @@ def parse_tokens_to_program(token_program: List[Token]) -> Program:
             program.ops.append(Op(type=OpType.PUSH_MEM, token=token, operand=memories[token.value], name=token.value))
             i += 1
         elif token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.INCLUDE):
-            expand_keyword_to_tokens(token, rprogram, macros)
+            expand_keyword_to_tokens(token, rprogram, macros, memories)
         elif token.type == TokenType.KEYWORD and token.value == Keyword.MEMORY:
             memory_name, memory_size = evaluate_memory_definition(rprogram, token, macros, memories)
             memories[memory_name] = program.memory_capacity
