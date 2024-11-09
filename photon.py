@@ -334,8 +334,10 @@ def notify_argument_origin(loc: Token, order: int = 1) -> None:
 def type_check_program(program: Program, debug: bool = False) -> None:
     stack: DataTypeStack = []
     block_stack: List[Tuple[DataTypeStack, Op]] = []
-    procs: Dict[str, DataTypeStack] = {}
-    for op in program.ops:
+    return_stack: List[int] = []
+    i = 0
+    while i < len(program.ops):
+        op = program.ops[i]
         assert len(OpType) == 13, 'Exhaustive handling of operations in type check'
         if op.type == OpType.PUSH_INT:
             assert type(op.operand) == int, 'Value for `PUSH_INT` must be `int`'
@@ -419,15 +421,13 @@ def type_check_program(program: Program, debug: bool = False) -> None:
                     raise_error('Stack types cannot be altered in an if-do condition', op.token)
             block_stack.append((stack.copy(), op))
         elif op.type == OpType.PROC:
-            block_stack.append((stack.copy(), op))
-            stack = []
-        elif op.type == OpType.RET:
-            assert type(op.operand) == str, 'Operand for `RET` must be `str`'
-            procs[op.operand] = stack.copy()
-            stack, block = block_stack.pop()
-            assert block.type == OpType.PROC, '[BUG] No `proc` before `ret (end)`'
+            i = op.addr
         elif op.type == OpType.CALL:
-            stack.extend(procs[op.name])
+            return_stack.append(i)
+            i = op.addr
+        elif op.type == OpType.RET:
+            assert len(return_stack) > 0, '[BUG] no return address'
+            i = return_stack.pop()
         elif op.type == OpType.INTRINSIC:
             assert len(Intrinsic) == 39, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
@@ -825,6 +825,7 @@ def type_check_program(program: Program, debug: bool = False) -> None:
         else:
             raise_error(f'Unhandled op: {op.name}',
                         op.token.loc)
+        i += 1
     assert len(block_stack) == 0, '[BUG] Block Stack Not Empty'
     if len(stack) != 0:
         current_stack = list(map(lambda x: x[0], stack))
@@ -1896,5 +1897,5 @@ if __name__ == '__main__':
             exit(exit_code)
         if '--run' in argv:
             args_start = argv.index('--run') + 1
-            args = ''.join(argv[args_start:])
-            exit(subprocess.call(f'./output {args}', shell=True))
+            argv_args = ''.join(argv[args_start:])
+            exit(subprocess.call(f'./output {argv_args}', shell=True))
