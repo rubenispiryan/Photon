@@ -421,9 +421,11 @@ def type_check_program(program: Program, debug: bool = False) -> None:
                     raise_error('Stack types cannot be altered in an if-do condition', op.token)
             block_stack.append((stack.copy(), op))
         elif op.type == OpType.PROC:
+            assert type(op.addr) == int, 'Jmp addr must be an int'
             i = op.addr
         elif op.type == OpType.CALL:
             return_stack.append(i)
+            assert type(op.addr) == int, 'Jmp addr must be an int'
             i = op.addr
         elif op.type == OpType.RET:
             assert len(return_stack) > 0, '[BUG] no return address'

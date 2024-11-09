@@ -1,7 +1,10 @@
-macro invertN
+proc invertN
     0
     while over 0 != do
-        over 10 % swap 10 * +
+        over 10
+        // TODO: Use % instead, after fixing include handling
+        over over / * -
+        swap 10 * +
         swap 10 / swap
     end swap drop
 end
