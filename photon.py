@@ -15,11 +15,20 @@ class Loc:
 
 
 def asm_setup(write_base: Callable[[str], None], write_level1: Callable[[str], None]) -> None:
+    write_base('.section __TEXT, __text')
+    write_base('.global _main')
+    write_base('.align 3')
     write_base('.macro push reg1:req')
     write_level1(r'str \reg1, [sp, #-16]!')
     write_base('.endmacro')
     write_base('.macro pop reg1:req')
     write_level1(r'ldr \reg1, [sp], #16')
+    write_base('.endmacro')
+    write_base('.macro push_ret reg1:req')
+    write_level1(r'str \reg1, [x20], #16')
+    write_base('.endmacro')
+    write_base('.macro pop_ret reg1:req')
+    write_level1(r'ldr \reg1, [x20, #-16]!')
     write_base('.endmacro')
     write_base('print:')
     write_level1('sub     sp, sp,  #48')
@@ -53,6 +62,15 @@ def asm_setup(write_base: Callable[[str], None], write_level1: Callable[[str], N
     write_level1('ldp     x29, x30, [sp,  #32]')
     write_level1('add     sp, sp,  #48')
     write_level1('ret')
+    write_base('_main:')
+    write_level1('adrp x2, argc@PAGE')
+    write_level1('add x2, x2, argc@PAGEOFF')
+    write_level1('str x0, [x2]')
+    write_level1('adrp x2, argv@PAGE')
+    write_level1('add x2, x2, argv@PAGEOFF')
+    write_level1('str x1, [x2]')
+    write_level1('adrp x20, ret_stack@PAGE')
+    write_level1('add x20, x20, ret_stack@PAGEOFF')
 
 
 class Intrinsic(Enum):
@@ -1094,23 +1112,11 @@ def simulate_little_endian_macos(program: Program, input_arguments: List[str]) -
 
 
 def compile_program(program: Program) -> None:
-    print(program.proc_ret_capacity)
-    exit(54)
     assert len(OpType) == 13, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
-    write_base('.section __TEXT, __text')
-    write_base('.global _main')
-    write_base('.align 3')
     asm_setup(write_base, write_level1)
-    write_base('_main:')
-    write_level1('adrp x2, argc@PAGE')
-    write_level1('add x2, x2, argc@PAGEOFF')
-    write_level1('str x0, [x2]')
-    write_level1('adrp x2, argv@PAGE')
-    write_level1('add x2, x2, argv@PAGEOFF')
-    write_level1('str x1, [x2]')
     strs: List[str] = []
     allocated_strs: Dict[str, int] = {}
     for i in range(len(program.ops)):
@@ -1158,13 +1164,15 @@ def compile_program(program: Program) -> None:
         elif op.type == OpType.IF:
             write_level1(';; -- if --')
         elif op.type == OpType.PROC:
-            raise NotImplementedError
-            write_level1(f'b end_{op.operand}')
-            write_base(f'proc_{i}')
+            write_level1(f'b ret_{op.operand}')
+            write_base(f'proc_{i}:')
+            write_level1('push_ret lr')
         elif op.type == OpType.CALL:
-            write_level1(f'b proc_{op.operand}')
+            write_level1(f'bl proc_{op.operand}')
         elif op.type == OpType.RET:
+            write_level1('pop_ret lr')
             write_level1(f'ret')
+            write_base(f'ret_{i}:')
         elif op.type == OpType.INTRINSIC:
             assert len(Intrinsic) == 39, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
@@ -1391,6 +1399,8 @@ def compile_program(program: Program) -> None:
     write_base('.section __DATA, __bss')
     write_base('mem:')
     write_level1(f'.skip {program.memory_capacity}')
+    write_base('ret_stack:')
+    write_level1(f'.skip {(program.proc_ret_capacity + 2) * 16}')
     out.close()
 
 
