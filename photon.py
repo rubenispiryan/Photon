@@ -172,9 +172,13 @@ class Macro(Token):
     tokens: List[Token] | None = None
 
 @dataclass
-class Proc:
-    addr: int
-    nested_proc_count: int
+class Proc(Token):
+    addr: int = -1
+    nested_proc_count: int = -1
+
+@dataclass
+class Memory(Token):
+    mem_addr: int = -1
 
 
 @dataclass
@@ -260,7 +264,6 @@ STR_CAPACITY = 640_000 + ARG_PTR_CAPACITY
 FDS: List[BinaryIO] = [sys.stdin.buffer, sys.stdout.buffer, sys.stderr.buffer]
 
 DataTypeStack = List[Tuple[DataType, Token]]
-MemAddr = int
 
 
 def make_log_message(message: str, loc: Loc) -> str:
@@ -330,9 +333,10 @@ def notify_argument_origin(loc: Token, order: int = 1) -> None:
 
 def type_check_program(program: Program, debug: bool = False) -> None:
     stack: DataTypeStack = []
-    block_stack: List[Tuple[DataTypeStack, Op]] = []  # convert stack to tuple keeping only DataType, hash and store
+    block_stack: List[Tuple[DataTypeStack, Op]] = []
+    procs: Dict[str, DataTypeStack] = {}
     for op in program.ops:
-        assert len(OpType) == 10, 'Exhaustive handling of operations in type check'
+        assert len(OpType) == 13, 'Exhaustive handling of operations in type check'
         if op.type == OpType.PUSH_INT:
             assert type(op.operand) == int, 'Value for `PUSH_INT` must be `int`'
             stack.append((DataType.INT, op.token))
@@ -414,6 +418,16 @@ def type_check_program(program: Program, debug: bool = False) -> None:
                     notify_user(f'Actual Stack Types: {current_stack}', op.token.loc)
                     raise_error('Stack types cannot be altered in an if-do condition', op.token)
             block_stack.append((stack.copy(), op))
+        elif op.type == OpType.PROC:
+            block_stack.append((stack.copy(), op))
+            stack = []
+        elif op.type == OpType.RET:
+            assert type(op.operand) == str, 'Operand for `RET` must be `str`'
+            procs[op.operand] = stack.copy()
+            stack, block = block_stack.pop()
+            assert block.type == OpType.PROC, '[BUG] No `proc` before `ret (end)`'
+        elif op.type == OpType.CALL:
+            stack.extend(procs[op.name])
         elif op.type == OpType.INTRINSIC:
             assert len(Intrinsic) == 39, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
@@ -866,15 +880,15 @@ def simulate_little_endian_macos(program: Program, input_arguments: List[str]) -
             i += 1
             continue
         elif op.type == OpType.ELIF:
-            assert type(op.operand) == int, 'Jump address must be `int`'
-            i = op.operand
+            assert type(op.addr) == int, 'Jump address must be `int`'
+            i = op.addr
         elif op.type == OpType.ELSE:
-            assert type(op.operand) == int, 'Jump address must be `int`'
-            i = op.operand
+            assert type(op.addr) == int, 'Jump address must be `int`'
+            i = op.addr
         elif op.type == OpType.END:
-            if op.operand is not None:
-                assert type(op.operand) == int, 'Jump address must be `int`'
-                i = op.operand
+            if op.addr is not None:
+                assert type(op.addr) == int, 'Jump address must be `int`'
+                i = op.addr
         elif op.type == OpType.WHILE:
             i += 1
             continue
@@ -882,13 +896,15 @@ def simulate_little_endian_macos(program: Program, input_arguments: List[str]) -
             a = stack.pop()
             assert type(a) == int, 'Arguments for `do` must be `int`'
             if a == 0:
-                assert type(op.operand) == int, 'Jump address must be `int`'
-                i = op.operand
+                assert type(op.addr) == int, 'Jump address must be `int`'
+                i = op.addr
         elif op.type == OpType.PROC:
-            i = op.operand
+            assert type(op.addr) == int, 'Jump address must be `int`'
+            i = op.addr
         elif op.type == OpType.CALL:
             return_stack.append(i)
-            i = op.operand
+            assert type(op.addr) == int, 'Jump address must be `int`'
+            i = op.addr
         elif op.type == OpType.RET:
             i = return_stack.pop()
         elif op.type == OpType.INTRINSIC:
@@ -1146,29 +1162,29 @@ def compile_program(program: Program) -> None:
         elif op.type == OpType.DO:
             write_level1('pop x0')
             write_level1('tst x0, x0')
-            assert op.operand is not None, 'No address to jump'
-            write_level1(f'b.eq end_{op.operand}')
+            assert op.addr is not None, 'No address to jump'
+            write_level1(f'b.eq end_{op.addr}')
         elif op.type == OpType.ELSE:
-            write_level1(f'b end_{op.operand}')
+            write_level1(f'b end_{op.addr}')
             write_base(f'end_{i}:')
         elif op.type == OpType.ELIF:
             write_base(f'end_{i - 1}:')
-            write_level1(f'b end_{op.operand}')
+            write_level1(f'b end_{op.addr}')
             write_base(f'end_{i}:')
         elif op.type == OpType.END:
-            if op.operand is not None:
-                write_level1(f'b while_{op.operand}')
+            if op.addr is not None:
+                write_level1(f'b while_{op.addr}')
             write_base(f'end_{i}:')
         elif op.type == OpType.WHILE:
             write_base(f'while_{i}:')
         elif op.type == OpType.IF:
             write_level1(';; -- if --')
         elif op.type == OpType.PROC:
-            write_level1(f'b ret_{op.operand}')
+            write_level1(f'b ret_{op.addr}')
             write_base(f'proc_{i}:')
             write_level1('push_ret lr')
         elif op.type == OpType.CALL:
-            write_level1(f'bl proc_{op.operand}')
+            write_level1(f'bl proc_{op.addr}')
         elif op.type == OpType.RET:
             write_level1('pop_ret lr')
             write_level1(f'ret')
@@ -1420,7 +1436,7 @@ class Parsing:
         self.stack: List[Tuple[Token, int]] = []
         self.rprogram = list(reversed(token_program))
         self.macros: Dict[str, Macro] = {}
-        self.memories: Dict[str, MemAddr] = {}
+        self.memories: Dict[str, Memory] = {}
         self.procs: Dict[str, Proc] = {}
         self.index = 0
         self.current_proc_ret_cap = 0
@@ -1444,12 +1460,12 @@ class Parsing:
             elif token.value in self.memories:
                 assert type(token.value) == str, 'Compiler Error: non string memory name was saved'
                 self.program.ops.append(
-                    Op(type=OpType.PUSH_MEM, token=token, operand=self.memories[token.value], name=token.value))
+                    Op(type=OpType.PUSH_MEM, token=token, operand=self.memories[token.value].mem_addr, name=token.value))
                 self.index += 1
             elif token.value in self.procs:
                 assert type(token.value) == str, 'Compiler Error: non string process name was saved'
                 self.program.ops.append(Op(type=OpType.CALL, token=token,
-                                           operand=self.procs[token.value].addr, name=token.value))
+                                           addr=self.procs[token.value].addr, name=token.value))
                 if self.current_proc is not None:
                     self.procs[self.current_proc].nested_proc_count = max(self.procs[self.current_proc].nested_proc_count,
                                                                           self.procs[token.value].nested_proc_count + 1)
@@ -1458,7 +1474,8 @@ class Parsing:
                 self.expand_keyword_to_tokens(token)
             elif token.type == TokenType.KEYWORD and token.value == Keyword.MEMORY:
                 memory_name, memory_size = self.evaluate_memory_definition(token)
-                self.memories[memory_name] = self.program.memory_capacity
+                self.memories[memory_name] = Memory(TokenType.KEYWORD, Keyword.MEMORY, loc=token.loc,
+                                                    name=memory_name, mem_addr=self.program.memory_capacity)
                 self.program.memory_capacity += memory_size
             else:
                 self.program.ops.append(self.parse_token_as_op(token))
@@ -1489,8 +1506,8 @@ class Parsing:
                             self.program.ops[if_index].token.loc)
                 raise_error('`if` or `elif` must be present before `do`', self.program.ops[if_index].token.loc)
             if self.program.ops[if_index].type == OpType.ELIF:
-                self.program.ops[if_index].operand = self.index - 1
-            self.program.ops[do_index].operand = self.index
+                self.program.ops[if_index].addr = self.index - 1
+            self.program.ops[do_index].addr = self.index
             self.stack.append((token, self.index))
             return Op(type=OpType.ELIF, token=token, name=token.value.name)
         elif token.value == Keyword.ELSE:
@@ -1502,7 +1519,7 @@ class Parsing:
                     notify_user(f'Instead of `do` found: {self.program.ops[do_index].type}',
                                 self.program.ops[do_index].token.loc)
                 raise_error(f'`else` can only be used with an `if-do` or `elif-do`', token.loc)
-            self.program.ops[do_index].operand = self.index
+            self.program.ops[do_index].addr = self.index
             self.stack.append((token, self.index))
             return Op(type=OpType.ELSE, token=token, name=token.value.name)
         elif token.value == Keyword.WHILE:
@@ -1523,16 +1540,17 @@ class Parsing:
                             proc_name.loc)
             assert type(proc_name.value) == str, 'Procedure name value must be a string'
             self.current_proc = proc_name.value
-            self.procs[proc_name.value] = Proc(self.index, 0)
+            self.procs[proc_name.value] = Proc(TokenType.KEYWORD, Keyword.PROC, loc=token.loc,
+                                               name=proc_name.value, addr=self.index, nested_proc_count=0)
             self.stack.append((token, self.index))
-            return Op(type=OpType.PROC, token=token, name=token.value.name)
+            return Op(type=OpType.PROC, token=token, operand=proc_name.value, name=token.value.name)
         elif token.value == Keyword.END:
             if len(self.stack) == 0:
                 raise_error('`end` can only be used with a `if-do`, `if-do-else`, `while-do`, `proc` or `macro`',
                             token.loc)
             block, block_index = self.stack.pop()
             if self.program.ops[block_index].type == OpType.ELSE:
-                self.program.ops[block_index].operand = self.index
+                self.program.ops[block_index].addr = self.index
                 if len(self.stack) == 0:
                     raise_error('`if-do` must be present before `else`', self.program.ops[block_index].token.loc)
                 _, if_index = self.stack.pop()
@@ -1541,20 +1559,20 @@ class Parsing:
                                 self.program.ops[if_index].token.loc)
                     raise_error('`if` or `elif` must be present before `do`', self.program.ops[if_index].token.loc)
                 if self.program.ops[if_index].type == OpType.ELIF:
-                    self.program.ops[if_index].operand = self.index
+                    self.program.ops[if_index].addr = self.index
                 return Op(type=OpType.END, token=token, name=token.value.name)
             elif self.program.ops[block_index].type == OpType.DO:
-                self.program.ops[block_index].operand = self.index
+                self.program.ops[block_index].addr = self.index
                 if len(self.stack) == 0:
                     raise_error('`while`, `if` or `elif` must be present before `do`',
                                 self.program.ops[block_index].token.loc)
                 _, before_do_index = self.stack.pop()
                 if self.program.ops[before_do_index].type == OpType.WHILE:
-                    return Op(type=OpType.END, token=token, name=token.value.name, operand=before_do_index)
+                    return Op(type=OpType.END, token=token, name=token.value.name, addr=before_do_index)
                 elif self.program.ops[before_do_index].type == OpType.IF:
                     return Op(type=OpType.END, token=token, name=token.value.name)
                 elif self.program.ops[before_do_index].type == OpType.ELIF:
-                    self.program.ops[before_do_index].operand = self.index
+                    self.program.ops[before_do_index].addr = self.index
                     return Op(type=OpType.END, token=token, name=token.value.name)
                 else:
                     notify_user(f'Instead of `while`, `if` or `elif` found: {self.program.ops[before_do_index].type}',
@@ -1562,11 +1580,13 @@ class Parsing:
                     raise_error('`while`, `if` or `elif` must be present before `do`',
                                 self.program.ops[block_index].token.loc)
             elif self.program.ops[block_index].type == OpType.PROC:
-                self.program.ops[block_index].operand = self.index
+                self.program.ops[block_index].addr = self.index
+                assert type(self.current_proc) == str, 'Procedure name value must be a string'
                 self.program.proc_ret_capacity = max(self.program.proc_ret_capacity,
                                                      self.procs[self.current_proc].nested_proc_count)
+                current_proc_name = self.current_proc
                 self.current_proc = None
-                return Op(type=OpType.RET, token=token, name=token.value.name)
+                return Op(type=OpType.RET, token=token, operand=current_proc_name, name=token.value.name)
             else:
                 notify_user(f'Instead of `else` or `do` found: {self.program.ops[block_index].type}',
                             self.program.ops[block_index].token.loc)
@@ -1686,7 +1706,11 @@ class Parsing:
             notify_user(f'Macro `{token.value}` was defined at this location', self.macros[token.value].loc)
             raise_error(f'Redefinition of existing macro: `{token.value}`', token.loc)
         if token.value in self.memories:
+            notify_user(f'Memory `{token.value}` was defined at this location', self.memories[token.value].loc)
             raise_error(f'Redefinition of existing memory: `{token.value}`', token.loc)
+        if token.value in self.procs:
+            notify_user(f'Proc `{token.value}` was defined at this location', self.procs[token.value].loc)
+            raise_error(f'Redefinition of existing proc: `{token.value}`', token.loc)
         return None
 
     def parse_token_as_op(self, token: Token) -> Op | NoReturn:
