@@ -153,6 +153,11 @@ class Token:
 class Macro(Token):
     tokens: List[Token] | None = None
 
+@dataclass
+class Proc:
+    addr: int
+    nested_proc_count: int
+
 
 @dataclass
 class Op:
@@ -167,6 +172,7 @@ class Op:
 class Program:
     ops: list[Op]
     memory_capacity: int
+    proc_ret_capacity: int
 
 
 KEYWORD_NAMES = {
@@ -237,7 +243,6 @@ FDS: List[BinaryIO] = [sys.stdin.buffer, sys.stdout.buffer, sys.stderr.buffer]
 
 DataTypeStack = List[Tuple[DataType, Token]]
 MemAddr = int
-ProcAddr = int
 
 
 def make_log_message(message: str, loc: Loc) -> str:
@@ -1089,7 +1094,9 @@ def simulate_little_endian_macos(program: Program, input_arguments: List[str]) -
 
 
 def compile_program(program: Program) -> None:
-    assert len(OpType) == 10, 'Exhaustive handling of operators in compilation'
+    print(program.proc_ret_capacity)
+    exit(54)
+    assert len(OpType) == 13, 'Exhaustive handling of operators in compilation'
     out = open('output.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
@@ -1150,6 +1157,14 @@ def compile_program(program: Program) -> None:
             write_base(f'while_{i}:')
         elif op.type == OpType.IF:
             write_level1(';; -- if --')
+        elif op.type == OpType.PROC:
+            raise NotImplementedError
+            write_level1(f'b end_{op.operand}')
+            write_base(f'proc_{i}')
+        elif op.type == OpType.CALL:
+            write_level1(f'b proc_{op.operand}')
+        elif op.type == OpType.RET:
+            write_level1(f'ret')
         elif op.type == OpType.INTRINSIC:
             assert len(Intrinsic) == 39, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
@@ -1390,13 +1405,15 @@ def usage_help() -> None:
 
 class Parsing:
     def __init__(self, token_program: List[Token]) -> None:
-        self.program = Program([], 0)
+        self.current_proc: str | None = None
+        self.program = Program([], 0, 0)
         self.stack: List[Tuple[Token, int]] = []
         self.rprogram = list(reversed(token_program))
         self.macros: Dict[str, Macro] = {}
         self.memories: Dict[str, MemAddr] = {}
-        self.procs: Dict[str, ProcAddr] = {}
+        self.procs: Dict[str, Proc] = {}
         self.index = 0
+        self.current_proc_ret_cap = 0
 
     def parse_tokens_to_program(self) -> Program:
         assert len(OpType) == 13, "Exhaustive handling of op types in parse_tokens_to_program."
@@ -1421,7 +1438,11 @@ class Parsing:
                 self.index += 1
             elif token.value in self.procs:
                 assert type(token.value) == str, 'Compiler Error: non string process name was saved'
-                self.program.ops.append(Op(type=OpType.CALL, token=token, operand=self.procs[token.value], name=token.value))
+                self.program.ops.append(Op(type=OpType.CALL, token=token,
+                                           operand=self.procs[token.value].addr, name=token.value))
+                if self.current_proc is not None:
+                    self.procs[self.current_proc].nested_proc_count = max(self.procs[self.current_proc].nested_proc_count,
+                                                                          self.procs[token.value].nested_proc_count + 1)
                 self.index += 1
             elif token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.INCLUDE):
                 self.expand_keyword_to_tokens(token)
@@ -1481,6 +1502,8 @@ class Parsing:
             self.stack.append((token, self.index))
             return Op(type=OpType.DO, token=token, name=token.value.name)
         elif token.value == Keyword.PROC:
+            if self.current_proc is not None:
+                raise_error('Nested `proc` blocks are not allowed', token.loc)
             if len(self.rprogram) == 0:
                 raise_error('Expected name of the procedure but found nothing', token.loc)
             proc_name = self.rprogram.pop()
@@ -1489,7 +1512,8 @@ class Parsing:
                 raise_error(f'Expected `end` at the end of empty procedure definition but found: `{proc_name.value}`',
                             proc_name.loc)
             assert type(proc_name.value) == str, 'Procedure name value must be a string'
-            self.procs[proc_name.value] = self.index
+            self.current_proc = proc_name.value
+            self.procs[proc_name.value] = Proc(self.index, 0)
             self.stack.append((token, self.index))
             return Op(type=OpType.PROC, token=token, name=token.value.name)
         elif token.value == Keyword.END:
@@ -1529,6 +1553,9 @@ class Parsing:
                                 self.program.ops[block_index].token.loc)
             elif self.program.ops[block_index].type == OpType.PROC:
                 self.program.ops[block_index].operand = self.index
+                self.program.proc_ret_capacity = max(self.program.proc_ret_capacity,
+                                                     self.procs[self.current_proc].nested_proc_count)
+                self.current_proc = None
                 return Op(type=OpType.RET, token=token, name=token.value.name)
             else:
                 notify_user(f'Instead of `else` or `do` found: {self.program.ops[block_index].type}',
