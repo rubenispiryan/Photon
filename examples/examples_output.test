@@ -115,7 +115,7 @@ STDIN:
 
 STDOUT:
 Error message originated inside: parse_keyword
-`while` must be present before `do`
+`while`, `if` or `elif` must be present before `do`
 Exit code: 1
 end_./examples/exceptions/do_without_while.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/macro_without_end.phtn argv  endargv
@@ -131,7 +131,7 @@ STDIN:
 
 STDOUT:
 Error message originated inside: parse_keyword
-`end` can only be used with a `if-do`, `if-do-else`, `while-do` or `macro`
+`end` can only be used with a `if-do`, `if-do-else`, `while-do`, `proc` or `macro`
 Exit code: 1
 end_./examples/exceptions/only_end.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 ./examples/exceptions/if_else_overflow.phtn argv  endargv
@@ -172,7 +172,7 @@ end_./examples/exceptions/exit.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 STDIN:
 
 STDOUT:
-Error message originated inside: expand_keyword_to_tokens
+Error message originated inside: check_block_name_validity
 Redefinition of intrinsic word: `print`
 Exit code: 1
 end_./examples/exceptions/intrinsic_redefinition.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
@@ -180,7 +180,7 @@ end_./examples/exceptions/intrinsic_redefinition.phtn-#--#--#--#--#--#--#--#--#-
 STDIN:
 
 STDOUT:
-Error message originated inside: expand_keyword_to_tokens
+Error message originated inside: check_block_name_validity
 Redefinition of existing macro: `print1`
 Macro `print1` was defined at this location
 Exit code: 1
