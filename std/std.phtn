@@ -1,7 +1,15 @@
 include "macos.phtn"
 
-macro NULL 0 end
+// Standard Type Definitions
 
+// struct Str {
+//   length: uint64 (8 bytes)
+//   data: char* (8 bytes)
+// }
+
+// Standard Constant Definitions
+
+macro NULL 0 end
 macro true 0 0 == end
 macro false 0 0 != end
 
@@ -10,18 +18,16 @@ macro stdin 0 end
 macro stdout 1 end
 macro stderr 2 end
 
-// syscall wrappers
-macro write SYS_WRITE syscall3 end
-macro read SYS_READ syscall3 end
-macro exit SYS_EXIT syscall1 drop end
-macro open SYS_OPEN syscall2 end
-macro close SYS_CLOSE syscall1 end
-macro fstat64 SYS_FSTAT64 syscall2 end
-macro mmap SYS_MMAP syscall6 end
+// mmap args
+macro MAP_PRIVATE 2 end
+macro PROT_READ 1 end
 
 // type sizes
-macro sizeof(ptr) 8 end
-macro sizeof(u64) 8 end
+macro sizeof(ptr)       8 end
+macro sizeof(u64)       8 end
+macro sizeof(u32)       4 end
+macro sizeof(u16)       2 end
+macro sizeof(timespec) 16 end
 
 // struct stat of fstat64
 macro sizeof(stat) 144 end
@@ -42,73 +48,93 @@ macro stat.st_flags 116 + end
 macro stat.st_gen 120 + end
 macro stat.st_lspare 124 + end
 macro stat.st_qspare 128 + end
-macro sizeof(st_dev) 4 end
-macro sizeof(st_mode) 2 end
-macro sizeof(st_nlink) 2 end
-macro sizeof(st_ino) 8 end
-macro sizeof(st_uid) 4 end
-macro sizeof(st_gid) 4 end
-macro sizeof(st_rdev) 4 end
-macro sizeof(st_atimespec) 16 end
-macro sizeof(st_mtimespec) 16 end
-macro sizeof(st_ctimespec) 16 end
-macro sizeof(st_size) 8 end
-macro sizeof(st_blocks) 8 end
-macro sizeof(st_blksize) 4 end
-macro sizeof(st_flags) 4 end
-macro sizeof(st_gen) 4 end
-macro sizeof(st_lspare) 4 end
-macro sizeof(st_qspare) 16 end
+macro sizeof(st_dev) sizeof(u32) end
+macro sizeof(st_mode) sizeof(u16) end
+macro sizeof(st_nlink) sizeof(u16) end
+macro sizeof(st_ino) sizeof(u64) end
+macro sizeof(st_uid) sizeof(u32) end
+macro sizeof(st_gid) sizeof(u32) end
+macro sizeof(st_rdev) sizeof(u32) end
+macro sizeof(st_atimespec) sizeof(timespec) end
+macro sizeof(st_mtimespec) sizeof(timespec) end
+macro sizeof(st_ctimespec) sizeof(timespec) end
+macro sizeof(st_size) sizeof(u64) end
+macro sizeof(st_blocks) sizeof(u64) end
+macro sizeof(st_blksize) sizeof(u32) end
+macro sizeof(st_flags) sizeof(u32) end
+macro sizeof(st_gen) sizeof(u32) end
+macro sizeof(st_lspare) sizeof(u32) end
+macro sizeof(st_qspare) sizeof(u64) 2 * end
 
-
-// mmap args
-macro MAP_PRIVATE 2 end
-macro PROT_READ 1 end
-
-
-macro puts stdout write drop end
-macro putsln puts "\n" puts end
-macro eputs stderr write drop end
-macro eputsln eputs "\n" eputs end
-
-macro inc8
-    dup @8 1 + swap !8
-end
-
-macro dec8
-    dup @8 1 - swap !8
-end
-
-// struct Str {
-//   length: uint64 (8 bytes)
-//   data: char* (8 bytes)
-// }
-
+// Str constants
 macro sizeof(Str) 16 end
 macro Str.length 0 + end
 macro Str.data 8 + end
-macro !Str.length Str.length !8 end
-macro !Str.data Str.data !8 end
-macro @Str.length Str.length @8 end
-macro @Str.data Str.data @8 ->ptr end
 
-macro @Str // str: Str -> int ptr
+// putd proc constant
+macro PUTD_BUFFER_CAP 32 end
+
+// Standard Procedure Definitions
+
+// stack operations
+proc dup2 over over end
+proc drop2 drop drop end
+
+// math operations
+proc % dup2 / * - end
+
+// syscall wrappers
+proc write SYS_WRITE syscall3 end
+proc read SYS_READ syscall3 end
+proc exit SYS_EXIT syscall1 drop end
+proc open SYS_OPEN syscall2 end
+proc close SYS_CLOSE syscall1 end
+proc fstat64 SYS_FSTAT64 syscall2 end
+proc mmap SYS_MMAP syscall6 end
+
+// write syscall wrappers
+proc puts stdout write drop end
+proc putsln puts "\n" puts end
+proc eputs stderr write drop end
+proc eputsln eputs "\n" eputs end
+
+// memory manipulations
+proc inc8 dup @8 1 + swap !8 end
+proc dec8 dup @8 1 - swap !8 end
+
+proc not
+    ->int bnot 1 and ->bool
+end
+
+proc isdigit
+    '0' >=
+    over '9' <=
+    and
+end
+
+// Str procs
+proc !Str.length Str.length !8 end
+proc !Str.data Str.data !8 end
+proc @Str.length Str.length @8 end
+proc @Str.data Str.data @8 ->ptr end
+
+proc @Str // str: Str -> int ptr
     dup @Str.length swap @Str.data
 end
 
-macro !Str // n: int, s: ptr, str: Str -> None
+proc !Str // n: int, s: ptr, str: Str -> None
     rot over
     !Str.length
     !Str.data
 end
 
 // Remove left most character from s
-macro Str.chop() // s: Str -> None
+proc Str.chop() // s: Str -> None
     dup Str.length dec8
     Str.data inc8
 end
 
-macro Str.chop_line() // line: Str input: Str -> None
+proc Str.chop_line() // line: Str input: Str -> None
     dup2 Str.data @8 swap Str.data !8
     over Str.length 0 swap !8
     while
@@ -127,7 +153,7 @@ macro Str.chop_line() // line: Str input: Str -> None
     drop2
 end
 
-macro Str.chop_word() // word: Str input: Str -> None
+proc Str.chop_word() // word: Str input: Str -> None
     dup2 Str.data @8 swap Str.data !8
     over Str.length 0 swap !8
     while
@@ -146,7 +172,7 @@ macro Str.chop_word() // word: Str input: Str -> None
     drop2
 end
 
-macro Str.left_strip() // input: Str -> None
+proc Str.left_strip() // input: Str -> None
     while
         if dup Str.length @8 0 > do
             dup Str.data @8 ->ptr @ ' ' ==
@@ -160,7 +186,7 @@ end
 
 memory streq_a sizeof(Str) end
 memory streq_b sizeof(Str) end
-macro Str.equal() // n1: int, s1: ptr, n2: int, s2: ptr -> bool
+proc Str.equal() // n1: int, s1: ptr, n2: int, s2: ptr -> bool
     streq_a !Str
     streq_b !Str
     if streq_a @Str.length streq_b @Str.length == do
@@ -180,12 +206,14 @@ macro Str.equal() // n1: int, s1: ptr, n2: int, s2: ptr -> bool
 end
 
 memory parse_int_var sizeof(Str) end
-macro Str.parse_int() // n: int, s: ptr -> int
+proc Str.parse_int() // n: int, s: ptr -> int
     parse_int_var !Str
     0 0 while dup parse_int_var @Str.length < do
         dup parse_int_var @Str.data + @
         if dup isdigit not do
-            report_error "Unknown word: " eputs word @Str eputsln
+            // TODO: Fix error reporting for photon.phtn
+            // report_error "Unknown word: " eputs word @Str eputsln
+            "Error: Unknown word" eputs
             1 exit
         end
         '0' - rot +
@@ -194,13 +222,13 @@ macro Str.parse_int() // n: int, s: ptr -> int
     end drop
 end
 
-macro strlen
+proc strlen
    dup
    while dup @ 0 != do 1 + end
    swap -
 end
 
-macro streq // str1: ptr str2: ptr -> bool
+proc streq // str1: ptr str2: ptr -> bool
     while
         if over @ 0 != over @ 0 != and do
             dup2 @ swap @ ==
@@ -213,24 +241,13 @@ macro streq // str1: ptr str2: ptr -> bool
     @ 0 == swap @ 0 == and
 end
 
-macro argv[n]
+proc argv[n]
     8 * argv + @8 ->ptr
 end
 
-macro not
-    ->int bnot 1 and ->bool
-end
-
-macro isdigit
-    '0' >=
-    over '9' <=
-    and
-end
-
-macro PUTD_BUFFER_CAP 32 end
 memory putd_buffer PUTD_BUFFER_CAP end
 // puts int into stdout
-macro putd
+proc putd
   if dup 0 == do
     "0" puts
   else
@@ -247,7 +264,7 @@ macro putd
 end
 
 // puts int into stderr
-macro eputd
+proc eputd
   if dup 0 == do
     "0" puts
   else
@@ -262,8 +279,3 @@ macro eputd
   end
   drop
 end
-
-macro dup2 over over end
-macro drop2 drop drop end
-
-macro % dup2 / * - end
