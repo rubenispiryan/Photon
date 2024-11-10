@@ -165,6 +165,7 @@ class Token:
     name: str
     expanded_from: Optional['Token'] = None
     expanded_count: int = 0
+    traceback_stack: Optional[List['Token']] = None
 
 
 @dataclass
@@ -287,21 +288,31 @@ def traceback_message(frame: int = 1) -> None:
 
 def raise_error(message: str, place: Loc | Token, frame: int = 2) -> NoReturn:
     traceback_message(frame=frame)
-    if isinstance(place, Token):
-        i = 0
-        expanded_count = place.expanded_count
-        expand_place = place
-        while i < MACRO_TRACEBACK_LIMIT and i < expanded_count:
-            assert expand_place.expanded_from is not None, 'Bug in macro expansion count'
-            location = expand_place.expanded_from.loc
-            if location.filename[:2] != './':
-                location.filename = './' + location.filename
-            notify_user(f'Operation expanded from macro: {expand_place.expanded_from.value}',
-                        loc=location)
-            expand_place = expand_place.expanded_from
-            i += 1
-        place = place.loc
-    print(make_log_message('[ERROR] ' + message, place), file=sys.stderr)
+    current_place = place
+    if isinstance(current_place, Token):
+        traceback_stack = current_place.traceback_stack
+        if traceback_stack is None:
+            traceback_stack = []
+        depth_count = len(traceback_stack) + 1
+        while depth_count > 0:
+            i = 0
+            expanded_count = current_place.expanded_count
+            expand_place = current_place
+            while i < MACRO_TRACEBACK_LIMIT and i < expanded_count:
+                assert expand_place.expanded_from is not None, 'Bug in macro expansion count'
+                location = expand_place.expanded_from.loc
+                if location.filename[:2] != './':
+                    location.filename = './' + location.filename
+                notify_user(f'Operation expanded from macro: {expand_place.expanded_from.value}',
+                            loc=location)
+                expand_place = expand_place.expanded_from
+                i += 1
+            if len(traceback_stack) > 0:
+                current_place = traceback_stack.pop()
+                notify_user(f'Operation expanded from proc: {current_place.value}',
+                            loc=current_place.loc)
+            depth_count -= 1
+    print(make_log_message('[ERROR] ' + message, place.loc), file=sys.stderr)
     exit(1)
 
 
@@ -335,9 +346,11 @@ def type_check_program(program: Program, debug: bool = False) -> None:
     stack: DataTypeStack = []
     block_stack: List[Tuple[DataTypeStack, Op]] = []
     return_stack: List[int] = []
+    traceback_stack: List[Token] = []
     i = 0
     while i < len(program.ops):
         op = program.ops[i]
+        op.token.traceback_stack = traceback_stack
         assert len(OpType) == 13, 'Exhaustive handling of operations in type check'
         if op.type == OpType.PUSH_INT:
             assert type(op.operand) == int, 'Value for `PUSH_INT` must be `int`'
@@ -425,11 +438,13 @@ def type_check_program(program: Program, debug: bool = False) -> None:
             i = op.addr
         elif op.type == OpType.CALL:
             return_stack.append(i)
+            traceback_stack.append(op.token)
             assert type(op.addr) == int, 'Jmp addr must be an int'
             i = op.addr
         elif op.type == OpType.RET:
             assert len(return_stack) > 0, '[BUG] no return address'
             i = return_stack.pop()
+            traceback_stack.pop()
         elif op.type == OpType.INTRINSIC:
             assert len(Intrinsic) == 39, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
@@ -1452,6 +1467,7 @@ class Parsing:
             if token.value in self.macros:
                 assert type(token.value) == str, 'Compiler Error: non string macro name was saved'
                 current_macro = self.macros[token.value]
+                # TODO: this expanded_count is not related to expanded_count of Token
                 current_macro.expanded_count += 1
                 if current_macro.expanded_count > MACRO_EXPANSION_LIMIT:
                     raise_error(f'Expansion limit reached for macro: {token.value}', current_macro.loc)
