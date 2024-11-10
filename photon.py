@@ -288,30 +288,32 @@ def traceback_message(frame: int = 1) -> None:
 
 def raise_error(message: str, place: Loc | Token, frame: int = 2) -> NoReturn:
     traceback_message(frame=frame)
+    if not isinstance(place, Token):
+        print(make_log_message('[ERROR] ' + message, place), file=sys.stderr)
+        exit(1)
     print(make_log_message('[ERROR] ' + message, place.loc), file=sys.stderr)
-    if isinstance(place, Token):
-        traceback_stack = place.traceback_stack
-        if traceback_stack is None:
-            traceback_stack = []
-        depth_count = len(traceback_stack) + 1
-        while depth_count > 0:
-            i = 0
-            expanded_count = place.expanded_count
-            expand_place = place
-            while i < MACRO_TRACEBACK_LIMIT and i < expanded_count:
-                assert expand_place.expanded_from is not None, 'Bug in macro expansion count'
-                location = expand_place.expanded_from.loc
-                if location.filename[:2] != './':
-                    location.filename = './' + location.filename
-                notify_user(f'Operation expanded from macro: {expand_place.expanded_from.value}',
-                            loc=location)
-                expand_place = expand_place.expanded_from
-                i += 1
-            if len(traceback_stack) > 0:
-                place = traceback_stack.pop()
-                notify_user(f'Operation expanded from proc: {place.value}',
-                            loc=place.loc)
-            depth_count -= 1
+    traceback_stack = place.traceback_stack
+    if traceback_stack is None:
+        traceback_stack = []
+    depth_count = len(traceback_stack) + 1
+    while depth_count > 0:
+        i = 0
+        expanded_count = place.expanded_count
+        expand_place = place
+        while i < MACRO_TRACEBACK_LIMIT and i < expanded_count:
+            assert expand_place.expanded_from is not None, 'Bug in macro expansion count'
+            location = expand_place.expanded_from.loc
+            if location.filename[:2] != './':
+                location.filename = './' + location.filename
+            notify_user(f'Operation expanded from macro: {expand_place.expanded_from.value}',
+                        loc=location)
+            expand_place = expand_place.expanded_from
+            i += 1
+        if len(traceback_stack) > 0:
+            place = traceback_stack.pop()
+            notify_user(f'Operation expanded from proc: {place.value}',
+                        loc=place.loc)
+        depth_count -= 1
     exit(1)
 
 
