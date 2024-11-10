@@ -649,8 +649,8 @@ STDOUT:
 Error message originated inside: type_check_program
 Error message originated inside: ensure_argument_count
 Not enough arguments for: syscall3, found: 3 but required: 4
-Operation expanded from macro: write
-Operation expanded from macro: puts
+Operation expanded from proc: write
+Operation expanded from proc: puts
 Exit code: 1
 end_./examples/exceptions/cstring_puts_without_len.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
 -
@@ -663,3 +663,4 @@ STDOUT:
 Filename is required
 Exit code: 1
 end_./examples/split_file.phtn-#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#-
+-
