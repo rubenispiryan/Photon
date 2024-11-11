@@ -95,7 +95,7 @@ def create_examples() -> None:
         create_example(filename)
 
 
-def check_examples(debug: bool = False) -> dict[str, str]:
+def check_examples(verbose: bool = False) -> dict[str, str]:
     filenames = filter(lambda x: x.endswith('.phtn'), get_files('./examples'))
     summary = {}
     for filename in filenames:
@@ -109,7 +109,7 @@ def check_examples(debug: bool = False) -> dict[str, str]:
         simulated_out = execute('sim', filename, argv=input_args, stdin=stdin)
         compiled_out = execute('com', filename, flags='--run', argv=input_args, stdin=stdin)
         if compiled_out != expected:
-            if debug:
+            if verbose:
                 print(
                     f'Expected:\n'
                     f'  {expected}\n'
@@ -118,7 +118,7 @@ def check_examples(debug: bool = False) -> dict[str, str]:
             print(f'Compilation and Test of {filename} do not match', file=sys.stderr)
             summary[filename] = 'COM:\n' + compiled_out
         elif simulated_out != expected:
-            if debug:
+            if verbose:
                 print(
                     f'Expect:\n'
                     f'{expected}\n'
@@ -167,10 +167,10 @@ def record_stdin(arg_filenames: list[str]) -> None:
 
 # TODO: Some examples cannot be simulated
 if __name__ == '__main__':
-    deb = '-d' in sys.argv or '--debug' in sys.argv
+    verb = '-v' in sys.argv or '--verbose' in sys.argv
     reset = '--reset' in sys.argv
-    if len(sys.argv) == 1 or len(sys.argv) == 2 and deb:
-        print_summary(check_examples(deb))
+    if len(sys.argv) == 1 or len(sys.argv) == 2 and verb:
+        print_summary(check_examples(verb))
     elif len(sys.argv) > 1 and sys.argv[1] == '--snapshot':
         if not os.path.exists(TEST_FILE_NAME) or reset:
             create_expected_file(TEST_FILE_NAME)
