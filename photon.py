@@ -1440,12 +1440,15 @@ def compile_program(program: Program) -> None:
 
 
 def usage_help() -> None:
-    print('Usage: photon.py <SUBCOMMAND> <FLAGS> <FILENAME>')
+    print('Usage: photon.py <SUBCOMMAND> <FILENAME> <FLAGS>')
     print('Subcommands:')
     print('     sim     Simulate the program in a macos little endian environment')
     print('     flow    Generate a control flow graph for the given program')
     print('     com     Compile the program to arm 64-bit assembly')
-    print('         --run   Used with `com` to run immediately')
+    print('Flags:')
+    print('         [-d | --debug]  Use the compiler in debug mode')
+    print('         --unsafe        Disable type checking')
+    print('         --run           Used with `com` to run immediately')
 
 
 class Parsing:
