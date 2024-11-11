@@ -178,19 +178,19 @@ not behave as logical `not`, there is a logical
 
 #### Memory
 
-| Name     | Signature                    | Description                                                                  |
-|----------|------------------------------|------------------------------------------------------------------------------|
-| `!`      | `[byte: int] [addr: ptr] ->` | store a given byte at the address on the stack.                              |
-| `@`      | `[addr: ptr] -> [byte: int]` | load a byte from the address on the stack.                                   |
-| `!2`     | `[byte: int] [addr: ptr] ->` | store a 2-byte word at the address on the stack.                             |
-| `@2`     | `[addr: ptr] -> [byte: int]` | load a 2-byte word from the address on the stack.                            |
-| `!4`     | `[byte: int] [addr: ptr] ->` | store a 4-byte word at the address on the stack.                             |
-| `@4`     | `[addr: ptr] -> [byte: int]` | load a 4-byte word from the address on the stack.                            |
-| `!8`     | `[byte: int] [addr: ptr] ->` | store an 8-byte word at the address on the stack.                            |
-| `@8`     | `[addr: ptr] -> [byte: int]` | load an 8-byte word from the address on the stack.                           |
-| `->int`  | `[a: T] -> [a: int]`         | cast the element on top of the stack to `int`, where `T` is `bool` or `int`  |
-| `->bool` | `[a: T] -> [a: bool]`        | cast the element on top of the stack to `bool`, where `T` is `bool` or `int` |
-| `->ptr`  | `[a: T] -> [a: ptr]`         | cast the element on top of the stack to `ptr`, where `T` is `ptr` or `int`   |
+| Name&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Signature                    | Description                                                                  |
+|------------------------------------------|------------------------------|------------------------------------------------------------------------------|
+| `!`                                      | `[byte: int] [addr: ptr] ->` | store a given byte at the address on the stack.                              |
+| `@`                                      | `[addr: ptr] -> [byte: int]` | load a byte from the address on the stack.                                   |
+| `!2`                                     | `[byte: int] [addr: ptr] ->` | store a 2-byte word at the address on the stack.                             |
+| `@2`                                     | `[addr: ptr] -> [byte: int]` | load a 2-byte word from the address on the stack.                            |
+| `!4`                                     | `[byte: int] [addr: ptr] ->` | store a 4-byte word at the address on the stack.                             |
+| `@4`                                     | `[addr: ptr] -> [byte: int]` | load a 4-byte word from the address on the stack.                            |
+| `!8`                                     | `[byte: int] [addr: ptr] ->` | store an 8-byte word at the address on the stack.                            |
+| `@8`                                     | `[addr: ptr] -> [byte: int]` | load an 8-byte word from the address on the stack.                           |
+| `->int`                                  | `[a: T] -> [a: int]`         | cast the element on top of the stack to `int`, where `T` is `bool` or `int`  |
+| `->bool`                                 | `[a: T] -> [a: bool]`        | cast the element on top of the stack to `bool`, where `T` is `bool` or `int` |
+| `->ptr`                                  | `[a: T] -> [a: ptr]`         | cast the element on top of the stack to `ptr`, where `T` is `ptr` or `int`   |
 
 #### System
 
