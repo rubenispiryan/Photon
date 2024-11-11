@@ -9,10 +9,10 @@ in Python.
 - [x] Executable
 - [x] Stack-based
 - [x] [Turing Complete (Shown by Rule 110 Implementation)](./examples/rule110.phtn)
+- [x] Static Type Checking
 
 Planned:
-- [ ] Static Type Checking
-- [ ] Self-Hosted
+- [ ] Self-Hosted (in progress)
 
 ## Usage
 
