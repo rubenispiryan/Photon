@@ -209,3 +209,9 @@ arg1 ... argn SYSCALL_NUMBER syscall<n> -> [return_code: int]
 
 - `if <condition> do <then-branch> else <else-branch> end` - pops the element on top of the stack and if the element is not `0` executes the `<then-branch>`, otherwise `<else-branch>`.
 - `while <condition> do <body> end` - keeps executing both `<condition>` and `<body>` until `<condition>` produces `0` at the top of the stack. Checking the result of the `<condition>` removes it from the stack.
+
+### Memory Definition
+
+Memory sections can be defined using `memory <name> <size> end`. This will
+allocate memory of the specified amount and the absolute address
+of the start of this memory section will be pushed upon encountering `<name>`.
