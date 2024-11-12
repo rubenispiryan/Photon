@@ -1,6 +1,11 @@
 include "std.phtn"
 
-macro compile_header
+// Constants
+macro SIM_STACK_CAP 1024 end
+macro OP_STACK_CAP 1024 end
+macro MEM_CAPACITY 640000 end
+
+proc compile_header
     ".section __TEXT, __text\n" puts
     ".global _start\n" puts
     ".align 3\n" puts
@@ -52,7 +57,7 @@ macro compile_header
     "   ret\n" puts
 end
 
-macro compile_footer
+proc compile_footer
     ".section __DATA, __data\n" puts
     "   argc: .quad 0\n" puts
     "   argv: .quad 0\n" puts
@@ -60,11 +65,6 @@ macro compile_footer
     "mem:\n" puts
     "   .skip " puts MEM_CAPACITY putd "\n" puts
 end
-
-// Constants
-macro SIM_STACK_CAP 1024 end
-macro OP_STACK_CAP 1024 end
-macro MEM_CAPACITY 640000 end
 
 // Operation Enum
 macro OP_PUSH_INT 0 end
@@ -86,17 +86,17 @@ macro sizeof(Loc) 24 end
 macro Loc.filename 0 end
 macro Loc.line_num 8 end
 macro Loc.col_num 16 end
-macro @Loc.filename Loc.filename + @8 end
-macro @Loc.line_num Loc.line_num + @8 end
-macro @Loc.col_num Loc.col_num + @8 end
-macro @Loc
+proc @Loc.filename Loc.filename + @8 end
+proc @Loc.line_num Loc.line_num + @8 end
+proc @Loc.col_num Loc.col_num + @8 end
+proc @Loc
     dup @Loc.filename swap
     dup @Loc.line_num swap
     @Loc.col_num
 end
-macro !Loc.filename Loc.filename + !8 end
-macro !Loc.line_num Loc.line_num + !8 end
-macro !Loc.col_num Loc.col_num + !8 end
+proc !Loc.filename Loc.filename + !8 end
+proc !Loc.line_num Loc.line_num + !8 end
+proc !Loc.col_num Loc.col_num + !8 end
 
 // struct Op {
 //   type:    uint64 (8 bytes)
@@ -106,12 +106,12 @@ macro !Loc.col_num Loc.col_num + !8 end
 macro sizeof(Op) 16 end
 macro Op.type 0 end
 macro Op.operand 8 end
-macro !Op.type Op.type + !8 end
-macro !Op.operand Op.operand + !8 end
-macro @Op.type Op.type + @8 end
-macro @Op.operand Op.operand + @8 end
-macro !Op !Op.operand !Op.type end
-macro @Op dup @Op.type swap @Op.operand end
+proc !Op.type Op.type + !8 end
+proc !Op.operand Op.operand + !8 end
+proc @Op.type Op.type + @8 end
+proc @Op.operand Op.operand + @8 end
+proc !Op !Op.operand !Op.type end
+proc @Op dup @Op.type swap @Op.operand end
 
 // Memory layout
 memory fd sizeof(ptr) end
@@ -126,13 +126,13 @@ memory op_stack_count sizeof(u64) end
 memory op_stack sizeof(Op) OP_STACK_CAP * end
 
 // expects: type:int operand:int
-macro push_op
+proc push_op
     op_stack_count @8 sizeof(Op) * op_stack +
     dup rot swap !Op
     op_stack_count inc8
 end
 
-macro Loc.puts() // loc: Loc -> None
+proc Loc.puts() // loc: Loc -> None
     @Loc
     rot dup ->ptr strlen swap puts ":" puts
     "[" puts
@@ -141,7 +141,7 @@ macro Loc.puts() // loc: Loc -> None
     "] " puts
 end
 
-macro Loc.eputs() // loc: Loc -> None
+proc Loc.eputs() // loc: Loc -> None
     @Loc
     rot dup ->ptr strlen swap eputs ":" eputs
     "[" eputs
@@ -151,13 +151,20 @@ macro Loc.eputs() // loc: Loc -> None
 end
 
 
-macro report_error // n: int, s: ptr -> None
+proc report_error // n: int, s: ptr -> None
     loc Loc.eputs()
     "[ERROR] " eputs
 end
 
+proc print_usage
+    "Usage: photon.py <SUBCOMMAND>\n" puts
+    "Subcommands:\n" puts
+    "     sim <FILENAME>     Simulate the program in a macos little endian environment\n" puts
+    "     com <FILENAME>     Compile the program to arm 64-bit assembly\n" puts
+end
+
 // Memory map file and save the pointer in content: Str
-macro mmap_file
+proc mmap_file
     if argc 3 < do
         print_usage
         "Filename is required\n" eputs
@@ -199,7 +206,7 @@ macro mmap_file
 end
 
 // value
-macro sim_stack_push
+proc sim_stack_push
     if sim_stack_count @8 SIM_STACK_CAP >= do
         here eputs "[ERROR] data stack overflow in simulation mode" eputs 1 exit
     end
@@ -207,7 +214,7 @@ macro sim_stack_push
     sim_stack_count inc8
 end
 
-macro sim_stack_pop
+proc sim_stack_pop
     if sim_stack_count @8 0 <= do
         here eputs "[ERROR] data stack underflow in simulation mode" eputs 1 exit
     end
@@ -216,7 +223,7 @@ macro sim_stack_pop
 end
 
 // TODO: Add drop3 Intrinsic
-macro assert_op_count // here_len: int here_str: ptr expected_count: int
+proc assert_op_count // here_len: int here_str: ptr expected_count: int
     if dup OP_COUNT != do
         drop
         eputs "Assertion Fail: Exhaustive handling of Op types" eputsln
@@ -224,7 +231,7 @@ macro assert_op_count // here_len: int here_str: ptr expected_count: int
     else drop2 drop end
 end
 
-macro simulate_program
+proc simulate_program
     here 6 assert_op_count
     0 while dup op_stack_count @8 < do
         dup sizeof(Op) * op_stack +
@@ -258,7 +265,7 @@ macro simulate_program
     end drop
 end
 
-macro compile_program
+proc compile_program
     here 6 assert_op_count
     compile_header
     0 while dup op_stack_count @8 < do
@@ -298,7 +305,7 @@ macro compile_program
     compile_footer
 end
 
-macro print_ops
+proc print_ops
     0 while dup op_stack_count @8 < do
         dup sizeof(Op) * op_stack +
         "Type: " puts dup @Op.type putd
@@ -309,7 +316,7 @@ end
 
 // Expects file contents to be in content: Str
 // Expects that line, word are allocated
-macro parse_file_as_op
+proc parse_file_as_op
     here 6 assert_op_count
     2 argv[n] loc !Loc.filename
     0 while content Str.length @8 0 > do
@@ -338,14 +345,7 @@ macro parse_file_as_op
     end drop
 end
 
-macro print_usage
-    "Usage: photon.py <SUBCOMMAND>\n" puts
-    "Subcommands:\n" puts
-    "     sim <FILENAME>     Simulate the program in a macos little endian environment\n" puts
-    "     com <FILENAME>     Compile the program to arm 64-bit assembly\n" puts
-end
-
-macro main
+proc main
     if argc 2 < do
         print_usage
     else
