@@ -71,9 +71,10 @@ macro OP_PUSH_INT 0 end
 macro OP_ADD      1 end
 macro OP_PRINT    2 end
 macro OP_SUB      3 end
-macro OP_DUP      4 end
-macro OP_DROP     5 end
-macro OP_COUNT    6 end
+macro OP_MUL      4 end
+macro OP_DUP      5 end
+macro OP_DROP     6 end
+macro OP_COUNT    7 end
 
 
 // struct Loc {
@@ -232,7 +233,7 @@ proc assert_op_count // here_len: int here_str: ptr expected_count: int
 end
 
 proc simulate_program
-    here 6 assert_op_count
+    here 7 assert_op_count
     0 while dup op_stack_count @8 < do
         dup sizeof(Op) * op_stack +
         if dup @Op.type OP_PUSH_INT == do
@@ -247,6 +248,11 @@ proc simulate_program
             sim_stack_pop
             swap
             -
+            sim_stack_push
+        elif dup @Op.type OP_MUL == do
+            sim_stack_pop
+            sim_stack_pop
+            *
             sim_stack_push
         elif dup @Op.type OP_PRINT == do
             sim_stack_pop
@@ -266,8 +272,9 @@ proc simulate_program
 end
 
 proc compile_program
-    here 6 assert_op_count
+    here 7 assert_op_count
     compile_header
+    "   ;; -- start --\n" puts
     0 while dup op_stack_count @8 < do
         dup sizeof(Op) * op_stack +
         if dup @Op.type OP_PUSH_INT == do
@@ -285,6 +292,12 @@ proc compile_program
             "   pop x0\n" puts
             "   pop x1\n" puts
             "   sub x0, x1, x0\n" puts
+            "   push x0\n" puts
+        elif dup @Op.type OP_MUL == do
+            "   ;; -- mul --\n" puts
+            "   pop x0\n" puts
+            "   pop x1\n" puts
+            "   mul x0, x0, x1\n" puts
             "   push x0\n" puts
         elif dup @Op.type OP_PRINT == do
             "   ;; -- print --\n" puts
@@ -317,7 +330,7 @@ end
 // Expects file contents to be in content: Str
 // Expects that line, word are allocated
 proc parse_file_as_op
-    here 6 assert_op_count
+    here 7 assert_op_count
     2 argv[n] loc !Loc.filename
     0 while content Str.length @8 0 > do
         dup loc !Loc.line_num
@@ -330,6 +343,8 @@ proc parse_file_as_op
                 OP_ADD 0 push_op
             elif word @Str "-" Str.equal() do
                 OP_SUB 0 push_op
+            elif word @Str "*" Str.equal() do
+                OP_MUL 0 push_op
             elif word @Str "print" Str.equal() do
                 OP_PRINT 0 push_op
             elif word @Str "dup" Str.equal() do
