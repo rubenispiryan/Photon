@@ -251,6 +251,10 @@ proc putd
   if dup 0 == do
     "0" puts
   else
+    if dup 0 < do
+      "-" puts
+      0 swap -
+    end
     putd_buffer PUTD_BUFFER_CAP +
     while over 0 > do
       1 - dup rot
@@ -266,8 +270,12 @@ end
 // puts int into stderr
 proc eputd
   if dup 0 == do
-    "0" puts
+    "0" eputs
   else
+    if dup 0 < do
+      "-" eputs
+      0 swap -
+    end
     putd_buffer PUTD_BUFFER_CAP +
     while over 0 > do
       1 - dup rot
