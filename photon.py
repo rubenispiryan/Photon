@@ -847,6 +847,9 @@ def type_check_program(program: Program, debug: bool = False) -> None:
     assert len(block_stack) == 0, '[BUG] Block Stack Not Empty'
     if len(stack) != 0:
         current_stack = list(map(lambda x: x[0], stack))
+        if debug:
+            for item_id in range(len(stack)):
+                notify_argument_origin(stack[item_id][1], order=item_id + 1)
         raise_error(f'Unhandled data on the stack: {current_stack}', stack[-1][1])
 
 
@@ -1440,7 +1443,7 @@ def compile_program(program: Program) -> None:
 
 
 def usage_help() -> None:
-    print('Usage: photon.py <SUBCOMMAND> <FILENAME> <FLAGS>')
+    print('Usage: photon.py <SUBCOMMAND> <FILENAME> [<FLAGS>]')
     print('Subcommands:')
     print('     sim     Simulate the program in a macos little endian environment')
     print('     flow    Generate a control flow graph for the given program')
