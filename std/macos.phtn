@@ -1,5 +1,6 @@
 // Syscalls
 macro SYS_EXIT 1 end
+macro SYS_FORK 2 end
 macro SYS_READ 3 end
 macro SYS_WRITE 4 end
 macro SYS_OPEN 5 end
@@ -13,7 +14,24 @@ macro O_WRONLY 1 end
 macro O_RDWR 2 end
 
 // Flags for open()
-macro O_CREAT 64 end
-macro O_EXCL 128 end
-macro O_TRUNC 512 end
-macro O_APPEND 1024 end
+macro O_APPEND 8 end
+macro O_CREAT 512 end
+macro O_TRUNC 1024 end
+macro O_EXCL 2048 end
+
+// Modes for open()
+macro S_IRWXU  448 end
+macro S_IRUSR  256 end
+macro S_IWUSR  128 end
+macro S_IXUSR  64  end
+macro S_IRWXG  56  end
+macro S_IRGRP  32  end
+macro S_IWGRP  16  end
+macro S_IXGRP  8   end
+macro S_IRWXO  7   end
+macro S_IROTH  4   end
+macro S_IWOTH  2   end
+macro S_IXOTH  1   end
+
+// Current Working FD
+macro AT_FDCWD -2 end

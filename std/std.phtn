@@ -88,6 +88,7 @@ proc write SYS_WRITE syscall3 end
 proc read SYS_READ syscall3 end
 proc exit SYS_EXIT syscall1 drop end
 proc open SYS_OPEN syscall2 end
+proc open_create SYS_OPEN syscall3 end
 proc close SYS_CLOSE syscall1 end
 proc fstat64 SYS_FSTAT64 syscall2 end
 proc mmap SYS_MMAP syscall6 end
@@ -213,7 +214,7 @@ proc Str.parse_int() // n: int, s: ptr -> int
         if dup isdigit not do
             // TODO: Fix error reporting for photon.phtn
             // report_error "Unknown word: " eputs word @Str eputsln
-            "Error: Unknown word" eputs
+            "[ERROR] Unknown word: " eputs parse_int_var @Str eputsln
             1 exit
         end
         '0' - rot +
