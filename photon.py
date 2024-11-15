@@ -103,6 +103,7 @@ class Intrinsic(Enum):
     STORE4 = auto()
     LOAD8 = auto()
     STORE8 = auto()
+    SYSCALL0 = auto()
     SYSCALL1 = auto()
     SYSCALL2 = auto()
     SYSCALL3 = auto()
@@ -243,6 +244,7 @@ INTRINSIC_NAMES = {
     '@4': Intrinsic.LOAD4,
     '!8': Intrinsic.STORE8,
     '@8': Intrinsic.LOAD8,
+    'syscall0': Intrinsic.SYSCALL0,
     'syscall1': Intrinsic.SYSCALL1,
     'syscall2': Intrinsic.SYSCALL2,
     'syscall3': Intrinsic.SYSCALL3,
@@ -447,7 +449,7 @@ def type_check_program(program: Program, debug: bool = False) -> None:
             i = return_stack.pop()
             traceback_stack.pop()
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 39, 'Exhaustive handling of intrinsics in type check'
+            assert len(Intrinsic) == 40, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -770,6 +772,15 @@ def type_check_program(program: Program, debug: bool = False) -> None:
             elif op.operand == Intrinsic.HERE:
                 stack.append((DataType.INT, op.token))
                 stack.append((DataType.PTR, op.token))
+            elif op.operand == Intrinsic.SYSCALL0:
+                ensure_argument_count(len(stack), op, 1)
+                syscall_type, syscall_loc = stack.pop()
+                if syscall_type != DataType.INT:
+                    if debug:
+                        notify_argument_origin(syscall_loc, order=1)
+                    raise_error(f'Invalid argument types for `{op.name}`: {syscall_type.name}',
+                                op.token)
+                stack.append((DataType.INT, op.token))
             elif op.operand == Intrinsic.SYSCALL1:
                 ensure_argument_count(len(stack), op, 2)
                 syscall_type, syscall_loc = stack.pop()
@@ -930,7 +941,7 @@ def simulate_little_endian_macos(program: Program, input_arguments: List[str]) -
         elif op.type == OpType.RET:
             i = return_stack.pop()
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 39, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 40, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 a = stack.pop()
                 b = stack.pop()
@@ -1212,7 +1223,7 @@ def compile_program(program: Program) -> None:
             write_level1(f'ret')
             write_base(f'ret_{i}:')
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 39, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 40, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -1379,6 +1390,13 @@ def compile_program(program: Program) -> None:
                 if here_text not in allocated_strs:
                     allocated_strs[here_text] = len(strs)
                     strs.append(here_text)
+            elif op.operand == Intrinsic.SYSCALL0:
+                write_level1('pop x16')
+                write_level1('svc #0')
+                write_level1(f'b.cc return_ok_{i}')
+                write_level1('mov x0, #-1')
+                write_base(f'return_ok_{i}:')
+                write_level1('push x0')
             elif op.operand == Intrinsic.SYSCALL1:
                 write_level1('pop x16')
                 write_level1('pop x0')

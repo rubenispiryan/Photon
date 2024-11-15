@@ -5,6 +5,9 @@ macro SYS_READ 3 end
 macro SYS_WRITE 4 end
 macro SYS_OPEN 5 end
 macro SYS_CLOSE 6 end
+macro SYS_WAIT4 7 end
+macro SYS_GETPID 20 end
+macro SYS_EXECVE 59 end
 macro SYS_MMAP 197 end
 macro SYS_FSTAT64 339 end
 
