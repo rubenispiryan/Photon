@@ -1181,9 +1181,9 @@ def simulate_little_endian_macos(program: Program, input_arguments: List[str]) -
         i += 1
 
 
-def compile_program(program: Program) -> None:
+def compile_program(program: Program, out_name: str) -> None:
     assert len(OpType) == 13, 'Exhaustive handling of operators in compilation'
-    out = open('output.s', 'w')
+    out = open(f'{out_name}.s', 'w')
     write_base = write_indent(out, 0)
     write_level1 = write_indent(out, 1)
     asm_setup(write_base, write_level1)
@@ -1962,15 +1962,16 @@ if __name__ == '__main__':
     elif subcommand == 'flow':
         generate_program_control_flow(program_referenced, file_path_arg)
     else:
-        compile_program(program_referenced)
-        exit_code = subprocess.call('as -o output.o output.s', shell=True)
+        out_filename = file_path_arg.split('.')[-2].lstrip('/')
+        compile_program(program_referenced, out_filename)
+        exit_code = subprocess.call(f'as -o {out_filename}.o {out_filename}.s', shell=True)
         if exit_code != 0:
             exit(exit_code)
         exit_code = subprocess.call(
-            'ld -o output output.o', shell=True)
+            f'ld -o {out_filename} {out_filename}.o', shell=True)
         if exit_code != 0:
             exit(exit_code)
         if '--run' in argv:
             args_start = argv.index('--run') + 1
             argv_args = ''.join(argv[args_start:])
-            exit(subprocess.call(f'./output {argv_args}', shell=True))
+            exit(subprocess.call(f'./{out_filename} {argv_args}', shell=True))
