@@ -79,6 +79,7 @@ proc com_setup
 end
 
 proc call_proc // proc_argv: ptr
+    // TODO: create a std proc for converting c-string to photon string literal
     dup @8 ->ptr dup strlen swap putsln
     fork
 
