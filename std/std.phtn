@@ -91,7 +91,7 @@ proc read SYS_READ syscall3 end
 proc open SYS_OPEN syscall2 end
 proc open_create SYS_OPEN syscall3 end
 proc close SYS_CLOSE syscall1 end
-proc wait4 SYS_WAIT4 syscall1 end
+proc wait4 SYS_WAIT4 syscall4 end
 proc getpid SYS_GETPID syscall0 end
 proc execve SYS_EXECVE syscall3 end
 proc fstat64 SYS_FSTAT64 syscall2 end
