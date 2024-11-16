@@ -107,6 +107,7 @@ class Intrinsic(Enum):
     SYSCALL1 = auto()
     SYSCALL2 = auto()
     SYSCALL3 = auto()
+    SYSCALL4 = auto()
     SYSCALL6 = auto()
     ARGC = auto()
     ARGV = auto()
@@ -248,6 +249,7 @@ INTRINSIC_NAMES = {
     'syscall1': Intrinsic.SYSCALL1,
     'syscall2': Intrinsic.SYSCALL2,
     'syscall3': Intrinsic.SYSCALL3,
+    'syscall4': Intrinsic.SYSCALL4,
     'syscall6': Intrinsic.SYSCALL6,
     'argc': Intrinsic.ARGC,
     'argv': Intrinsic.ARGV,
@@ -449,7 +451,7 @@ def type_check_program(program: Program, debug: bool = False) -> None:
             i = return_stack.pop()
             traceback_stack.pop()
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 40, 'Exhaustive handling of intrinsics in type check'
+            assert len(Intrinsic) == 41, 'Exhaustive handling of intrinsics in type check'
             if op.operand == Intrinsic.ADD:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
@@ -824,6 +826,25 @@ def type_check_program(program: Program, debug: bool = False) -> None:
                         f'{(arg1_type.name, arg2_type.name, arg3_type.name, syscall_type.name)}',
                         op.token)
                 stack.append((DataType.INT, op.token))
+            elif op.operand == Intrinsic.SYSCALL4:
+                ensure_argument_count(len(stack), op, 5)
+                syscall_type, syscall_loc = stack.pop()
+                arg4_type, arg4_loc = stack.pop()
+                arg3_type, arg3_loc = stack.pop()
+                arg2_type, arg2_loc = stack.pop()
+                arg1_type, arg1_loc = stack.pop()
+                if syscall_type != DataType.INT:
+                    if debug:
+                        notify_argument_origin(arg1_loc, order=1)
+                        notify_argument_origin(arg2_loc, order=2)
+                        notify_argument_origin(arg3_loc, order=3)
+                        notify_argument_origin(arg4_loc, order=4)
+                        notify_argument_origin(syscall_loc, order=5)
+                    raise_error(
+                        f'Invalid argument types for `{op.name}`: '
+                        f'{(arg1_type.name, arg2_type.name, arg3_type.name, arg4_type.name, syscall_type.name)}',
+                        op.token)
+                stack.append((DataType.INT, op.token))
             elif op.operand == Intrinsic.SYSCALL6:
                 ensure_argument_count(len(stack), op, 7)
                 syscall_type, syscall_loc = stack.pop()
@@ -941,7 +962,7 @@ def simulate_little_endian_macos(program: Program, input_arguments: List[str]) -
         elif op.type == OpType.RET:
             i = return_stack.pop()
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 40, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 41, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 a = stack.pop()
                 b = stack.pop()
@@ -1223,7 +1244,7 @@ def compile_program(program: Program) -> None:
             write_level1(f'ret')
             write_base(f'ret_{i}:')
         elif op.type == OpType.INTRINSIC:
-            assert len(Intrinsic) == 40, 'Exhaustive handling of intrinsics in simulation'
+            assert len(Intrinsic) == 41, 'Exhaustive handling of intrinsics in simulation'
             if op.operand == Intrinsic.ADD:
                 write_level1('pop x0')
                 write_level1('pop x1')
@@ -1419,6 +1440,17 @@ def compile_program(program: Program) -> None:
                 write_level1('pop x0')
                 write_level1('pop x1')
                 write_level1('pop x2')
+                write_level1('svc #0')
+                write_level1(f'b.cc return_ok_{i}')
+                write_level1('mov x0, #-1')
+                write_base(f'return_ok_{i}:')
+                write_level1('push x0')
+            elif op.operand == Intrinsic.SYSCALL4:
+                write_level1('pop x16')
+                write_level1('pop x0')
+                write_level1('pop x1')
+                write_level1('pop x2')
+                write_level1('pop x3')
                 write_level1('svc #0')
                 write_level1(f'b.cc return_ok_{i}')
                 write_level1('mov x0, #-1')
