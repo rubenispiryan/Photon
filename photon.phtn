@@ -29,6 +29,9 @@ memory sim_stack_count sizeof(u64) end
 memory sim_stack sizeof(u64) SIM_STACK_CAP * end
 memory op_stack_count sizeof(u64) end
 memory op_stack sizeof(Op) OP_STACK_CAP * end
+memory as_argv sizeof(ptr) 5 * end
+memory ld_argv sizeof(ptr) 5 * end
+memory empty_env sizeof(ptr) end
 
 proc write_fd // n: int s: ptr
     dup2
@@ -61,15 +64,57 @@ proc writed_fd // n: int
   drop
 end
 
+proc com_setup
+    NULL empty_env !8
+    // TODO: get output filename from input filename
+    "/usr/bin/as\0" as_argv !8
+    "-o\0" as_argv sizeof(ptr) 1 * + !8
+    "output.o\0" as_argv sizeof(ptr) 2 * + !8
+    "output.s\0" as_argv sizeof(ptr) 3 * + !8
+
+    "/usr/bin/ld\0" ld_argv !8
+    "-o\0" ld_argv sizeof(ptr) 1 * + !8
+    "output\0" ld_argv sizeof(ptr) 2 * + !8
+    "output.o\0" ld_argv sizeof(ptr) 3 * + !8
+end
+
+proc call_proc // proc_argv: ptr
+    dup @8 ->ptr dup strlen swap putsln
+    fork
+
+    if dup -1 == do
+        "[ERROR] Could not do fork" eputsln 1 exit
+    end
+
+    if dup getpid == do
+        drop
+        empty_env
+        swap dup @8
+        execve
+        if dup -1 == do
+            "[ERROR] Could not call execve" eputsln 1 exit
+        end
+        drop
+    else
+        NULL swap
+        0    swap
+        NULL swap
+        wait4
+        if dup 0 > not do
+            "[ERROR] Waiting for the process went wrong" eputsln 1 exit
+        end drop2
+    end
+end
+
 proc compile_header
     ".section __TEXT, __text\n" write_fd
     ".global _main\n" write_fd
     ".align 3\n" write_fd
     ".macro push reg1:req\n" write_fd
-    "   str \reg1, [sp, #-16]!\n" write_fd
+    "   str \\reg1, [sp, #-16]!\n" write_fd
     ".endmacro\n" write_fd
     ".macro pop reg1:req\n" write_fd
-    "   ldr \reg1, [sp], #16\n" write_fd
+    "   ldr \\reg1, [sp], #16\n" write_fd
     ".endmacro\n" write_fd
     "print:\n" write_fd
     "   sub     sp, sp,  #48\n" write_fd
@@ -106,6 +151,9 @@ proc compile_header
 end
 
 proc compile_footer
+    "mov x16, #1\n" write_fd
+    "mov x0, #0\n" write_fd
+    "svc #0\n" write_fd
     ".section __DATA, __data\n" write_fd
     "   argc: .quad 0\n" write_fd
     "   argv: .quad 0\n" write_fd
@@ -195,7 +243,7 @@ end
 
 proc create_output_file // output_name: ptr -> fd: int
     S_IRUSR S_IWUSR or
-    O_WRONLY O_CREAT or
+    O_WRONLY O_CREAT or O_TRUNC or
     rot
     open_create
 
@@ -406,9 +454,12 @@ proc main
         elif dup "com\0" streq do
             mmap_file
             parse_file_as_op
-            "output.txt\0" create_output_file
+            "output.s\0" create_output_file
             fd !8
             compile_program
+            com_setup
+            as_argv call_proc
+            ld_argv call_proc
         elif dup "dump\0" streq do
             mmap_file
             parse_file_as_op

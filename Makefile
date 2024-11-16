@@ -11,7 +11,7 @@ output: output.o
 	ld -o output output.o
 
 output.o: output.s
-	as -g -o output.o output.s
+	as -o output.o output.s
 
 sim: photon.py ./$(INPUT).phtn
 	pypy3.10 photon.py sim ./$(INPUT).phtn
