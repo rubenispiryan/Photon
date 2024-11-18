@@ -1,7 +1,5 @@
 .idea
-output*
+output.phtn
 .DS_Store
 __pycache__
 photon
-photon.s
-photon.o
