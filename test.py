@@ -2,10 +2,27 @@ import os
 import re
 import subprocess
 import sys
-from typing import List
+from typing import List, TextIO
 
 TEST_FILE_NAME = 'examples/examples_output.test'
 SEPARATOR = '-#-' * 20
+
+def delete_test_extras(filename: str, verbose: bool) -> None:
+    ext_index = filename.rindex('.')
+    # For the sake of mypy only
+    stderr: TextIO | int | None = None
+    if verbose:
+        stderr = sys.stderr
+    else:
+        stderr = subprocess.DEVNULL
+    result = subprocess.run(f'rm {filename[:ext_index]} {filename[:ext_index]}.s {filename[:ext_index]}.o',
+                            shell=True, stderr=stderr)
+    if not verbose:
+        return None
+    if result.returncode != 0:
+        print(f'No extra test files removed for: {filename}')
+    else:
+        print(f'Extra test files removed for: {filename}')
 
 def process_exception_message(message: str) -> str:
     output = ''
@@ -14,10 +31,12 @@ def process_exception_message(message: str) -> str:
     return output
 
 
-def execute(subcommand: str, filename: str, flags: str = '', argv: str = '', stdin: str ='') -> str:
+def execute(subcommand: str, filename: str, flags: str = '', argv: str = '', stdin: str ='', verbose: bool = False) -> str:
     command = f'pypy3.10 photon.py {subcommand} {filename} {flags} {argv}'
     result = subprocess.run(command, input=stdin.encode('utf-8'), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             shell=True)
+    if subcommand == 'com':
+        delete_test_extras(filename, verbose)
     if result.returncode != 0:
         full_output = result.stderr.decode('utf-8') + result.stdout.decode('utf-8')
         output = process_exception_message(full_output)
@@ -68,14 +87,14 @@ def replace_expected_output(filename: str, expected: str) -> None:
         f.seek(0)
         f.write(replaced_tests)
 
-def create_example(filename: str, argv: str = '', stdin: str = '') -> None:
+def create_example(filename: str, argv: str = '', stdin: str = '', verbose: bool = False) -> None:
     expected_data = read_expected(filename)
     if expected_data and argv == '':
         argv = expected_data['argv']
     if expected_data and stdin == '':
         stdin = expected_data['stdin']
-    simulated_out = execute('sim', filename, argv=argv, stdin=stdin)
-    compiled_out = execute('com', filename, flags='--run', argv=argv, stdin=stdin)
+    simulated_out = execute('sim', filename, argv=argv, stdin=stdin, verbose=verbose)
+    compiled_out = execute('com', filename, flags='--run', argv=argv, stdin=stdin, verbose=verbose)
     assert compiled_out == simulated_out, (
         f'Output from compilation:\n'
         f'  {compiled_out}\n'
@@ -89,10 +108,10 @@ def create_example(filename: str, argv: str = '', stdin: str = '') -> None:
         add_expected_output(TEST_FILE_NAME, snapshot_output)
     print(f'Snapshot of {filename} added successfully')
 
-def create_examples() -> None:
+def create_examples(verbose: bool) -> None:
     filenames = filter(lambda x: x.endswith('.phtn'), get_files('./examples'))
     for filename in filenames:
-        create_example(filename)
+        create_example(filename, verbose=verbose)
 
 
 def check_examples(verbose: bool = False) -> dict[str, str]:
@@ -106,8 +125,8 @@ def check_examples(verbose: bool = False) -> dict[str, str]:
         expected = test_data['expected_text']
         input_args = test_data['argv']
         stdin = test_data['stdin']
-        simulated_out = execute('sim', filename, argv=input_args, stdin=stdin)
-        compiled_out = execute('com', filename, flags='--run', argv=input_args, stdin=stdin)
+        simulated_out = execute('sim', filename, argv=input_args, stdin=stdin, verbose=verbose)
+        compiled_out = execute('com', filename, flags='--run', argv=input_args, stdin=stdin, verbose=verbose)
         if compiled_out != expected:
             if verbose:
                 print(
@@ -149,21 +168,21 @@ def print_summary(summary: dict[str, str]) -> None:
           f' Failed: {len(summary) - count_passed - undefined_count}, Undefined: {undefined_count}')
 
 
-def record_argv(arg_filenames: list[str]) -> None:
+def record_argv(arg_filenames: list[str], verbose: bool) -> None:
     filenames = set(filter(lambda x: x.endswith('.phtn'), get_files('./examples')))
     for arg_filename in arg_filenames:
         if arg_filename in filenames:
             argv = input('Enter argv: ')
-            create_example(arg_filename, argv=argv)
+            create_example(arg_filename, argv=argv, verbose=verbose)
 
 
-def record_stdin(arg_filenames: list[str]) -> None:
+def record_stdin(arg_filenames: list[str], verbose: bool) -> None:
     filenames = set(filter(lambda x: x.endswith('.phtn'), get_files('./examples')))
     for arg_filename in arg_filenames:
         if arg_filename in filenames:
             print("Enter stdin (press Ctrl+D to finish):")
             stdin = sys.stdin.read()
-            create_example(arg_filename, stdin=stdin)
+            create_example(arg_filename, stdin=stdin, verbose=verbose)
 
 # TODO: Some examples cannot be simulated
 if __name__ == '__main__':
@@ -174,10 +193,10 @@ if __name__ == '__main__':
     elif len(sys.argv) > 1 and sys.argv[1] == '--snapshot':
         if not os.path.exists(TEST_FILE_NAME) or reset:
             create_expected_file(TEST_FILE_NAME)
-        create_examples()
+        create_examples(verb)
     elif len(sys.argv) > 2 and sys.argv[1] == '--record-argv':
-        record_argv(sys.argv[2:])
+        record_argv(sys.argv[2:], verbose=verb)
     elif len(sys.argv) > 2 and sys.argv[1] == '--record-stdin':
-        record_stdin(sys.argv[2:])
+        record_stdin(sys.argv[2:], verbose=verb)
     else:
-        print(f'Usage: {sys.argv[0]} [--snapshot] [-d | --debug] [--record-(argv|stdin) <filename>]')
+        print(f'Usage: {sys.argv[0]} [--snapshot] [-v | --verbose] [--record-(argv|stdin) <filename>]')
