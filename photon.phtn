@@ -416,11 +416,11 @@ proc parse_file_as_op
     main_filename @8 ->ptr loc !Loc.filename
     0 while content Str.length @8 0 > do
         dup loc !Loc.line_num
-        line content Str.chop_line()
+        line content '\n' Str.chop_until()
         0 while line Str.length @8 0 > do
             dup loc !Loc.col_num
             line Str.left_strip()
-            word line Str.chop_word()
+            word line ' ' Str.chop_until()
             if word @Str "+" Str.equal() do
                 OP_ADD 0 push_op
             elif word @Str "-" Str.equal() do

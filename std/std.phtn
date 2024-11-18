@@ -139,31 +139,14 @@ proc Str.chop() // s: Str -> None
     Str.data inc8
 end
 
-proc Str.chop_line() // line: Str input: Str -> None
+memory strchop_delim sizeof(u64) end
+proc Str.chop_until() // line: Str input: Str delimiter: int -> None
+    strchop_delim !8
     dup2 Str.data @8 swap Str.data !8
     over Str.length 0 swap !8
     while
         if dup Str.length @8 0 > do
-            dup Str.data @8 ->ptr @ '\n' !=
-        else
-            false
-        end
-    do
-        dup Str.chop()
-        over Str.length inc8
-    end
-    if dup Str.length @8 0 > do
-        dup Str.chop()
-    end
-    drop2
-end
-
-proc Str.chop_word() // word: Str input: Str -> None
-    dup2 Str.data @8 swap Str.data !8
-    over Str.length 0 swap !8
-    while
-        if dup Str.length @8 0 > do
-            dup Str.data @8 ->ptr @ ' ' !=
+            dup Str.data @8 ->ptr @ strchop_delim @8 !=
         else
             false
         end

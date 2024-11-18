@@ -46,10 +46,10 @@ end
 
 
 while content Str.length @8 0 > do
-    line content Str.chop_line()
+    line content '\n' Str.chop_until()
     while line Str.length @8 0 > do
         line Str.left_strip()
-        word line Str.chop_word()
+        word line ' ' Str.chop_until()
         word @Str putsln
     end
 end
