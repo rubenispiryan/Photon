@@ -133,6 +133,16 @@ proc !Str // n: int, s: ptr, str: Str -> None
     !Str.data
 end
 
+// Get character from string at given index
+proc Str.at() // i: int s: Str -> char: int
+    @Str.data + @
+end
+
+// Get character from string at given index from right (0 is the last element)
+proc Str.atr() // i: int s: Str -> char: int
+    @Str + 1 - swap - @
+end
+
 // Remove left most character from s
 proc Str.chop() // s: Str -> None
     dup Str.length dec8
