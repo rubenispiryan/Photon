@@ -230,6 +230,10 @@ proc streq // str1: ptr str2: ptr -> bool
 end
 
 proc argv[n]
+    if dup argc >= do
+        here eputs "[ERROR] Cannot access out of range of argv" eputsln
+        1 exit
+    end
     8 * argv + @8 ->ptr
 end
 
