@@ -16,6 +16,20 @@ macro sizeof(Op) 16 end
 macro Op.type 0 end
 macro Op.operand 8 end
 
+// Operation Enum
+macro OP_PUSH_INT   0 end
+macro OP_INTRINSIC  1 end
+macro OP_COUNT      2 end
+
+// Intrinsic Enum
+macro INTRINSIC_ADD      0 end
+macro INTRINSIC_PRINT    1 end
+macro INTRINSIC_SUB      2 end
+macro INTRINSIC_MUL      3 end
+macro INTRINSIC_DUP      4 end
+macro INTRINSIC_DROP     5 end
+macro INTRINSIC_COUNT    6 end
+
 // Memory layout
 memory writed_buffer PUTD_BUFFER_CAP end
 memory fd sizeof(u64) end
@@ -163,17 +177,6 @@ proc compile_footer
     "   .skip " write_fd MEM_CAPACITY writed_fd "\n" write_fd
 end
 
-// Operation Enum
-macro OP_PUSH_INT 0 end
-macro OP_ADD      1 end
-macro OP_PRINT    2 end
-macro OP_SUB      3 end
-macro OP_MUL      4 end
-macro OP_DUP      5 end
-macro OP_DROP     6 end
-macro OP_COUNT    7 end
-
-
 // struct Loc {
 //   filename: ptr    (8 bytes)
 //   line_num: uint64 (8 bytes)
@@ -193,8 +196,8 @@ proc !Loc.line_num Loc.line_num + !8 end
 proc !Loc.col_num Loc.col_num + !8 end
 
 // struct Op {
-//   type:    uint64 (8 bytes)
-//   operand: uint64 (8 bytes)
+//   type:    u64 (8 bytes)
+//   operand: [int | Intrinsic] u64 (8 bytes)
 // }
 
 proc !Op.type Op.type + !8 end
@@ -240,6 +243,7 @@ proc print_usage
     "Subcommands:\n" puts
     "     sim <FILENAME>     Simulate the program in a macos little endian environment\n" puts
     "     com <FILENAME>     Compile the program to arm 64-bit assembly\n" puts
+    "     dump <FILENAME>    Print the operations of the program\n" puts
 end
 
 proc create_output_file // output_name: ptr -> fd: int
@@ -306,55 +310,60 @@ proc sim_stack_pop // None -> value: int
 end
 
 // TODO: Add drop3 Intrinsic
-proc assert_op_count // here_len: int here_str: ptr expected_count: int
-    if dup OP_COUNT != do
-        drop
-        eputs "[ERROR] Assertion Fail: Exhaustive handling of Op types" eputsln
+memory assert_expected_counts sizeof(u64) 2 * end
+proc assert_expected_int // here_len: int here_str: ptr actual_count: int expected_count: int
+    swap assert_expected_counts !8
+    assert_expected_counts sizeof(u64) + !8
+    if assert_expected_counts @8 assert_expected_counts sizeof(u64) + @8 != do
+        eputs "[ERROR] Assertion Fail: Actual value: " eputs assert_expected_counts @8 eputd
+        ", differs from expected: " eputs assert_expected_counts sizeof(u64) + @8 eputd "\n" eputs
         1 exit
-    else drop2 drop end
+    else drop2 end
 end
 
 proc simulate_program
-    here 7 assert_op_count
+    here 2 OP_COUNT assert_expected_int
     0 while dup op_stack_count @8 < do
         dup sizeof(Op) * op_stack +
         if dup @Op.type OP_PUSH_INT == do
             dup @Op.operand sim_stack_push
-        elif dup @Op.type OP_ADD == do
-            sim_stack_pop
-            sim_stack_pop
-            +
-            sim_stack_push
-        elif dup @Op.type OP_SUB == do
-            sim_stack_pop
-            sim_stack_pop
-            swap
-            -
-            sim_stack_push
-        elif dup @Op.type OP_MUL == do
-            sim_stack_pop
-            sim_stack_pop
-            *
-            sim_stack_push
-        elif dup @Op.type OP_PRINT == do
-            sim_stack_pop
-            print
-        elif dup @Op.type OP_DROP == do
-            sim_stack_pop
-            drop
-        elif dup @Op.type OP_DUP == do
-            sim_stack_pop
-            dup
-            sim_stack_push
-            sim_stack_push
-        else "Unhandled Instruction: " eputs dup @Op.type eputd "\n" eputs 1 exit
-        end drop
+        elif dup @Op.type OP_INTRINSIC == do
+            here 6 INTRINSIC_COUNT assert_expected_int
+            if dup @Op.operand INTRINSIC_ADD == do
+                sim_stack_pop
+                sim_stack_pop
+                +
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_SUB == do
+                sim_stack_pop
+                sim_stack_pop
+                swap
+                -
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_MUL == do
+                sim_stack_pop
+                sim_stack_pop
+                *
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_PRINT == do
+                sim_stack_pop
+                print
+            elif dup @Op.operand INTRINSIC_DROP == do
+                sim_stack_pop
+                drop
+            elif dup @Op.operand INTRINSIC_DUP == do
+                sim_stack_pop
+                dup
+                sim_stack_push
+                sim_stack_push
+            else "Unhandled Intrinsic: " eputs dup @Op.operand eputd "\n" eputs 1 exit end
+        else "Unhandled Operation: " eputs dup @Op.type eputd "\n" eputs 1 exit end drop
         1 +
     end drop
 end
 
 proc compile_program
-    here 7 assert_op_count
+    here 2 OP_COUNT assert_expected_int
     compile_header
     "_main:\n" write_fd
     0 while dup op_stack_count @8 < do
@@ -363,38 +372,40 @@ proc compile_program
             "   ;; -- push int " write_fd dup @Op.operand writed_fd " --\n" write_fd
             "   ldr x0, =" write_fd dup @Op.operand writed_fd "\n" write_fd
             "   push x0\n" write_fd
-        elif dup @Op.type OP_ADD == do
-            "   ;; -- add --\n" write_fd
-            "   pop x0\n" write_fd
-            "   pop x1\n" write_fd
-            "   add x0, x0, x1\n" write_fd
-            "   push x0\n" write_fd
-        elif dup @Op.type OP_SUB == do
-            "   ;; -- sub --\n" write_fd
-            "   pop x0\n" write_fd
-            "   pop x1\n" write_fd
-            "   sub x0, x1, x0\n" write_fd
-            "   push x0\n" write_fd
-        elif dup @Op.type OP_MUL == do
-            "   ;; -- mul --\n" write_fd
-            "   pop x0\n" write_fd
-            "   pop x1\n" write_fd
-            "   mul x0, x0, x1\n" write_fd
-            "   push x0\n" write_fd
-        elif dup @Op.type OP_PRINT == do
-            "   ;; -- print --\n" write_fd
-            "   pop x0\n" write_fd
-            "   bl print\n" write_fd
-        elif dup @Op.type OP_DROP == do
-            "   ;; -- drop --\n" write_fd
-            "   pop x0\n" write_fd
-        elif dup @Op.type OP_DUP == do
-            "   ;; -- dup --\n" write_fd
-            "   pop x0\n" write_fd
-            "   push x0\n" write_fd
-            "   push x0\n" write_fd
-        else "Unhandled Instruction: " eputs dup @Op.type eputd "\n" eputs  1 exit
-        end drop
+        elif dup @Op.type OP_INTRINSIC == do
+            here 6 INTRINSIC_COUNT assert_expected_int
+            if dup @Op.operand INTRINSIC_ADD == do
+                "   ;; -- add --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   add x0, x0, x1\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_SUB == do
+                "   ;; -- sub --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   sub x0, x1, x0\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_MUL == do
+                "   ;; -- mul --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   mul x0, x0, x1\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_PRINT == do
+                "   ;; -- print --\n" write_fd
+                "   pop x0\n" write_fd
+                "   bl print\n" write_fd
+            elif dup @Op.operand INTRINSIC_DROP == do
+                "   ;; -- drop --\n" write_fd
+                "   pop x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_DUP == do
+                "   ;; -- dup --\n" write_fd
+                "   pop x0\n" write_fd
+                "   push x0\n" write_fd
+                "   push x0\n" write_fd
+           else "Unhandled Intrinsic: " eputs dup @Op.operand eputd "\n" eputs  1 exit end
+        else "Unhandled Operation: " eputs dup @Op.type eputd "\n" eputs  1 exit end drop
         1 +
     end drop
     compile_footer
@@ -412,7 +423,8 @@ end
 // Expects file contents to be in content: Str
 // Expects that line, word are allocated
 proc parse_file_as_op
-    here 7 assert_op_count
+    here 2 OP_COUNT assert_expected_int
+    here 6 INTRINSIC_COUNT assert_expected_int
     main_filename @8 ->ptr loc !Loc.filename
     0 while content Str.length @8 0 > do
         dup loc !Loc.line_num
@@ -422,17 +434,17 @@ proc parse_file_as_op
             line Str.left_strip()
             word line ' ' Str.chop_until()
             if word @Str "+" Str.equal() do
-                OP_ADD 0 push_op
+                OP_INTRINSIC INTRINSIC_ADD push_op
             elif word @Str "-" Str.equal() do
-                OP_SUB 0 push_op
+                OP_INTRINSIC INTRINSIC_SUB push_op
             elif word @Str "*" Str.equal() do
-                OP_MUL 0 push_op
+                OP_INTRINSIC INTRINSIC_MUL push_op
             elif word @Str "print" Str.equal() do
-                OP_PRINT 0 push_op
+                OP_INTRINSIC INTRINSIC_PRINT push_op
             elif word @Str "dup" Str.equal() do
-                OP_DUP 0 push_op
+                OP_INTRINSIC INTRINSIC_DUP push_op
             elif word @Str "drop" Str.equal() do
-                OP_DROP 0 push_op
+                OP_INTRINSIC INTRINSIC_DROP push_op
             else
                 OP_PUSH_INT word @Str Str.parse_int() push_op
             end
