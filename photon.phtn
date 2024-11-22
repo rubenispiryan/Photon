@@ -232,8 +232,11 @@ proc @Op.operand Op.operand + @8 end
 proc !Op !Op.operand !Op.type end
 proc @Op dup @Op.type swap @Op.operand end
 
-// expects: type:int operand:int
+// expects: type: int, operand: int
 proc push_op
+    if op_stack_count @8 OP_STACK_CAP >= do
+        here eputs "[ERROR] Op stack overflow" eputsln 1 exit
+    end
     op_stack_count @8 sizeof(Op) * op_stack +
     dup rot swap !Op
     op_stack_count inc8
