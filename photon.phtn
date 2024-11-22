@@ -22,13 +22,38 @@ macro OP_INTRINSIC  1 end
 macro OP_COUNT      2 end
 
 // Intrinsic Enum
-macro INTRINSIC_ADD      0 end
-macro INTRINSIC_PRINT    1 end
-macro INTRINSIC_SUB      2 end
-macro INTRINSIC_MUL      3 end
-macro INTRINSIC_DUP      4 end
-macro INTRINSIC_DROP     5 end
-macro INTRINSIC_COUNT    6 end
+macro INTRINSIC_ADD         0  end
+macro INTRINSIC_PRINT       1  end
+macro INTRINSIC_SUB         2  end
+macro INTRINSIC_MUL         3  end
+macro INTRINSIC_DUP         4  end
+macro INTRINSIC_DROP        5  end
+macro INTRINSIC_DIV         6  end
+macro INTRINSIC_EQUAL       7  end
+macro INTRINSIC_LT          8  end
+macro INTRINSIC_GT          9  end
+macro INTRINSIC_LTE         10 end
+macro INTRINSIC_GTE         11 end
+macro INTRINSIC_NE          12 end
+macro INTRINSIC_AND         13 end
+macro INTRINSIC_OR          14 end
+macro INTRINSIC_BITNOT      15 end
+macro INTRINSIC_SHIFT_RIGHT 16 end
+macro INTRINSIC_SHIFT_LEFT  17 end
+macro INTRINSIC_SWAP        18 end
+macro INTRINSIC_OVER        19 end
+macro INTRINSIC_ROT         20 end
+macro INTRINSIC_SYSCALL0    21 end
+macro INTRINSIC_SYSCALL1    22 end
+macro INTRINSIC_SYSCALL2    23 end
+macro INTRINSIC_SYSCALL3    24 end
+macro INTRINSIC_SYSCALL4    25 end
+macro INTRINSIC_SYSCALL5    26 end
+macro INTRINSIC_SYSCALL6    27 end
+macro INTRINSIC_CAST_PTR    28 end
+macro INTRINSIC_CAST_INT    29 end
+macro INTRINSIC_CAST_BOOL   30 end
+macro INTRINSIC_COUNT       31 end
 
 // Memory layout
 memory writed_buffer PUTD_BUFFER_CAP end
@@ -238,6 +263,21 @@ proc report_error // n: int, s: ptr -> None
     "[ERROR] " eputs
 end
 
+proc get_word_as_int // None -> int
+    0 0 while dup word @Str.length < do
+        swap 10 * swap
+        dup word @Str.data + @
+        if dup isdigit not do
+            // TODO: Add a parse_int proc to std
+             report_error "Unknown word: " eputs word @Str eputsln
+            1 exit
+        end
+        '0' - rot +
+        swap
+        1 +
+    end drop
+end
+
 proc print_usage
     "Usage: photon.py <SUBCOMMAND>\n" puts
     "Subcommands:\n" puts
@@ -328,7 +368,7 @@ proc simulate_program
         if dup @Op.type OP_PUSH_INT == do
             dup @Op.operand sim_stack_push
         elif dup @Op.type OP_INTRINSIC == do
-            here 6 INTRINSIC_COUNT assert_expected_int
+            here 31 INTRINSIC_COUNT assert_expected_int
             if dup @Op.operand INTRINSIC_ADD == do
                 sim_stack_pop
                 sim_stack_pop
@@ -356,6 +396,144 @@ proc simulate_program
                 dup
                 sim_stack_push
                 sim_stack_push
+            elif dup @Op.operand INTRINSIC_DIV == do
+                sim_stack_pop
+                sim_stack_pop
+                swap
+                /
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_EQUAL == do
+                sim_stack_pop
+                sim_stack_pop
+                ==
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_LT == do
+                sim_stack_pop
+                sim_stack_pop
+                >
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_GT == do
+                sim_stack_pop
+                sim_stack_pop
+                <
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_LTE == do
+                sim_stack_pop
+                sim_stack_pop
+                >=
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_GTE == do
+                sim_stack_pop
+                sim_stack_pop
+                <=
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_NE == do
+                sim_stack_pop
+                sim_stack_pop
+                !=
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_AND == do
+                sim_stack_pop
+                sim_stack_pop
+                and
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_OR == do
+                sim_stack_pop
+                sim_stack_pop
+                or
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_BITNOT == do
+                sim_stack_pop
+                bnot
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_SHIFT_RIGHT == do
+                sim_stack_pop
+                sim_stack_pop
+                swap
+                >>
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_SHIFT_LEFT == do
+                sim_stack_pop
+                sim_stack_pop
+                swap
+                <<
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_SWAP == do
+                sim_stack_pop
+                sim_stack_pop
+                swap
+                sim_stack_push
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_OVER == do
+                sim_stack_pop
+                sim_stack_pop
+                over
+                sim_stack_push
+                sim_stack_push
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_ROT == do
+                sim_stack_pop
+                sim_stack_pop
+                sim_stack_pop
+                rot
+                sim_stack_push
+                sim_stack_push
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_SYSCALL0 == do
+                sim_stack_pop
+                syscall0
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_SYSCALL1 == do
+                sim_stack_pop
+                sim_stack_pop
+                syscall1
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_SYSCALL2 == do
+                sim_stack_pop
+                sim_stack_pop
+                sim_stack_pop
+                syscall2
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_SYSCALL3 == do
+                sim_stack_pop
+                sim_stack_pop
+                sim_stack_pop
+                sim_stack_pop
+                syscall3
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_SYSCALL4 == do
+                sim_stack_pop
+                sim_stack_pop
+                sim_stack_pop
+                sim_stack_pop
+                sim_stack_pop
+                syscall4
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_SYSCALL5 == do
+                sim_stack_pop
+                sim_stack_pop
+                sim_stack_pop
+                sim_stack_pop
+                sim_stack_pop
+                sim_stack_pop
+                syscall5
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_SYSCALL6 == do
+                sim_stack_pop
+                sim_stack_pop
+                sim_stack_pop
+                sim_stack_pop
+                sim_stack_pop
+                sim_stack_pop
+                sim_stack_pop
+                syscall6
+                sim_stack_push
+            elif dup @Op.operand INTRINSIC_CAST_PTR == do
+                NOP
+            elif dup @Op.operand INTRINSIC_CAST_INT == do
+                NOP
+            elif dup @Op.operand INTRINSIC_CAST_BOOL == do
+                NOP
             else "Unhandled Intrinsic: " eputs dup @Op.operand eputd "\n" eputs 1 exit end
         else "Unhandled Operation: " eputs dup @Op.type eputd "\n" eputs 1 exit end drop
         1 +
@@ -373,7 +551,7 @@ proc compile_program
             "   ldr x0, =" write_fd dup @Op.operand writed_fd "\n" write_fd
             "   push x0\n" write_fd
         elif dup @Op.type OP_INTRINSIC == do
-            here 6 INTRINSIC_COUNT assert_expected_int
+            here 31 INTRINSIC_COUNT assert_expected_int
             if dup @Op.operand INTRINSIC_ADD == do
                 "   ;; -- add --\n" write_fd
                 "   pop x0\n" write_fd
@@ -404,6 +582,187 @@ proc compile_program
                 "   pop x0\n" write_fd
                 "   push x0\n" write_fd
                 "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_DIV == do
+                "   ;; -- div --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   udiv x0, x1, x0\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_EQUAL == do
+                "   ;; -- equal --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   cmp x0, x1\n" write_fd
+                "   cset x0, eq\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_LT == do
+                "   ;; -- lt --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   cmp x1, x0\n" write_fd
+                "   cset x0, lt\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_GT == do
+                "   ;; -- gt --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   cmp x1, x0\n" write_fd
+                "   cset x0, gt\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_LTE == do
+                "   ;; -- lte --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   cmp x1, x0\n" write_fd
+                "   cset x0, le\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_GTE == do
+                "   ;; -- gte --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   cmp x1, x0\n" write_fd
+                "   cset x0, ge\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_NE == do
+                "   ;; -- not equal --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   cmp x0, x1\n" write_fd
+                "   cset x0, ne\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_AND == do
+                "   ;; -- and --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   and x0, x0, x1\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_OR == do
+                "   ;; -- or --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   orr x0, x0, x1\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_BITNOT == do
+                "   ;; -- bitnot --\n" write_fd
+                "   pop x0\n" write_fd
+                "   mvn x0, x0\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_SHIFT_RIGHT == do
+                "   ;; -- shift right --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   lsr x0, x1, x0\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_SHIFT_LEFT == do
+                "   ;; -- shift left --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   lsl x0, x1, x0\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_SWAP == do
+                "   ;; -- swap --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   push x0\n" write_fd
+                "   push x1\n" write_fd
+            elif dup @Op.operand INTRINSIC_OVER == do
+                "   ;; -- over --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   push x1\n" write_fd
+                "   push x0\n" write_fd
+                "   push x1\n" write_fd
+            elif dup @Op.operand INTRINSIC_ROT == do
+                "   ;; -- rot --\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   pop x2\n" write_fd
+                "   push x1\n" write_fd
+                "   push x0\n" write_fd
+                "   push x2\n" write_fd
+            elif dup @Op.operand INTRINSIC_SYSCALL0 == do
+                "   ;; -- syscall0 --\n" write_fd
+                "   pop x16\n" write_fd
+                "   svc #0\n" write_fd
+                "   b.cc return_ok_" write_fd over writed_fd "\n" write_fd
+                "   mov x0, #-1\n" write_fd
+                "return_ok_" write_fd over writed_fd ":\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_SYSCALL1 == do
+                "   ;; -- syscall1 --\n" write_fd
+                "   pop x16\n" write_fd
+                "   pop x0\n" write_fd
+                "   svc #0\n" write_fd
+                "   b.cc return_ok_" write_fd over writed_fd "\n" write_fd
+                "   mov x0, #-1\n" write_fd
+                "return_ok_" write_fd over writed_fd ":\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_SYSCALL2 == do
+                "   ;; -- syscall2 --\n" write_fd
+                "   pop x16\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   svc #0\n" write_fd
+                "   b.cc return_ok_" write_fd over writed_fd "\n" write_fd
+                "   mov x0, #-1\n" write_fd
+                "return_ok_" write_fd over writed_fd ":\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_SYSCALL3 == do
+                "   ;; -- syscall3 --\n" write_fd
+                "   pop x16\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   pop x2\n" write_fd
+                "   svc #0\n" write_fd
+                "   b.cc return_ok_" write_fd over writed_fd "\n" write_fd
+                "   mov x0, #-1\n" write_fd
+                "return_ok_" write_fd over writed_fd ":\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_SYSCALL4 == do
+                "   ;; -- syscall4 --\n" write_fd
+                "   pop x16\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   pop x2\n" write_fd
+                "   pop x3\n" write_fd
+                "   svc #0\n" write_fd
+                "   b.cc return_ok_" write_fd over writed_fd "\n" write_fd
+                "   mov x0, #-1\n" write_fd
+                "return_ok_" write_fd over writed_fd ":\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_SYSCALL5 == do
+                "   ;; -- syscall5 --\n" write_fd
+                "   pop x16\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   pop x2\n" write_fd
+                "   pop x3\n" write_fd
+                "   pop x4\n" write_fd
+                "   svc #0\n" write_fd
+                "   b.cc return_ok_" write_fd over writed_fd "\n" write_fd
+                "   mov x0, #-1\n" write_fd
+                "return_ok_" write_fd over writed_fd ":\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_SYSCALL6 == do
+                "   ;; -- syscall6 --\n" write_fd
+                "   pop x16\n" write_fd
+                "   pop x0\n" write_fd
+                "   pop x1\n" write_fd
+                "   pop x2\n" write_fd
+                "   pop x3\n" write_fd
+                "   pop x4\n" write_fd
+                "   pop x5\n" write_fd
+                "   svc #0\n" write_fd
+                "   b.cc return_ok_" write_fd over writed_fd "\n" write_fd
+                "   mov x0, #-1\n" write_fd
+                "return_ok_" write_fd over writed_fd ":\n" write_fd
+                "   push x0\n" write_fd
+            elif dup @Op.operand INTRINSIC_CAST_PTR == do
+                "   ;; -- cast ptr --\n" write_fd
+            elif dup @Op.operand INTRINSIC_CAST_INT == do
+                "   ;; -- cast int --\n" write_fd
+            elif dup @Op.operand INTRINSIC_CAST_BOOL == do
+                "   ;; -- cast ptr --\n" write_fd
            else "Unhandled Intrinsic: " eputs dup @Op.operand eputd "\n" eputs  1 exit end
         else "Unhandled Operation: " eputs dup @Op.type eputd "\n" eputs  1 exit end drop
         1 +
@@ -424,14 +783,15 @@ end
 // Expects that line, word are allocated
 proc parse_file_as_op
     here 2 OP_COUNT assert_expected_int
-    here 6 INTRINSIC_COUNT assert_expected_int
+    here 31 INTRINSIC_COUNT assert_expected_int
     main_filename @8 ->ptr loc !Loc.filename
     0 while content Str.length @8 0 > do
         dup loc !Loc.line_num
         line content '\n' Str.chop_until()
-        0 while line Str.length @8 0 > do
-            dup loc !Loc.col_num
+        line @Str.data
+        while line Str.length @8 0 > do
             line Str.left_strip()
+            dup line @Str.data swap - loc !Loc.col_num
             word line ' ' Str.chop_until()
             if word @Str "+" Str.equal() do
                 OP_INTRINSIC INTRINSIC_ADD push_op
@@ -445,10 +805,59 @@ proc parse_file_as_op
                 OP_INTRINSIC INTRINSIC_DUP push_op
             elif word @Str "drop" Str.equal() do
                 OP_INTRINSIC INTRINSIC_DROP push_op
+            elif word @Str "/" Str.equal() do
+                OP_INTRINSIC INTRINSIC_DIV push_op
+            elif word @Str "==" Str.equal() do
+                OP_INTRINSIC INTRINSIC_EQUAL push_op
+            elif word @Str "<" Str.equal() do
+                OP_INTRINSIC INTRINSIC_LT push_op
+            elif word @Str ">" Str.equal() do
+                OP_INTRINSIC INTRINSIC_GT push_op
+            elif word @Str "<=" Str.equal() do
+                OP_INTRINSIC INTRINSIC_LTE push_op
+            elif word @Str ">=" Str.equal() do
+                OP_INTRINSIC INTRINSIC_GTE push_op
+            elif word @Str "!=" Str.equal() do
+                OP_INTRINSIC INTRINSIC_NE push_op
+            elif word @Str "and" Str.equal() do
+                OP_INTRINSIC INTRINSIC_AND push_op
+            elif word @Str "or" Str.equal() do
+                OP_INTRINSIC INTRINSIC_OR push_op
+            elif word @Str "bnot" Str.equal() do
+                OP_INTRINSIC INTRINSIC_BITNOT push_op
+            elif word @Str ">>" Str.equal() do
+                OP_INTRINSIC INTRINSIC_SHIFT_RIGHT push_op
+            elif word @Str "<<" Str.equal() do
+                OP_INTRINSIC INTRINSIC_SHIFT_LEFT push_op
+            elif word @Str "swap" Str.equal() do
+                OP_INTRINSIC INTRINSIC_SWAP push_op
+            elif word @Str "over" Str.equal() do
+                OP_INTRINSIC INTRINSIC_OVER push_op
+            elif word @Str "rot" Str.equal() do
+                OP_INTRINSIC INTRINSIC_ROT push_op
+            elif word @Str "syscall0" Str.equal() do
+                OP_INTRINSIC INTRINSIC_SYSCALL0 push_op
+            elif word @Str "syscall1" Str.equal() do
+                OP_INTRINSIC INTRINSIC_SYSCALL1 push_op
+            elif word @Str "syscall2" Str.equal() do
+                OP_INTRINSIC INTRINSIC_SYSCALL2 push_op
+            elif word @Str "syscall3" Str.equal() do
+                OP_INTRINSIC INTRINSIC_SYSCALL3 push_op
+            elif word @Str "syscall4" Str.equal() do
+                OP_INTRINSIC INTRINSIC_SYSCALL4 push_op
+            elif word @Str "syscall5" Str.equal() do
+                OP_INTRINSIC INTRINSIC_SYSCALL5 push_op
+            elif word @Str "syscall6" Str.equal() do
+                OP_INTRINSIC INTRINSIC_SYSCALL6 push_op
+            elif word @Str "->ptr" Str.equal() do
+                OP_INTRINSIC INTRINSIC_CAST_PTR push_op
+            elif word @Str "->int" Str.equal() do
+                OP_INTRINSIC INTRINSIC_CAST_INT push_op
+            elif word @Str "->bool" Str.equal() do
+                OP_INTRINSIC INTRINSIC_CAST_BOOL push_op
             else
-                OP_PUSH_INT word @Str Str.parse_int() push_op
+                OP_PUSH_INT get_word_as_int push_op
             end
-            1 +
         end drop
         1 +
     end drop
