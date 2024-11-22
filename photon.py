@@ -613,7 +613,7 @@ def type_check_program(program: Program, debug: bool = False) -> None:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
                 b_type, b_loc = stack.pop()
-                if a_type != DataType.PTR or (b_type != DataType.INT and b_type != DataType.PTR):
+                if a_type != DataType.PTR:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
@@ -630,7 +630,7 @@ def type_check_program(program: Program, debug: bool = False) -> None:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
                 b_type, b_loc = stack.pop()
-                if a_type != DataType.PTR or (b_type != DataType.INT and b_type != DataType.PTR):
+                if a_type != DataType.PTR:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
@@ -647,7 +647,7 @@ def type_check_program(program: Program, debug: bool = False) -> None:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
                 b_type, b_loc = stack.pop()
-                if a_type != DataType.PTR or (b_type != DataType.INT and b_type != DataType.PTR):
+                if a_type != DataType.PTR:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
@@ -664,7 +664,7 @@ def type_check_program(program: Program, debug: bool = False) -> None:
                 ensure_argument_count(len(stack), op, 2)
                 a_type, a_loc = stack.pop()
                 b_type, b_loc = stack.pop()
-                if a_type != DataType.PTR or (b_type != DataType.INT and b_type != DataType.PTR):
+                if a_type != DataType.PTR:
                     if debug:
                         notify_argument_origin(b_loc, order=1)
                         notify_argument_origin(a_loc, order=2)
