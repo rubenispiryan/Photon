@@ -12,6 +12,7 @@ include "macos.phtn"
 macro NULL 0 end
 macro true 0 0 == end
 macro false 0 0 != end
+macro NOP end
 
 // IO Buffers
 macro stdin 0 end
@@ -201,23 +202,6 @@ proc Str.equal() // n1: int, s1: ptr, n2: int, s2: ptr -> bool
     else
         false
     end
-end
-
-memory parse_int_var sizeof(Str) end
-proc Str.parse_int() // n: int, s: ptr -> int
-    parse_int_var !Str
-    0 0 while dup parse_int_var @Str.length < do
-        dup parse_int_var @Str.data + @
-        if dup isdigit not do
-            // TODO: Fix error reporting for photon.phtn
-            // report_error "Unknown word: " eputs word @Str eputsln
-            "[ERROR] Unknown word: " eputs parse_int_var @Str eputsln
-            1 exit
-        end
-        '0' - rot +
-        swap
-        1 +
-    end drop
 end
 
 proc strlen
