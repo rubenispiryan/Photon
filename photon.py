@@ -2,6 +2,7 @@ import inspect
 import os
 import subprocess
 import sys
+from _ast import Constant
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Generator, List, NoReturn, Callable, Dict, TextIO, Tuple, Optional, BinaryIO
@@ -144,6 +145,7 @@ class Keyword(Enum):
     PROC = auto()
     INCLUDE = auto()
     MEMORY = auto()
+    CONST = auto()
 
 
 class TokenType(Enum):
@@ -184,6 +186,10 @@ class Proc(Token):
 class Memory(Token):
     mem_addr: int = -1
 
+@dataclass
+class Const(Token):
+    constant: int = -1
+
 
 @dataclass
 class Op:
@@ -212,6 +218,7 @@ KEYWORD_NAMES = {
     'include': Keyword.INCLUDE,
     'memory': Keyword.MEMORY,
     'proc': Keyword.PROC,
+    'const': Keyword.CONST,
 }
 
 assert len(KEYWORD_NAMES) == len(Keyword), 'Exhaustive handling of keywords'
@@ -1549,12 +1556,13 @@ class Parsing:
         self.macros: Dict[str, Macro] = {}
         self.memories: Dict[str, Memory] = {}
         self.procs: Dict[str, Proc] = {}
+        self.consts: Dict[str, Const] = {}
         self.index = 0
         self.current_proc_ret_cap = 0
 
     def parse_tokens_to_program(self) -> Program:
         assert len(OpType) == 13, "Exhaustive handling of op types in parse_tokens_to_program."
-        assert len(Keyword) == 10, "Exhaustive handling of keywords in parse_tokens_to_program."
+        assert len(Keyword) == 11, "Exhaustive handling of keywords in parse_tokens_to_program."
         while len(self.rprogram) > 0:
             token = self.rprogram.pop()
             if token.value in self.macros:
@@ -1574,6 +1582,11 @@ class Parsing:
                 self.program.ops.append(
                     Op(type=OpType.PUSH_MEM, token=token, operand=self.memories[token.value].mem_addr, name=token.value))
                 self.index += 1
+            elif token.value in self.consts:
+                assert type(token.value) == str, 'Compiler Error: non string const name was saved'
+                self.program.ops.append(Op(type=OpType.PUSH_INT, token=token,
+                                           operand=self.consts[token.value].constant, name=token.value))
+                self.index += 1
             elif token.value in self.procs:
                 assert type(token.value) == str, 'Compiler Error: non string process name was saved'
                 self.program.ops.append(Op(type=OpType.CALL, token=token,
@@ -1585,10 +1598,14 @@ class Parsing:
             elif token.type == TokenType.KEYWORD and token.value in (Keyword.MACRO, Keyword.INCLUDE):
                 self.expand_keyword_to_tokens(token)
             elif token.type == TokenType.KEYWORD and token.value == Keyword.MEMORY:
-                memory_name, memory_size = self.evaluate_memory_definition(token)
+                memory_name, memory_size = self.evaluate_const_value(token)
                 self.memories[memory_name] = Memory(TokenType.KEYWORD, Keyword.MEMORY, loc=token.loc,
                                                     name=memory_name, mem_addr=self.program.memory_capacity)
                 self.program.memory_capacity += memory_size
+            elif token.type == TokenType.KEYWORD and token.value == Keyword.CONST:
+                const_name, const_value = self.evaluate_const_value(token)
+                self.consts[const_name] = Const(TokenType.KEYWORD, const_name, loc=token.loc,
+                                                name=const_name, constant=const_value)
             else:
                 self.program.ops.append(self.parse_token_as_op(token))
                 self.index += 1
@@ -1597,7 +1614,7 @@ class Parsing:
         return self.program
 
     def parse_keyword(self, token: Token) -> NoReturn | Op:
-        assert len(Keyword) == 10, 'Exhaustive handling of keywords in parse_keyword'
+        assert len(Keyword) == 11, 'Exhaustive handling of keywords in parse_keyword'
         if type(token.value) != Keyword:
             raise_error(f'Token value `{token.value}` must be a Keyword, but found: {type(token.value)}', token.loc)
         if token.value == Keyword.IF:
@@ -1708,7 +1725,7 @@ class Parsing:
             raise_error(f'Unknown keyword token: {token.value}', token.loc)
 
     def expand_keyword_to_tokens(self, token: Token) -> NoReturn | None:
-        assert len(Keyword) == 10, 'Exhaustive handling of keywords in compile_keyword_to_program'
+        assert len(Keyword) == 11, 'Exhaustive handling of keywords in compile_keyword_to_program'
         if token.value == Keyword.MACRO:
             if len(self.rprogram) == 0:
                 raise_error('Expected name of the macro but found nothing', token.loc)
@@ -1723,13 +1740,13 @@ class Parsing:
             block_count = 0
             while len(self.rprogram) > 0:
                 next_token = self.rprogram.pop()
-                assert len(Keyword) == 10, 'Exhaustive handling of keywords in macro expansion'
+                assert len(Keyword) == 11, 'Exhaustive handling of keywords in macro expansion'
                 if next_token.type == TokenType.KEYWORD and next_token.value == Keyword.END:
                     if block_count == 0:
                         break
                     block_count -= 1
                 elif next_token.type == TokenType.KEYWORD and next_token.value in (
-                        Keyword.MACRO, Keyword.IF, Keyword.WHILE, Keyword.MEMORY, Keyword.PROC):
+                        Keyword.MACRO, Keyword.IF, Keyword.WHILE, Keyword.MEMORY, Keyword.PROC, Keyword.CONST):
                     block_count += 1
                 macro_tokens = self.macros[macro_name.value].tokens
                 assert macro_tokens is not None, 'Macro tokens not saved'
@@ -1762,13 +1779,15 @@ class Parsing:
             raise_error(f'Keyword token not compilable to tokens: {token.value}', token.loc)
         return None
 
-    def evaluate_memory_definition(self, token: Token) -> Tuple[str, int]:
+    def evaluate_const_value(self, token: Token) -> Tuple[str, int]:
+        assert len(Keyword) == 11, 'Exhaustive handling of keywords in evaluate_const_value'
+        name = 'memory' if token.value == Keyword.MEMORY else 'constant'
         if len(self.rprogram) == 0:
-            raise_error('Expected name of the memory but found nothing', token.loc)
+            raise_error(f'Expected name of the {name} but found nothing', token.loc)
         memory_name = self.rprogram.pop()
         self.check_block_name_validity(memory_name)
         if len(self.rprogram) == 0:
-            raise_error(f'Expected `end` at the end of empty memory definition but found: `{memory_name.value}`',
+            raise_error(f'Expected `end` at the end of empty {name} definition but found: `{memory_name.value}`',
                         memory_name.loc)
         memory_size_stack: List[int] = []
         while len(self.rprogram) > 0:
@@ -1796,15 +1815,15 @@ class Parsing:
                         current_macro.tokens[idx].expanded_count = token.expanded_count + 1
                         self.rprogram.append(current_macro.tokens[idx])
                 else:
-                    raise_error(f'Unsupported token in memory definition: {token.value}', token.loc)
+                    raise_error(f'Unsupported token in {name} definition: {token.value}', token.loc)
             else:
-                raise_error(f'Unsupported token in memory definition: {token.value}', token.loc)
+                raise_error(f'Unsupported token in {name} definition: {token.value}', token.loc)
         if token.type != TokenType.KEYWORD or token.value != Keyword.END:
-            raise_error(f'Expected `end` at the end of memory definition but found: `{token.value}`',
+            raise_error(f'Expected `end` at the end of {name} definition but found: `{token.value}`',
                         token.loc)
         if len(memory_size_stack) != 1:
-            raise_error('Memory definition expects only 1 integer', token.loc)
-        assert type(memory_name.value) == str, 'Memory name value must be a string'
+            raise_error(f'{name.capitalize()} definition expects only 1 integer', token.loc)
+        assert type(memory_name.value) == str, f'{name.capitalize()} name value must be a string'
         return memory_name.value, memory_size_stack.pop()
 
     def check_block_name_validity(self, token: Token) -> None | NoReturn:
