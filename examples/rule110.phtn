@@ -4,7 +4,7 @@
 include "std.phtn"
 
 // Width of the row
-macro N 100 end
+const N 100 end
 
 // Memory layout
 memory row N end

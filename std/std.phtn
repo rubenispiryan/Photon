@@ -7,31 +7,33 @@ include "macos.phtn"
 //   data: char* (8 bytes)
 // }
 
-// Standard Constant Definitions
-
-macro NULL 0 end
+// Standard Macro Definitions
+macro NOP end
 macro true 0 0 == end
 macro false 0 0 != end
-macro NOP end
+
+// Standard Constant Definitions
+
+const NULL 0 end
 
 // IO Buffers
-macro stdin 0 end
-macro stdout 1 end
-macro stderr 2 end
+const stdin 0 end
+const stdout 1 end
+const stderr 2 end
 
 // mmap args
-macro MAP_PRIVATE 2 end
-macro PROT_READ 1 end
+const MAP_PRIVATE 2 end
+const PROT_READ 1 end
 
 // type sizes
-macro sizeof(ptr)       8 end
-macro sizeof(u64)       8 end
-macro sizeof(u32)       4 end
-macro sizeof(u16)       2 end
-macro sizeof(timespec) 16 end
+const sizeof(ptr)       8 end
+const sizeof(u64)       8 end
+const sizeof(u32)       4 end
+const sizeof(u16)       2 end
+const sizeof(timespec) 16 end
 
 // struct stat of fstat64
-macro sizeof(stat) 144 end
+const sizeof(stat) 144 end
 macro stat.st_dev 0 + end
 macro stat.st_mode 4 + end
 macro stat.st_nlink 6 + end
@@ -49,31 +51,31 @@ macro stat.st_flags 116 + end
 macro stat.st_gen 120 + end
 macro stat.st_lspare 124 + end
 macro stat.st_qspare 128 + end
-macro sizeof(st_dev) sizeof(u32) end
-macro sizeof(st_mode) sizeof(u16) end
-macro sizeof(st_nlink) sizeof(u16) end
-macro sizeof(st_ino) sizeof(u64) end
-macro sizeof(st_uid) sizeof(u32) end
-macro sizeof(st_gid) sizeof(u32) end
-macro sizeof(st_rdev) sizeof(u32) end
-macro sizeof(st_atimespec) sizeof(timespec) end
-macro sizeof(st_mtimespec) sizeof(timespec) end
-macro sizeof(st_ctimespec) sizeof(timespec) end
-macro sizeof(st_size) sizeof(u64) end
-macro sizeof(st_blocks) sizeof(u64) end
-macro sizeof(st_blksize) sizeof(u32) end
-macro sizeof(st_flags) sizeof(u32) end
-macro sizeof(st_gen) sizeof(u32) end
-macro sizeof(st_lspare) sizeof(u32) end
-macro sizeof(st_qspare) sizeof(u64) 2 * end
+const sizeof(st_dev) sizeof(u32) end
+const sizeof(st_mode) sizeof(u16) end
+const sizeof(st_nlink) sizeof(u16) end
+const sizeof(st_ino) sizeof(u64) end
+const sizeof(st_uid) sizeof(u32) end
+const sizeof(st_gid) sizeof(u32) end
+const sizeof(st_rdev) sizeof(u32) end
+const sizeof(st_atimespec) sizeof(timespec) end
+const sizeof(st_mtimespec) sizeof(timespec) end
+const sizeof(st_ctimespec) sizeof(timespec) end
+const sizeof(st_size) sizeof(u64) end
+const sizeof(st_blocks) sizeof(u64) end
+const sizeof(st_blksize) sizeof(u32) end
+const sizeof(st_flags) sizeof(u32) end
+const sizeof(st_gen) sizeof(u32) end
+const sizeof(st_lspare) sizeof(u32) end
+const sizeof(st_qspare) sizeof(u64) 2 * end
 
 // Str constants
-macro sizeof(Str) 16 end
+const sizeof(Str) 16 end
 macro Str.length 0 + end
 macro Str.data 8 + end
 
 // putd proc constant
-macro PUTD_BUFFER_CAP 32 end
+const PUTD_BUFFER_CAP 32 end
 
 // Standard Procedure Definitions
 

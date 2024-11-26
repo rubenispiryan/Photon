@@ -2,7 +2,7 @@
 
 include "std.phtn"
 
-macro BUFFER_CAP 1024 end
+const BUFFER_CAP 1024 end
 
 // memory layout
 memory fd sizeof(ptr) end
@@ -11,10 +11,10 @@ memory argn sizeof(u64) end
 memory buffer BUFFER_CAP end
 
 // remove count from string literal
-macro only_str swap drop end
+proc only_str swap drop end
 
 // assumes that a file descriptor is stored at fd to be read from
-macro write_fd
+proc write_fd
     while BUFFER_CAP buffer fd @8 read dup 0 > do
         buffer puts
     end drop
@@ -22,7 +22,7 @@ end
 
 // opens a file descriptor from a filename given as the n-th argument
 // saves it at fd
-macro open_fd_from_argv[n]
+proc open_fd_from_argv[n]
     O_RDONLY argn @8 argv[n] open
     if dup -1 == do
         "An error occurred when trying to open the file" putsln
@@ -32,7 +32,7 @@ macro open_fd_from_argv[n]
     end
 end
 
-macro close_fd
+proc close_fd
     if fd @8 close 0 != do
         "An error occurred when trying to close the file" putsln
         1 exit
