@@ -1779,6 +1779,7 @@ class Parsing:
             raise_error(f'Keyword token not compilable to tokens: {token.value}', token.loc)
         return None
 
+    # TODO: Rename legacy memory variables
     def evaluate_const_value(self, token: Token) -> Tuple[str, int]:
         assert len(Keyword) == 11, 'Exhaustive handling of keywords in evaluate_const_value'
         name = 'memory' if token.value == Keyword.MEMORY else 'constant'
@@ -1814,6 +1815,8 @@ class Parsing:
                         current_macro.tokens[idx].expanded_from = token
                         current_macro.tokens[idx].expanded_count = token.expanded_count + 1
                         self.rprogram.append(current_macro.tokens[idx])
+                elif token.value in self.consts:
+                    memory_size_stack.append(self.consts[token.value].constant)
                 else:
                     raise_error(f'Unsupported token in {name} definition: {token.value}', token.loc)
             else:
