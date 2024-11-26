@@ -2,7 +2,7 @@
 
 include "std.phtn"
 
-macro N 20 end
+const N 20 end
 
 // |acc          |tmp           |ans|
 memory acc 8 N * end

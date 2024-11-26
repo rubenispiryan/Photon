@@ -3,12 +3,12 @@
 
 include "std.phtn"
 
-macro BUFFER_CAP 1024 end
+const BUFFER_CAP 1024 end
 
 memory buffer BUFFER_CAP end
 
 // str_ptr shift_amount
-macro shift_letter_by_n
+proc shift_letter_by_n
     if over @ dup 'a' >= swap 'z' <= and do
         dup2 over @ + 'a' - 26 % 'a' + swap !
     end
