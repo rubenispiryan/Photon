@@ -79,7 +79,7 @@ proc write_fd // n: int s: ptr
     if dup -1 == do
         here eputs "[ERROR] Could not write: " eputs rot rot eputsln
         1 exit drop
-    else drop2 drop end
+    else drop3 end
 end
 
 // writes int into fd

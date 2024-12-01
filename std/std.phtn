@@ -82,6 +82,7 @@ const PUTD_BUFFER_CAP 32 end
 // stack operations
 proc dup2 over over end
 proc drop2 drop drop end
+proc drop3 drop drop drop end
 
 // math operations
 proc % dup2 / * - end
